@@ -1,12 +1,31 @@
 [package]
 name = "vibe-tools"
-description = "TODO"
+description = "Built-in tools and security policy for Vibe Factory agents"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
+async-trait.workspace = true
+globset.workspace = true
+ignore.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+similar.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
 vibe-core.workspace = true
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

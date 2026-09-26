@@ -112,13 +112,19 @@ impl ToolContext {
         } else {
             self.workspace_root.join(input)
         };
-        let canonical = canonicalize_lenient(&joined);
-        let root = canonicalize_lenient(&self.workspace_root);
+        let canonical = canonicalize_lenient(&joined).ok_or_else(|| {
+            crate::Error::denied(format!(
+                "path `{}` goes through a dangling symbolic link",
+                input.display()
+            ))
+        })?;
+        let root = canonicalize_lenient(&self.workspace_root)
+            .unwrap_or_else(|| self.workspace_root.clone());
         if canonical.starts_with(&root) {
             return Ok(canonical);
         }
         for extra in &self.permissions.extra_read_paths {
-            if canonical.starts_with(canonicalize_lenient(extra)) {
+            if canonicalize_lenient(extra).is_some_and(|e| canonical.starts_with(e)) {
                 return Ok(canonical);
             }
         }
@@ -132,7 +138,11 @@ impl ToolContext {
 
 /// Canonicalize the longest existing prefix of `path` and re-append the rest,
 /// after normalising `.` and `..` components lexically.
-fn canonicalize_lenient(path: &Path) -> PathBuf {
+///
+/// Returns `None` when the existing prefix cannot be canonicalised, which
+/// happens when it goes through a dangling symbolic link: such a path must be
+/// treated as escaping the workspace because the link target is unknown.
+fn canonicalize_lenient(path: &Path) -> Option<PathBuf> {
     use std::path::Component;
     // 1. Lexical normalisation.
     let mut normalised = PathBuf::new();
@@ -148,7 +158,7 @@ fn canonicalize_lenient(path: &Path) -> PathBuf {
     // 2. Split into an existing prefix and a non-existing suffix.
     let mut existing = normalised.clone();
     let mut rest: Vec<std::ffi::OsString> = Vec::new();
-    while !existing.exists() {
+    while existing.symlink_metadata().is_err() {
         match existing.file_name() {
             Some(name) => {
                 rest.push(name.to_os_string());
@@ -157,11 +167,15 @@ fn canonicalize_lenient(path: &Path) -> PathBuf {
             None => break,
         }
     }
-    let mut out = existing.canonicalize().unwrap_or(existing);
+    let mut out = if existing.as_os_str().is_empty() {
+        existing
+    } else {
+        existing.canonicalize().ok()?
+    };
     for name in rest.iter().rev() {
         out.push(name);
     }
-    out
+    Some(out)
 }
 
 /// Output of a tool call.
@@ -362,6 +376,30 @@ mod tests {
         assert!(ctx.resolve_path("/etc/passwd").is_err());
         let inner = ctx.resolve_path("a/../b").unwrap();
         assert!(inner.ends_with("b"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlink_is_denied() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path().join("missing.txt"), dir.path().join("link"))
+            .unwrap();
+        let ctx = ToolContext::new(dir.path());
+        assert!(ctx.resolve_path("link").is_err());
+        assert!(ctx.resolve_path("link/child").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_outside_is_denied() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("real.txt"), "x").unwrap();
+        std::os::unix::fs::symlink(outside.path().join("real.txt"), dir.path().join("link"))
+            .unwrap();
+        let ctx = ToolContext::new(dir.path());
+        assert!(ctx.resolve_path("link").is_err());
     }
 
     #[test]
