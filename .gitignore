@@ -1,0 +1,25 @@
+# Build
+/target
+**/target
+Cargo.lock.orig
+
+# mdBook output
+/docs/book
+
+# Local runtime data
+/.vibe
+*.log
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Private session journals (never committed)
+COMMANDS.md
+MEMORY.md
+CHANGES.md
+TODOS.md
+PLAN.md
+.omc/

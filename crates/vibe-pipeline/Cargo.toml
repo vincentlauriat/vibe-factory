@@ -1,0 +1,12 @@
+[package]
+name = "vibe-pipeline"
+description = "TODO"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+vibe-core.workspace = true
+
+[lints]
+workspace = true
