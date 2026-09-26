@@ -5,8 +5,11 @@ use crate::provider::{ModelRef, Usage};
 
 /// Well-known agent roles used by the default pipeline. Plugins may add
 /// arbitrary roles through [`AgentRole::Custom`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+///
+/// Roles serialise as plain `snake_case` strings (`"qa_reviewer"`,
+/// `"my_custom_agent"`), so the wire format is the same for built-in and
+/// custom roles.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AgentRole {
     /// Classifies the task complexity.
     ComplexityAssessor,
@@ -36,15 +39,36 @@ pub enum AgentRole {
     Custom(String),
 }
 
+const BUILTIN_ROLES: &[(&str, AgentRole)] = &[
+    ("complexity_assessor", AgentRole::ComplexityAssessor),
+    ("spec_gatherer", AgentRole::SpecGatherer),
+    ("spec_researcher", AgentRole::SpecResearcher),
+    ("spec_writer", AgentRole::SpecWriter),
+    ("spec_critic", AgentRole::SpecCritic),
+    ("planner", AgentRole::Planner),
+    ("coder", AgentRole::Coder),
+    ("coder_recovery", AgentRole::CoderRecovery),
+    ("qa_reviewer", AgentRole::QaReviewer),
+    ("qa_fixer", AgentRole::QaFixer),
+    ("merge_resolver", AgentRole::MergeResolver),
+    ("commit_message", AgentRole::CommitMessage),
+];
+
 impl AgentRole {
+    /// Every built-in role, in pipeline order.
+    pub fn builtin() -> impl Iterator<Item = AgentRole> {
+        BUILTIN_ROLES.iter().map(|(_, r)| r.clone())
+    }
+
     /// Stable name used for prompts, configuration and logs.
     #[must_use]
     pub fn name(&self) -> String {
         match self {
             AgentRole::Custom(s) => s.clone(),
-            other => serde_json::to_value(other)
-                .ok()
-                .and_then(|v| v.as_str().map(String::from))
+            other => BUILTIN_ROLES
+                .iter()
+                .find(|(_, r)| r == other)
+                .map(|(n, _)| (*n).to_string())
                 .unwrap_or_default(),
         }
     }
@@ -52,8 +76,30 @@ impl AgentRole {
     /// Parse a role name; unknown names become [`AgentRole::Custom`].
     #[must_use]
     pub fn parse(name: &str) -> Self {
-        serde_json::from_value(serde_json::Value::String(name.to_string()))
-            .unwrap_or_else(|_| AgentRole::Custom(name.to_string()))
+        BUILTIN_ROLES
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, r)| r.clone())
+            .unwrap_or_else(|| AgentRole::Custom(name.to_string()))
+    }
+
+    /// Whether this is one of the built-in roles.
+    #[must_use]
+    pub fn is_builtin(&self) -> bool {
+        !matches!(self, AgentRole::Custom(_))
+    }
+}
+
+impl serde::Serialize for AgentRole {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.name())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for AgentRole {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(AgentRole::parse(&s))
     }
 }
 
@@ -317,6 +363,17 @@ mod tests {
             AgentRole::Custom("my_agent".into())
         );
         assert_eq!(AgentRole::Custom("x".into()).to_string(), "x");
+        assert_eq!(
+            serde_json::to_string(&AgentRole::Custom("x".into())).unwrap(),
+            "\"x\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AgentRole::Coder).unwrap(),
+            "\"coder\""
+        );
+        let back: AgentRole = serde_json::from_str("\"planner\"").unwrap();
+        assert_eq!(back, AgentRole::Planner);
+        assert_eq!(AgentRole::builtin().count(), 12);
     }
 
     #[test]

@@ -175,6 +175,13 @@ pub struct PluginConfig {
     /// Environment variables for the process.
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    /// Working directory of the process (default: the project root).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<PathBuf>,
+    /// Capabilities the plugin claims to offer (`tools`, `agents`, `hooks`);
+    /// informational, the handshake is authoritative.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
     /// Whether a failure to start is fatal.
     #[serde(default)]
     pub required: bool,
