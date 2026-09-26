@@ -1,12 +1,26 @@
 [package]
 name = "vibe-workspace"
-description = "TODO"
+description = "Workspace isolation (git worktrees) and merge for Vibe Factory"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 vibe-core.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+pretty_assertions.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

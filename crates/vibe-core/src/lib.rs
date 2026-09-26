@@ -44,23 +44,31 @@ pub mod task;
 pub mod tool;
 pub mod workspace;
 
-pub use agent::{AgentOutcome, AgentRole, AgentSpec, AgentStop, ModelSelection, ToolSelection};
-pub use config::{PhaseModels, ProviderConfig, VibeConfig};
+pub use agent::{
+    AgentOutcome, AgentRole, AgentSpec, AgentStop, ModelSelection, ThinkingLevel, ToolSelection,
+};
+pub use config::{
+    PhaseModels, PipelineConfig, PluginConfig, ProviderConfig, SecurityConfig, VibeConfig,
+};
 pub use error::{Error, ErrorKind, Result};
-pub use event::{Event, EventBus, EventSink};
+pub use event::{Envelope, Event, EventBus, EventSink};
 pub use ids::{RunId, SessionId, SubtaskId, TaskId};
-pub use memory::{InMemoryStore, MemoryEntry, MemoryStore};
+pub use memory::{InMemoryStore, MemoryEntry, MemoryKind, MemoryStore, SharedMemory};
 pub use message::{ContentBlock, Message, Role};
 pub use phase::Phase;
 pub use plan::{Plan, PlanPhase, Subtask, SubtaskStatus};
-pub use plugin::{Hook, HookDecision, Plugin, Registry};
+pub use plugin::{Hook, HookDecision, Plugin, Registry, SharedHook};
 pub use prompt::PromptTemplate;
 pub use provider::{
-    CompletionRequest, CompletionResponse, ModelProvider, ModelRef, StopReason, ToolSpec, Usage,
+    CompletionRequest, CompletionResponse, ModelProvider, ModelRef, ProviderInfo, SharedProvider,
+    StopReason, ToolSpec, Usage,
 };
 pub use qa::{QaIssue, QaReport, QaVerdict, Severity};
 pub use spec::{Requirement, RequirementKind, Spec, SpecContext};
-pub use store::TaskStore;
+pub use store::{SharedTaskStore, TaskStore};
 pub use task::{Complexity, Task, TaskSource, TaskStatus};
-pub use tool::{Permissions, Tool, ToolContext, ToolOutput, ToolRegistry};
-pub use workspace::{Workspace, WorkspaceKind, WorkspaceProvider};
+pub use tool::{Permissions, SharedTool, Tool, ToolContext, ToolOutput, ToolRegistry};
+pub use workspace::{
+    InPlaceWorkspace, MergeOutcome, SharedWorkspaceProvider, Workspace, WorkspaceKind,
+    WorkspaceProvider,
+};
