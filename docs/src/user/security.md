@@ -13,7 +13,7 @@ workspace and governed by a security policy you control from `.vibe/config.toml`
 | `list_dir` | Indented tree of a directory (`depth` 1–10, default 2), honouring `.gitignore`, skipping `.git`, `target`, `node_modules`. | read |
 | `glob` | Find files by pattern (`**/*.rs`), newest first, at most 2000 results. | read |
 | `grep` | Regex search in text files (`content`, `files` or `count` mode, context lines, case-insensitive). | read |
-| `bash` | Run a shell command inside the workspace with a timeout (default 120 s, max 600 s). | execute |
+| `bash` | Run a shell command inside the workspace with a timeout (default 120 s, max 600 s). Background jobs are killed when the command finishes. | execute |
 
 Which tools an agent may use is decided per role (see [Customising agents](agents.md)):
 the planner and the reviewers of the spec phase are read-only, the coder and the QA agents
@@ -28,7 +28,8 @@ Every path an agent gives is resolved against the workspace root and must stay i
   create a file outside the workspace;
 - writing tools additionally refuse to write *through* any symbolic link.
 
-Paths listed in `security.extra_read_paths` may be read but never written.
+Paths listed in `security.extra_read_paths` may be read but never written. Nothing under a
+`.git` directory can be written by the file tools, whatever the path used to reach it.
 
 ## The shell policy
 
