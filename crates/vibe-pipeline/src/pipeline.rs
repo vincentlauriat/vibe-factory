@@ -372,9 +372,8 @@ impl Pipeline {
             let Some(phase) = current else {
                 break (ctx.task.status, RunStatus::Finished);
             };
-            if !ctx.profile.has(phase)
-                && !(phase == Phase::Fix && ctx.state.pending_validation_fix.is_some())
-            {
+            let pending_fix = phase == Phase::Fix && ctx.state.pending_validation_fix.is_some();
+            if !(ctx.profile.has(phase) || pending_fix) {
                 current = ctx.profile.next_after(phase);
                 continue;
             }
