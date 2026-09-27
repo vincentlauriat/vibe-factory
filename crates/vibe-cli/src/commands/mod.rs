@@ -51,6 +51,7 @@ pub async fn dispatch(cli: Cli) -> Result<u8> {
             approval::cancel(&find_project_root(project)?, &reference, wait, ui).await
         }
         Command::Tui => crate::tui::run(&find_project_root(project)?).await,
+        Command::Serve(args) => crate::server::run(&find_project_root(project)?, args, ui).await,
         Command::Events(args) => events::run(&find_project_root(project)?, args, ui).await,
         Command::Status => status::run(&find_project_root(project)?, ui).await,
         Command::Config(cmd) => config::run(&find_project_root(project)?, cmd, ui),

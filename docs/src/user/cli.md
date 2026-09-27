@@ -244,6 +244,44 @@ or `vibe cancel` in another terminal show up in it. Runs use the project configu
 (there are no `--provider` or `--model` flags; set `default_model` or `[phases]`). It needs an
 interactive terminal.
 
+## `vibe serve`
+
+```sh
+vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE]
+```
+
+Serves an HTTP API and a web UI for the project. It prints the address and a link that
+carries the access token (`http://127.0.0.1:7777/#token=…`); open it in a browser. The web
+UI shows the task board, the selected task with its run, budget, a live activity feed with
+the text as the model writes it, the plan, spec, QA reports and workspace changes, and lets
+you create, run, resume and cancel tasks and approve or reject what a run waits for.
+
+Security: the server listens on the loopback interface by default and then only accepts its
+own host names (`127.0.0.1`, `localhost`, `[::1]`), which blocks DNS rebinding. Every API
+call needs `Authorization: Bearer <token>`; the token is random per start, printed once and
+written to `.vibe/server.token` (owner-only on Unix), and removed on exit. Event streams also
+accept `?token=`, because browsers cannot set headers on them. The API never returns the
+configuration or keys. `--bind` with another address prints a warning: anyone who reaches it
+with the token controls the agents. `Ctrl-C` stops the server and cancels the runs it started
+(they stay resumable).
+
+| Method and path | Effect |
+|-----------------|--------|
+| `GET /api/health` | name and version |
+| `GET /api/tasks` | every task with its number and whether it runs |
+| `POST /api/tasks` `{"title", "description"}` | create a task |
+| `GET /api/tasks/{ref}` | task, run state, spec, plan and QA reports |
+| `POST /api/tasks/{ref}/run` `{"resume": bool}` | start or resume a run (202) |
+| `POST /api/tasks/{ref}/cancel` | stop its run, from this server or another process |
+| `POST /api/tasks/{ref}/approve` `{"comment"}` | approve what the run waits for |
+| `POST /api/tasks/{ref}/reject` `{"reason"}` | reject it |
+| `GET /api/tasks/{ref}/changes` | workspace changes summary |
+| `GET /api/tasks/{ref}/events?after=SEQ&all=bool` | logged events |
+| `GET /api/tasks/{ref}/stream?after=SEQ` | server-sent events: logged events after `SEQ`, then new ones and streamed text; each SSE event is named by its type and carries the envelope, with the sequence number as id |
+
+`{ref}` is a task number, directory name or id prefix, as on the command line. Errors are
+`{"error": "…"}` with 400, 401, 403, 404 or 409.
+
 ## `vibe events`
 
 ```sh

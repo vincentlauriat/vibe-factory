@@ -58,6 +58,7 @@ dirs = "5"
 tempfile = "3"
 fs4 = { version = "0.13", features = ["sync"] }
 ratatui = "0.30"
+axum = "0.8"
 tokio-test = "0.4"
 wiremock = "0.6"
 pretty_assertions = "1"

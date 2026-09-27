@@ -53,7 +53,8 @@ documented trait, and plugins can be written in Rust or in any language.
 | Human approvals of the spec, plan or merge (unreleased) | ✅ |
 | `vibe tui`: task board and live run view (unreleased) | ✅ |
 | User guide, design book, ADRs, API docs | ✅ |
-| HTTP server and web UI, issue importers, web tools | roadmap |
+| `vibe serve`: HTTP API, event stream and web UI (unreleased) | ✅ |
+| Issue importers, pull requests, web tools, persistent memory | roadmap |
 
 ## Install
 

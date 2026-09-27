@@ -40,6 +40,7 @@ mod cli;
 mod commands;
 mod mock;
 mod render;
+mod server;
 mod tui;
 mod util;
 

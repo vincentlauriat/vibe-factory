@@ -85,6 +85,8 @@ pub enum Command {
     },
     /// Open the terminal UI: task board, live run view, approvals.
     Tui,
+    /// Serve the HTTP API and the web UI on this machine.
+    Serve(ServeArgs),
     /// Replay the logged events of a task's run, optionally following new ones.
     Events(EventsArgs),
     /// Project summary: tasks per status, last runs, active worktrees.
@@ -217,6 +219,30 @@ pub fn parse_duration_secs(text: &str) -> Result<u64, String> {
     value
         .checked_mul(factor)
         .ok_or_else(|| format!("duration `{text}` is too large"))
+}
+
+/// `vibe serve …`
+#[derive(Debug, Args)]
+pub struct ServeArgs {
+    /// Address to listen on (loopback by default; anything else exposes the
+    /// agents to the network).
+    #[arg(long, default_value = "127.0.0.1")]
+    pub bind: String,
+    /// Port (0 picks a free one).
+    #[arg(long, default_value_t = 7777)]
+    pub port: u16,
+    /// Use this provider for every phase of the runs it starts.
+    #[arg(long, value_name = "NAME")]
+    pub provider: Option<String>,
+    /// Use this `provider/model` for every phase.
+    #[arg(long, value_name = "PROVIDER/MODEL")]
+    pub model: Option<String>,
+    /// Workspace provider.
+    #[arg(long, value_name = "NAME")]
+    pub workspace: Option<String>,
+    /// Drive the `mock` provider with scripted responses from a JSON file.
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["provider", "model"])]
+    pub script: Option<std::path::PathBuf>,
 }
 
 /// `vibe events …`

@@ -207,7 +207,7 @@ async fn perform(
 }
 
 /// Changes of the task's workspace, as reviewers see them.
-async fn changes(ctx: &AppContext, id: TaskId) -> Result<String> {
+pub(crate) async fn changes(ctx: &AppContext, id: TaskId) -> Result<String> {
     let task = ctx.store.load_task(id).await?;
     if uses_worktrees(ctx.workspace.name()) {
         let ws = worktree_workspace(&ctx.root, &task);
