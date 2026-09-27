@@ -54,14 +54,22 @@ and so are shells reading their program from standard input (`echo x | sh`).
 
 | Command | Rule |
 |---------|------|
-| `rm` | No `--no-preserve-root`; no `/`, `~`, `$HOME`, `*`, `.`, `..`, paths that climb out of the workspace, drive roots, or top-level system directories (`/etc`, `/usr`, `/home`, `/Users`, `/System`, …). |
+| `rm`, `rmdir`, `unlink`, `shred` | No `--no-preserve-root`; no target containing `$`, a backtick, `*`, `?`, `[`, `{` or `~` (so `rm -rf ${HOME%/}`, `rm *.log` and `rm -rf /U*` are all refused); no `.`, `..`, the workspace root itself, or any absolute path outside the workspace (`/Users/you/.ssh` included). Symbolic links leading out of the workspace are followed for the check. |
+| `find … -delete` / `-exec rm` | The start paths obey the `rm` rules. |
+| `… \| xargs rm` | Every upstream command's path arguments obey the `rm` rules; `xargs` must name its program explicitly and cannot take it from its input. |
+| Redirections `>`, `>>`, `&>`, `tee` | The target file must be inside the workspace and contain no expansion; `/dev/null` and friends are fine; `/dev/tcp` needs network access. |
+| `cd`, `pushd` | The target must stay inside the workspace (no `cd ..` from the root, no `cd -`, no `CDPATH`). |
 | `chmod` | No setuid/setgid bits (`4xxx`, `2xxx`, `6xxx`, `+s`). |
-| `git` | No `git config` writes; no `-c` overrides of identity, hooks, pagers, editors or credential helpers; no force-push to `main`/`master` (or without an explicit branch); no deletion of `main`/`master`. Everything else is allowed. |
+| `git` | `git config` only for reads (`get`, `list`, `--get*`, `-l`); no `-c` overrides of identity, hooks, pagers, editors, includes, filters, credential or GPG helpers; no `GIT_*` environment overrides; no `rebase -x`, `bisect run`, `filter-branch`, `submodule foreach`, `difftool`/`mergetool` commands; no force-push to `main`/`master` (or without an explicit branch); no deletion of `main`/`master`; no `--exec-path`. Everything else is allowed. |
 | `kill`, `pkill`, `killall` | No `kill -1`/`kill 0`; no system processes (`launchd`, `systemd`, `sshd`, `dockerd`, …). |
-| `bash`, `sh`, `zsh`, `fish`, `dash`, `ksh` | The `-c` command is validated recursively. |
+| Shells (`bash`, `sh`, `zsh`, `fish`, `dash`, `ksh`, `csh`, `tcsh`, `rc`, `elvish`, `nu`, `pwsh`, `powershell`) | The inline command (`-c`, `-Command`) is validated recursively; reading the program from standard input and `-EncodedCommand` are refused. |
+| Wrappers (`env`, `time`, `nice`, `nohup`, `xargs`, `timeout`, `setsid`, `stdbuf`, `caffeinate`, `flock`, `watch`, `strace`, `script`, `busybox`, …) | Stripped, then the wrapped command is validated; a wrapper that writes a file (`time -o`, `strace -o`, `script`) obeys the write rules. |
+| `alias`, `hash`, `enable`, `expect -c` | Refused: they can give a blocked program another name or run code the policy cannot read. |
+| Environment prefixes | `PATH`, `CDPATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DYLD_*`, `IFS`, `BASH_ENV`, `ENV`, `PROMPT_COMMAND`, `PERL5OPT`, `PYTHONSTARTUP`, `NODE_OPTIONS`, `RUBYOPT` and the `GIT_*` overrides cannot be set, in any form (`VAR=x cmd`, `env VAR=x`, `export`, `declare`, `read`, …). |
 | `psql`, `mysql`, `mariadb`, `redis-cli`, `mongosh`, `mongo` | No `DROP`, `TRUNCATE`, `DELETE` without `WHERE`, `FLUSHALL`/`FLUSHDB`, `.drop(`, `dropDatabase`, `deleteMany({})`. |
 | `dropdb`, `dropuser` | Only names containing `test`, `dev`, `local`, `tmp`, `temp`, `scratch`, `sandbox` or `mock`. |
 | `curl`, `wget`, `nc`, `ssh`, `scp`, `sftp`, `ftp`, `telnet` | Only when network access is allowed (see below). |
+| Anything touching `.git/` | Writing tools, copies, links and redirections into `.git/hooks`, `.git/config`, `.git/info`, `.git/worktrees` or `.git/modules` are refused, and `git worktree` is limited to `list`. |
 
 ### What you can configure
 
@@ -70,8 +78,8 @@ and so are shells reading their program from standard input (`echo x | sh`).
 # Programs to block in addition to the built-in list.
 blocked_commands = ["docker", "terraform"]
 
-# If non-empty, ONLY these programs may run (plus harmless builtins:
-# cd, echo, printf, true, false, pwd, test, [, exit, :).
+# If non-empty, ONLY these programs (and these wrappers, e.g. `nohup`) may run,
+# plus harmless builtins: cd, echo, printf, true, false, pwd, test, [, exit, :.
 allowed_commands = ["cargo", "git", "ls", "cat"]
 
 # Default timeout of a shell command, in seconds (an agent may ask up to 600).
