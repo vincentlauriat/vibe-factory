@@ -293,4 +293,24 @@ mod tests {
         assert!(out.is_error && out.content.contains("Access denied"));
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "abc");
     }
+
+    #[tokio::test]
+    async fn git_metadata_is_not_editable() {
+        let (dir, ctx) = workspace();
+        write(&dir, ".git/config", "[core]\n\tbare = false\n");
+        write(&dir, "sub/.git/x", "a");
+        for p in [".git/config", "sub/.git/x"] {
+            let out = run(
+                &ctx,
+                json!({"path": p, "old_string": "a", "new_string": "hooksPath = /tmp/evil"}),
+            )
+            .await;
+            assert!(
+                out.is_error && out.content.contains(".git"),
+                "{p}: {}",
+                out.content
+            );
+        }
+        assert_eq!(read(&dir, ".git/config"), "[core]\n\tbare = false\n");
+    }
 }

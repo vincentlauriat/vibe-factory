@@ -184,4 +184,49 @@ mod tests {
         assert!(!out.is_error, "{}", out.content);
         assert!(dir.path().join("real/b.txt").exists());
     }
+
+    #[tokio::test]
+    async fn git_metadata_is_not_writable() {
+        let (dir, ctx) = workspace();
+        std::fs::create_dir_all(dir.path().join(".git/hooks")).unwrap();
+        std::fs::create_dir_all(dir.path().join("sub/.git")).unwrap();
+        for p in [
+            ".git/hooks/pre-commit",
+            ".git/config",
+            ".git",
+            "sub/.git/x",
+            ".GIT/hooks/post-checkout",
+            "sub/../.git/info/exclude",
+            "new/.git/hooks/x",
+        ] {
+            let out = run(&ctx, json!({"path": p, "content": "#!/bin/sh"})).await;
+            assert!(
+                out.is_error && out.content.contains(".git"),
+                "{p}: {}",
+                out.content
+            );
+        }
+        assert!(!dir.path().join(".git/hooks/pre-commit").exists());
+        assert!(!dir.path().join("sub/.git/x").exists());
+        for p in [".github/workflows/ci.yml", "src/.gitignore", ".gitkeep"] {
+            let out = run(&ctx, json!({"path": p, "content": "x"})).await;
+            assert!(!out.is_error, "{p}: {}", out.content);
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn symlink_into_git_metadata_is_denied() {
+        let (dir, ctx) = workspace();
+        std::fs::create_dir_all(dir.path().join(".git/hooks")).unwrap();
+        std::os::unix::fs::symlink(dir.path().join(".git/hooks"), dir.path().join("hooks"))
+            .unwrap();
+        let out = run(&ctx, json!({"path": "hooks/pre-commit", "content": "x"})).await;
+        assert!(
+            out.is_error && out.content.contains(".git"),
+            "{}",
+            out.content
+        );
+        assert!(!dir.path().join(".git/hooks/pre-commit").exists());
+    }
 }

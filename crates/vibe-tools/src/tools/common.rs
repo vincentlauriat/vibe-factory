@@ -66,6 +66,13 @@ pub(crate) fn resolve_inside_workspace(
              can be modified."
         )));
     };
+    let input_has_git = Path::new(path).components().any(is_git_component);
+    if input_has_git || relative.components().any(is_git_component) {
+        return Err(ToolOutput::error(format!(
+            "Access denied: `{path}` is inside a `.git` directory (or is one). Repository \
+             metadata such as hooks and configuration cannot be modified by agents."
+        )));
+    }
     let mut current = root.clone();
     for component in relative.components() {
         if let Component::Normal(name) = component {
@@ -79,6 +86,12 @@ pub(crate) fn resolve_inside_workspace(
         }
     }
     Ok(resolved)
+}
+
+/// Whether a path component is named `.git` (compared case-insensitively,
+/// since common filesystems are case-insensitive).
+fn is_git_component(component: Component<'_>) -> bool {
+    matches!(component, Component::Normal(name) if name.to_string_lossy().eq_ignore_ascii_case(".git"))
 }
 
 /// Path shown to the model: relative to the workspace root with `/`

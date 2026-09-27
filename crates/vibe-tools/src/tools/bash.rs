@@ -172,7 +172,8 @@ impl Tool for BashTool {
          directory inside the workspace (default: the root). The command is killed after \
          `timeout_secs` (default from the project configuration, at most 600). Output longer \
          than 30000 characters keeps its beginning and end. Commands run non-interactively \
-         with no standard input."
+         with no standard input; background processes they start are killed when the \
+         command finishes."
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -240,6 +241,8 @@ impl Tool for BashTool {
                 return Ok(ToolOutput::error(format!("Cannot start the shell: {e}.")));
             }
         };
+        // Captured now: the id is no longer available once the shell is reaped.
+        let pid = child.id();
         let capture = Arc::new(Mutex::new(Capture::default()));
         let mut readers = Vec::new();
         if let Some(out) = child.stdout.take() {
@@ -251,12 +254,18 @@ impl Tool for BashTool {
 
         let status = tokio::time::timeout(Duration::from_secs(timeout_secs), child.wait()).await;
         let (status, timed_out) = match status {
-            Ok(Ok(status)) => (Some(status), false),
+            Ok(Ok(status)) => {
+                // Background jobs (`sleep 999 &`) must not outlive the call.
+                if let Some(pid) = pid {
+                    kill_tree(pid).await;
+                }
+                (Some(status), false)
+            }
             Ok(Err(e)) => {
                 return Err(Error::tool(format!("waiting for the shell failed: {e}")));
             }
             Err(_) => {
-                if let Some(pid) = child.id() {
+                if let Some(pid) = pid {
                     kill_tree(pid).await;
                 }
                 let _ = child.kill().await;
@@ -503,5 +512,40 @@ mod tests {
         .await;
         assert!(!out.is_error, "{}", out.content);
         assert!(inside.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn background_jobs_do_not_outlive_the_call() {
+        let (dir, ctx) = workspace();
+        let out = run(&ctx, json!({"command": "sleep 999 & echo $! > pid.txt"})).await;
+        assert!(!out.is_error, "{}", out.content);
+        let pid = std::fs::read_to_string(dir.path().join("pid.txt")).unwrap();
+        let pid = pid.trim().to_string();
+        let alive = || {
+            std::process::Command::new("kill")
+                .args(["-0", &pid])
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success())
+        };
+        // The orphaned child is reaped asynchronously by its new parent.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while alive() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(!alive(), "background sleep {pid} survived the tool call");
+    }
+
+    #[tokio::test]
+    async fn cwd_inside_git_metadata_is_denied() {
+        let (dir, ctx) = workspace();
+        std::fs::create_dir_all(dir.path().join(".git/hooks")).unwrap();
+        let out = run(&ctx, json!({"command": "echo hi", "cwd": ".git/hooks"})).await;
+        assert!(
+            out.is_error && out.content.contains(".git"),
+            "{}",
+            out.content
+        );
     }
 }

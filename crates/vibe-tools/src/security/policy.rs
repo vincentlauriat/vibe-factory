@@ -73,7 +73,7 @@ pub const NETWORK_PROGRAMS: &[&str] = &[
 
 /// POSIX-like shells whose `-c` argument is validated recursively.
 pub const SHELLS: &[&str] = &[
-    "bash", "sh", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "rc", "elvish", "nu",
+    "bash", "sh", "zsh", "fish", "dash", "ksh", "ash", "mksh", "tcsh", "csh", "rc", "elvish", "nu",
 ];
 
 /// PowerShell executables whose `-Command` argument is validated recursively.
@@ -137,7 +137,13 @@ pub const FORBIDDEN_VARIABLES: &[&str] = &[
 ];
 
 /// Prefixes of variables that may never be set by a command.
-pub const FORBIDDEN_VARIABLE_PREFIXES: &[&str] = &["DYLD_", "GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_"];
+pub const FORBIDDEN_VARIABLE_PREFIXES: &[&str] = &[
+    "DYLD_",
+    "GIT_CONFIG_KEY_",
+    "GIT_CONFIG_VALUE_",
+    "GIT_AUTHOR_",
+    "GIT_COMMITTER_",
+];
 
 /// Wrappers that are shell builtins or keywords; they are not subject to the
 /// allowlist.
@@ -198,7 +204,14 @@ const GIT_FORBIDDEN_CONFIG_PREFIXES: &[&str] = &[
     "core.gitproxy",
     "sequence.editor",
     "credential.helper",
-    "diff.external",
+    "diff.",
+    "merge.",
+    "filter.",
+    "protocol.",
+    "uploadpack.",
+    "receive.",
+    "core.askpass",
+    "gpg.",
 ];
 
 type Check = Result<(), String>;
@@ -339,6 +352,7 @@ impl SecurityPolicy {
             }
             if r.writes_file() {
                 check_path_target(target, scope.root, Purpose::Write)?;
+                check_git_metadata("redirection", target)?;
             }
         }
         if !seg.is_command() {
@@ -389,6 +403,11 @@ impl SecurityPolicy {
             ));
         }
         let args = seg.args();
+        if writes_its_arguments(program, args) {
+            for a in args {
+                check_git_metadata(program, a)?;
+            }
+        }
         match program {
             p if REMOVERS.contains(&p) => check_rm(p, args, scope.root),
             "cd" | "pushd" => check_cd(program, args, scope.root),
@@ -566,6 +585,52 @@ impl SecurityPolicy {
 
 fn shell_quote(word: &str) -> String {
     format!("'{}'", word.replace('\'', r"'\''"))
+}
+
+/// Programs that create, modify, copy or link the paths they are given.
+const PATH_WRITERS: &[&str] = &[
+    "cp", "mv", "tee", "install", "ln", "touch", "chmod", "dd", "rsync", "tar", "unzip",
+];
+
+/// Entries of a `.git` directory that control code execution or
+/// repository layout.
+const GIT_METADATA_ENTRIES: &[&str] = &["hooks", "config", "info", "worktrees", "modules"];
+
+/// Whether `program` writes to paths among its arguments (`sed` only with
+/// `-i`).
+fn writes_its_arguments(program: &str, args: &[String]) -> bool {
+    PATH_WRITERS.contains(&program)
+        || (program == "sed"
+            && args
+                .iter()
+                .any(|a| a.starts_with("-i") || a.starts_with("--in-place")))
+}
+
+/// Whether `arg` names a `.git` directory itself or its hooks, config,
+/// info, worktrees or modules (also inside `--opt=path` / `of=path` forms).
+fn touches_git_metadata(arg: &str) -> bool {
+    let lower = arg.to_lowercase().replace('\\', "/");
+    let parts: Vec<&str> = lower
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != ".")
+        .collect();
+    parts.iter().enumerate().any(|(i, part)| {
+        let is_git = *part == ".git" || part.ends_with("=.git");
+        is_git
+            && parts
+                .get(i + 1)
+                .is_none_or(|next| GIT_METADATA_ENTRIES.contains(next))
+    })
+}
+
+fn check_git_metadata(program: &str, arg: &str) -> Check {
+    if touches_git_metadata(arg) {
+        return Err(format!(
+            "Refusing to let `{program}` modify `{arg}`: repository metadata (.git hooks, \
+             config, info, worktrees and modules) cannot be changed by agents."
+        ));
+    }
+    Ok(())
 }
 
 /// Start paths of a `find` command (`.` when none is given), skipping the
@@ -1009,6 +1074,18 @@ fn check_git(args: &[String]) -> Check {
         }
         "bisect" if rest.first().is_some_and(|a| a == "run") => deny("bisect run"),
         "filter-branch" => deny("filter-branch"),
+        "worktree" => {
+            let action = rest.iter().find(|a| !a.starts_with('-'));
+            if action.is_some_and(|a| a == "list") {
+                Ok(())
+            } else {
+                Err(
+                    "Only `git worktree list` is allowed; workspaces are managed by the \
+                     framework."
+                        .into(),
+                )
+            }
+        }
         "submodule" => {
             let action = rest.iter().find(|a| !a.starts_with('-'));
             if action.is_some_and(|a| a == "foreach") {
@@ -1743,9 +1820,18 @@ mod tests {
                 "git -c CORE.HOOKSPATH=/tmp status",
                 "git --config-env=core.pager=EVIL log",
                 "git --exec-path=/tmp/evil status",
+                "git -c core.askpass=/tmp/x fetch",
+                "git -c gpg.program=/tmp/x commit -S",
+                "git -c filter.lfs.smudge='sh -c id' checkout .",
+                "git -c diff.tool=x difftool",
+                "git -c merge.tool=x mergetool",
+                "git -c protocol.ext.allow=always fetch",
+                "git -c uploadpack.packObjectsHook=/tmp/x fetch",
+                "git -c receive.denyCurrentBranch=ignore push",
             ],
             &[
                 "git -c color.ui=never status",
+                "git -c core.quotepath=off status",
                 "git -C sub log --oneline",
                 "git --exec-path",
             ],
@@ -1768,12 +1854,15 @@ mod tests {
                 "GIT_EXTERNAL_DIFF=/tmp/x git diff",
                 "GIT_EDITOR=/tmp/x git commit",
                 "GIT_PAGER='sh -c id' git log",
+                "GIT_AUTHOR_NAME=x git commit -m m",
+                "GIT_AUTHOR_DATE=2020-01-01 git commit -m m",
+                "GIT_COMMITTER_EMAIL=x@y git commit -m m",
+                "GIT_EXEC_PATH=/tmp/x git status",
                 "env GIT_SSH_COMMAND=x git fetch",
                 "export GIT_DIR=/tmp/x",
             ],
             &[
                 "GIT_TRACE=1 git status",
-                "GIT_AUTHOR_DATE=2020-01-01 git commit -m m",
                 "env GIT_TERMINAL_PROMPT=0 git fetch",
             ],
         );
@@ -2276,6 +2365,74 @@ mod tests {
         assert!(
             p.validate_with_network("cat < /dev/tcp/example.com/80", true)
                 .is_ok()
+        );
+    }
+
+    // -- addendum ------------------------------------------------------------
+
+    #[test]
+    fn more_shells_are_validated() {
+        let p = policy();
+        check_pairs(
+            &p,
+            &[
+                "ash -c 'sudo id'",
+                "mksh -c 'sudo id'",
+                "busybox ash -c 'sudo id'",
+                "busybox sh -c 'rm -rf /'",
+                "echo 'sudo id' | busybox sh",
+                "echo 'sudo id' | mksh",
+            ],
+            &["ash -c 'make'", "mksh -c 'make'", "busybox sh -c 'ls'"],
+        );
+    }
+
+    #[test]
+    fn git_metadata_cannot_be_written() {
+        let p = rooted();
+        check_pairs(
+            &p,
+            &[
+                "cp x .git/hooks/pre-commit",
+                "echo x | tee .git/hooks/pre-commit",
+                "chmod +x .git/hooks/pre-commit",
+                "mv evil .git/config",
+                "ln -s ../../evil.sh .git/hooks/post-checkout",
+                "install -m 755 hook .git/hooks/pre-push",
+                "touch .git/hooks/x",
+                "sed -i s/a/b/ .git/config",
+                "sed --in-place=.bak s/a/b/ .git/config",
+                "rsync -a hooks/ .git/hooks/",
+                "tar -xf hooks.tar -C .git",
+                "unzip hooks.zip -d .git/hooks",
+                "dd if=x of=.git/hooks/pre-commit",
+                "cp -r evil .git/",
+                "cp x sub/.git/info/attributes",
+                "cp x .GIT/hooks/pre-commit",
+                "cp x .git//hooks/y",
+                "cp x ./.git/./hooks/y",
+                "cp x --target-directory=.git/hooks",
+                "cp x ../../../.git/hooks/pre-commit",
+                "cp -r .git/modules/x .git/worktrees/y",
+                "echo x > .git/hooks/pre-commit",
+                "echo x >> .git/config",
+                "cat evil > sub/.git/info/exclude",
+                "git worktree add ../elsewhere",
+                "git worktree remove x",
+                "git worktree prune",
+            ],
+            &[
+                "cp x .github/workflows/ci.yml",
+                "cat .git/config",
+                "grep -r x .git/hooks",
+                "ls .git",
+                "echo x > .gitignore",
+                "touch .gitkeep",
+                "sed s/a/b/ .git/config",
+                "cp README.md docs/",
+                "git worktree list",
+                "git status",
+            ],
         );
     }
 }
