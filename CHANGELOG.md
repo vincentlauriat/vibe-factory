@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Streaming: `ModelProvider::complete_streaming`, server-sent events for Anthropic and
+  OpenAI-compatible providers, `agent_delta` events while a step is generated, and
+  `providers.<name>.stream = false` to opt out.
+- Events v2: every logged event carries `schema` 2 and a per-run `seq`, kept across resumes;
+  new `validation_finished`, `subtask_integrated`, `budget_updated`, `artefact_written`,
+  `approval_requested` and `approval_resolved` events; `vibe events <task> [--after SEQ]
+  [--follow] [--all]`; the envelope and every event type documented in the book.
+- Human approvals: `pipeline.approvals = ["spec", "plan", "merge"]`, `vibe approve` and
+  `vibe reject --reason`; a rejection goes back to the agents that produced the work.
+- `RunManager`, the single seam for interfaces (ADR-007); one process at a time per task
+  (OS lock on `run.lock`), cross-process index locking, and `vibe cancel [--wait]`.
+- `vibe tui`: task board and live run view with approvals, budgets, plan and changes.
+
+### Changed
+- Assisted conflict resolution counts against the run budget, and also resolves conflicts
+  between subtasks before an attempt is failed.
+
 ## [0.2.0] — 2026-09-27
 
 Reliability release. Configurations and runs from 0.1 keep working; see
