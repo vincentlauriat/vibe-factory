@@ -8,6 +8,7 @@ pub mod merge;
 pub mod plan;
 pub mod qa;
 pub mod spec;
+mod validation;
 
 pub use assess::run_assess;
 pub use build::{CoderReport, run_build};

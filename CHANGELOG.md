@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Required `pipeline.validation_commands`, executed independently of model verdicts before
+  ready/merge. Failures pause for review; results persist in `run.json` and all checks replay
+  on resume. Existing configurations keep their previous behavior with an empty list.
+- Automatic fixes for failed required commands, with fresh QA and full revalidation.
+  `pipeline.max_validation_fix_attempts` (default 2, 0 for manual-only) is retained across
+  resumes; policy/configuration failures still require human review.
+- Validated automatic integration in a detached worktree, including assisted conflict
+  resolution. Reject failing or modified candidates and stale targets before updating the
+  base branch. Workspace providers can opt in through `merge_validated` / `MergeValidator`.
+- Three dependency-free Rust evaluation cases, an isolated runner and versioned JSON reports.
+
+### Changed
+- Prioritize reliability work for v0.2 and clarify that the shell policy is not a sandbox.
+
 ## [0.1.0] — 2026-09-26
 
 Initial public release.

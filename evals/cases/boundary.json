@@ -1,0 +1,9 @@
+{
+  "id": "boundary",
+  "title": "Fix the inclusive upper bound",
+  "task": "Fix contains(value, min, max) so both bounds are inclusive. Return false when min > max. Preserve the public API and add regression tests.",
+  "files": {
+    "src/lib.rs": "pub fn contains(value: i32, min: i32, max: i32) -> bool {\n    value >= min && value < max\n}\n"
+  },
+  "oracle": "#[test]\nfn inclusive_bounds() {\n    assert!(fixture::contains(10, 0, 10));\n    assert!(fixture::contains(0, 0, 10));\n    assert!(fixture::contains(4, 4, 4));\n    assert!(!fixture::contains(5, 9, 2));\n    assert!(!fixture::contains(-1, 0, 10));\n    assert!(!fixture::contains(11, 0, 10));\n}\n"
+}

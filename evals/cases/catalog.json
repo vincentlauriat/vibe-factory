@@ -1,0 +1,11 @@
+{
+  "id": "catalog",
+  "title": "Share case-insensitive catalog lookup",
+  "task": "Make find and search use the same ASCII case-insensitive comparison helper in a separate module. find returns the first exact match; search returns all substring matches in input order. Preserve public APIs. Add tests covering both functions and empty queries.",
+  "files": {
+    "src/lib.rs": "mod lookup;\nmod search;\npub use lookup::find;\npub use search::search;\n",
+    "src/lookup.rs": "pub fn find<'a>(items: &[&'a str], query: &str) -> Option<&'a str> {\n    items.iter().copied().find(|item| *item == query)\n}\n",
+    "src/search.rs": "pub fn search<'a>(items: &[&'a str], query: &str) -> Vec<&'a str> {\n    items.iter().copied().filter(|item| item.contains(query)).collect()\n}\n"
+  },
+  "oracle": "#[test]\nfn shared_lookup_behavior() {\n    let items = [\"Alpha\", \"BETA\", \"alphabet\", \"\", \"alpha\"];\n    assert_eq!(fixture::find(&items, \"ALPHA\"), Some(\"Alpha\"));\n    assert_eq!(fixture::find(&items, \"\"), Some(\"\"));\n    assert_eq!(fixture::find(&items, \"missing\"), None);\n    assert_eq!(fixture::search(&items, \"ALP\"), vec![\"Alpha\", \"alphabet\", \"alpha\"]);\n    assert_eq!(fixture::search(&items, \"\"), items.to_vec());\n    assert!(fixture::search(&[], \"x\").is_empty());\n}\n"
+}

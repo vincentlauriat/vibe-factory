@@ -707,3 +707,255 @@ fn completions_and_unknown_provider() {
         .assert()
         .failure();
 }
+
+/// An approving reviewer cannot bypass required checks, even with auto-merge enabled.
+#[test]
+fn required_validation_blocks_merge_and_runs_again_on_resume() {
+    let p = Project::new();
+    p.init();
+    p.vibe()
+        .args(["config", "set", "pipeline.max_validation_fix_attempts", "0"])
+        .assert()
+        .success();
+    p.add_task("Fix typo in README", "Replace demo with corrected.");
+    let script = p.write_script(
+        "validation-script.json",
+        &json!({"routes": {
+            "coder": [
+                {"tool": "write_file", "input": {"path": "README.md", "content": "corrected\n"}},
+                fenced(json!({"status": "done", "summary": "corrected"}))
+            ]
+        }}),
+    );
+    p.vibe()
+        .args([
+            "config",
+            "set",
+            "pipeline.validation_commands",
+            "[\"exit 0\", \"exit 7\", \"exit 0\"]",
+        ])
+        .assert()
+        .success();
+    let original = p.git(&["rev-parse", "HEAD"]);
+    p.vibe()
+        .args(["run", "1", "--auto-merge", "--script"])
+        .arg(&script)
+        .assert()
+        .code(2);
+    assert_eq!(p.git(&["rev-parse", "HEAD"]), original);
+    assert_eq!(p.task_json(1)["status"], "review");
+    let state_path = p.task_dir(1).join("run.json");
+    let state: Value = serde_json::from_slice(&std::fs::read(&state_path).unwrap()).unwrap();
+    assert_eq!(state["status"], "paused");
+    assert_eq!(state["current_phase"], "merge");
+    assert_eq!(state["validations"].as_array().unwrap().len(), 2);
+    assert_eq!(state["validations"][0]["passed"], true);
+    assert_eq!(state["validations"][1]["metadata"]["exit_code"], 7);
+    p.vibe()
+        .args([
+            "config",
+            "set",
+            "pipeline.validation_commands",
+            "[\"exit 0\"]",
+        ])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--auto-merge", "--provider", "mock", "--resume"])
+        .assert()
+        .success();
+    assert_eq!(p.task_json(1)["status"], "done");
+    let state: Value = serde_json::from_slice(&std::fs::read(state_path).unwrap()).unwrap();
+    assert_eq!(state["validations"].as_array().unwrap().len(), 4);
+    assert_eq!(state["validations"][3]["integration"], true);
+    assert_eq!(state["validations"][2]["passed"], true);
+    assert_eq!(
+        std::fs::read_to_string(p.root().join("README.md")).unwrap(),
+        "corrected\n"
+    );
+}
+
+#[test]
+fn required_validation_blocks_ready_on_denied_or_empty_commands() {
+    for command in ["sudo echo forbidden", ""] {
+        let p = Project::new();
+        p.init();
+        p.add_task("Fix typo in README", "teh -> the");
+        let commands = serde_json::to_string(&vec![command]).unwrap();
+        p.vibe()
+            .args(["config", "set", "pipeline.validation_commands", &commands])
+            .assert()
+            .success();
+        p.vibe()
+            .args(["run", "1", "--provider", "mock"])
+            .assert()
+            .code(2);
+        assert_eq!(p.task_json(1)["status"], "review");
+        let state: Value =
+            serde_json::from_slice(&std::fs::read(p.task_dir(1).join("run.json")).unwrap())
+                .unwrap();
+        assert_eq!(state["validations"][0]["passed"], false);
+        assert_eq!(state["validation_fix_attempts"], 0);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn required_validation_timeout_blocks_ready() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo", "teh -> the");
+    p.vibe()
+        .args(["config", "set", "security.command_timeout_secs", "1"])
+        .assert()
+        .success();
+    p.vibe()
+        .args([
+            "config",
+            "set",
+            "pipeline.validation_commands",
+            "[\"sleep 3\"]",
+        ])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--provider", "mock"])
+        .assert()
+        .code(2);
+    let state: Value =
+        serde_json::from_slice(&std::fs::read(p.task_dir(1).join("run.json")).unwrap()).unwrap();
+    assert_eq!(state["validations"][0]["metadata"]["timed_out"], true);
+    assert_eq!(p.task_json(1)["status"], "review");
+}
+
+#[test]
+fn validation_fixer_changes_workspace_and_needs_new_qa_approval_before_merge() {
+    for verdict in ["approved", "inconclusive"] {
+        let p = Project::new();
+        p.init();
+        p.add_task("Fix typo in README", "Replace the heading with corrected.");
+        p.vibe()
+            .args([
+                "config",
+                "set",
+                "pipeline.validation_commands",
+                "[\"git grep -q corrected -- README.md\"]",
+            ])
+            .assert()
+            .success();
+        let script = p.write_script("fix-validation.json", &json!({"routes": {
+            "coder": [
+                {"tool": "write_file", "input": {"path": "README.md", "content": "broken\n"}},
+                fenced(json!({"status": "done", "summary": "edited"}))
+            ],
+            "qa_fixer": [
+                {"tool": "write_file", "input": {"path": "README.md", "content": "corrected\n"}},
+                fenced(json!({"status": "done", "summary": "corrected the content", "fixed": ["validation"]}))
+            ],
+            "qa_reviewer": [
+                fenced(json!({"verdict": "approved", "summary": "initial review", "issues": []})),
+                fenced(json!({"verdict": verdict, "summary": "review after correction", "issues": []}))
+            ]
+        }}));
+        let original = p.git(&["rev-parse", "HEAD"]);
+        p.vibe()
+            .args(["run", "1", "--auto-merge", "--script"])
+            .arg(script)
+            .assert()
+            .code(if verdict == "approved" { 0 } else { 2 });
+        let state: Value =
+            serde_json::from_slice(&std::fs::read(p.task_dir(1).join("run.json")).unwrap())
+                .unwrap();
+        assert_eq!(state["validation_fix_attempts"], 1);
+        assert_eq!(state["qa_round"], 2);
+        assert_eq!(state["validations"][0]["passed"], false);
+        if verdict == "approved" {
+            assert_eq!(p.task_json(1)["status"], "done");
+            assert_eq!(state["validations"][1]["passed"], true);
+            assert_eq!(
+                std::fs::read_to_string(p.root().join("README.md")).unwrap(),
+                "corrected\n"
+            );
+        } else {
+            assert_eq!(p.task_json(1)["status"], "review");
+            assert_eq!(p.git(&["rev-parse", "HEAD"]), original);
+            assert_eq!(state["validations"].as_array().unwrap().len(), 1);
+        }
+    }
+}
+
+#[test]
+fn integration_validation_rejects_combined_tree_and_rebuilds_it_on_resume() {
+    let p = Project::new();
+    std::fs::write(p.root().join("policy.txt"), "allowed\n").unwrap();
+    p.git(&["add", "policy.txt"]);
+    p.git(&["commit", "-qm", "initial policy"]);
+    p.init();
+    p.add_task("Fix typo in README", "Replace demo with corrected.");
+    p.vibe()
+        .args([
+            "config",
+            "set",
+            "pipeline.validation_commands",
+            "[\"git grep -q allowed -- policy.txt\"]",
+        ])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--dry-run"])
+        .assert()
+        .success();
+    // The task branch still has the old policy. Only the combined tree will fail.
+    std::fs::write(p.root().join("policy.txt"), "blocked\n").unwrap();
+    p.git(&["add", "policy.txt"]);
+    p.git(&["commit", "-qm", "base policy changed"]);
+    let before = p.git(&["rev-parse", "HEAD"]);
+    let script = p.write_script(
+        "integration-script.json",
+        &json!({"routes": {
+            "coder": [
+                {"tool": "write_file", "input": {"path": "README.md", "content": "corrected\n"}},
+                fenced(json!({"status": "done", "summary": "corrected"}))
+            ]
+        }}),
+    );
+    p.vibe()
+        .args(["run", "1", "--resume", "--auto-merge", "--script"])
+        .arg(&script)
+        .assert()
+        .code(2);
+    assert_eq!(p.git(&["rev-parse", "HEAD"]), before);
+    assert_eq!(p.task_json(1)["status"], "review");
+    let state_path = p.task_dir(1).join("run.json");
+    let state: Value = serde_json::from_slice(&std::fs::read(&state_path).unwrap()).unwrap();
+    assert_eq!(state["validations"][0]["passed"], true);
+    assert_eq!(state["validations"][0]["integration"], false);
+    assert_eq!(state["validations"][1]["passed"], false);
+    assert_eq!(state["validations"][1]["integration"], true);
+    assert_ne!(
+        state["validations"][0]["workspace_root"],
+        state["validations"][1]["workspace_root"]
+    );
+    assert_eq!(state["validation_fix_attempts"], 0);
+    // A new target commit requires building and checking a fresh candidate on resume.
+    std::fs::write(p.root().join("policy.txt"), "allowed again\n").unwrap();
+    p.git(&["add", "policy.txt"]);
+    p.git(&["commit", "-qm", "repair policy"]);
+    p.vibe()
+        .args(["run", "1", "--resume", "--auto-merge", "--provider", "mock"])
+        .assert()
+        .success();
+    assert_eq!(p.task_json(1)["status"], "done");
+    assert_eq!(
+        std::fs::read_to_string(p.root().join("README.md")).unwrap(),
+        "corrected\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(p.root().join("policy.txt")).unwrap(),
+        "allowed again\n"
+    );
+    let state: Value = serde_json::from_slice(&std::fs::read(state_path).unwrap()).unwrap();
+    assert_eq!(state["validations"].as_array().unwrap().len(), 4);
+    assert_eq!(state["validations"][3]["integration"], true);
+    assert_eq!(state["validations"][3]["passed"], true);
+}

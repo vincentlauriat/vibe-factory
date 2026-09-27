@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use vibe_core::workspace::MergeOutcome;
-use vibe_core::{Error, Result, Task, Workspace, WorkspaceKind, WorkspaceProvider};
+use vibe_core::{Error, MergeValidator, Result, Task, Workspace, WorkspaceKind, WorkspaceProvider};
 
 use crate::commit::commit_all;
 use crate::config_guard::{ConfigSnapshot, tampering_error};
@@ -453,6 +453,127 @@ impl WorkspaceProvider for GitWorktreeProvider {
         abort_and_restore(&project, original.as_deref(), &base).await;
         tracing::debug!(%branch, %base, files = ?conflicts, "merge needs human review");
         Ok(MergeOutcome::NeedsHumanReview { files: conflicts })
+    }
+
+    async fn merge_validated(
+        &self,
+        workspace: &Workspace,
+        validator: &mut dyn MergeValidator,
+    ) -> Result<MergeOutcome> {
+        let branch = workspace
+            .branch
+            .as_deref()
+            .ok_or_else(|| Error::workspace("validated integration requires a task branch"))?;
+        let project = Git::new(&workspace.project_root);
+        self.check_config_untouched(&project, &workspace.project_root, branch)
+            .await?;
+        if same_path(&workspace.root, &workspace.project_root) {
+            return Err(Error::workspace(
+                "validated git integration requires an isolated task workspace",
+            ));
+        }
+        if project.has_tracked_changes().await? {
+            return Err(Error::workspace(
+                "cannot integrate: project has uncommitted changes",
+            ));
+        }
+        commit_all(&workspace.root, CHECKPOINT_MESSAGE, &[]).await?;
+        let base = self.base_for(&project, workspace).await?;
+        let base_ref = format!("refs/heads/{base}");
+        let base_commit = project.rev_parse(&base_ref).await?;
+        let task_commit = project.rev_parse(&format!("refs/heads/{branch}")).await?;
+        let original_branch = project.current_branch().await?;
+        let original_head = project.head_sha().await?;
+        let worktrees = self.worktrees_root(&workspace.project_root);
+        ensure_worktrees_dir(&worktrees).await?;
+        // No temporary branch: a cancelled future leaves at most a prunable worktree entry.
+        let temp = tempfile::Builder::new()
+            .prefix(".integration-")
+            .tempdir_in(worktrees)?;
+        let path = path_arg(temp.path())?;
+        project
+            .run(&["worktree", "add", "--detach", path, &base_commit])
+            .await?;
+        let candidate = Git::new(temp.path());
+        let result = async {
+            let message = format!("Merge {branch} (vibe, validated)");
+            let merged = candidate
+                .output_as_framework(&["merge", "--ff", "--no-edit", "-m", &message, &task_commit])
+                .await?;
+            if !merged.success {
+                let conflicts = candidate.conflicted_files().await?;
+                if conflicts.is_empty() {
+                    return Err(Error::workspace(format!(
+                        "candidate merge failed: {}",
+                        merged.stderr.trim()
+                    )));
+                }
+                match &self.merge_strategy {
+                    MergeStrategy::Assisted { provider, model } => {
+                        let resolved =
+                            resolve_conflicts(provider.as_ref(), model, temp.path(), &conflicts)
+                                .await?;
+                        if resolved.iter().any(|r| !r.resolved) {
+                            return Ok(MergeOutcome::NeedsHumanReview { files: conflicts });
+                        }
+                        let mut add = vec!["add", "--"];
+                        add.extend(conflicts.iter().map(String::as_str));
+                        candidate.run(&add).await?;
+                        candidate
+                            .run_as_framework(&["commit", "--no-edit", "--quiet"])
+                            .await?;
+                    }
+                    MergeStrategy::Manual => {
+                        return Ok(MergeOutcome::NeedsHumanReview { files: conflicts });
+                    }
+                }
+            }
+            let commit = candidate.head_sha().await?;
+            let candidate_workspace = Workspace {
+                root: temp.path().to_path_buf(),
+                project_root: workspace.project_root.clone(),
+                kind: WorkspaceKind::GitWorktree,
+                branch: None,
+                base_branch: Some(base.clone()),
+            };
+            validator.validate(&candidate_workspace).await?;
+            // Checks are observers: never publish untested changes they left behind.
+            let status = candidate
+                .run(&["status", "--porcelain", "--untracked-files=normal"])
+                .await?;
+            if candidate.head_sha().await? != commit || !status.trim().is_empty() {
+                return Err(Error::workspace(
+                    "integration candidate changed during validation; refusing to publish",
+                ));
+            }
+            self.check_config_untouched(&project, &workspace.project_root, branch)
+                .await?;
+            if project.rev_parse(&base_ref).await? != base_commit
+                || project.current_branch().await? != original_branch
+                || project.head_sha().await? != original_head
+                || project.has_tracked_changes().await?
+            {
+                return Err(Error::workspace(
+                    "target changed during integration validation; retry with a fresh candidate",
+                ));
+            }
+            if commit == base_commit {
+                return Ok(MergeOutcome::NoChanges);
+            }
+            if original_branch.as_deref() != Some(base.as_str()) {
+                project.checkout(&base).await?;
+            }
+            // This can only move to the already validated commit; it cannot create a new merge.
+            project.run(&["merge", "--ff-only", &commit]).await?;
+            Ok(MergeOutcome::Merged {
+                commit: Some(commit),
+            })
+        }
+        .await;
+        if let Err(error) = project.run(&["worktree", "remove", "--force", path]).await {
+            tracing::warn!(%error, "could not unregister integration worktree; it will be pruned later");
+        }
+        result
     }
 
     async fn discard(&self, workspace: &Workspace) -> Result<()> {

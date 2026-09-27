@@ -37,6 +37,27 @@ impl RunStatus {
     }
 }
 
+/// Result of a required command executed by the pipeline, independently of QA.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ValidationResult {
+    /// True when checking the combined integration candidate rather than the task branch.
+    #[serde(default)]
+    pub integration: bool,
+    /// Directory in which the command ran (empty for legacy records).
+    #[serde(default)]
+    pub workspace_root: std::path::PathBuf,
+    /// Exact configured command.
+    pub command: String,
+    /// Completion time of this attempt.
+    pub finished_at: DateTime<Utc>,
+    /// True only for a successful tool result with exit code zero.
+    pub passed: bool,
+    /// Captured output or the reason execution was refused.
+    pub output: String,
+    /// Shell metadata (exit code, timeout and elapsed milliseconds when available).
+    pub metadata: serde_json::Value,
+}
+
 /// State of one pipeline run, persisted as `run.json` in the task directory.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RunState {
@@ -63,6 +84,15 @@ pub struct RunState {
     pub updated_at: DateTime<Utc>,
     /// Lifecycle status.
     pub status: RunStatus,
+    /// Validation attempt history, retained across resumes.
+    #[serde(default)]
+    pub validations: Vec<ValidationResult>,
+    /// Automatic validation fixes started, retained across resumes.
+    #[serde(default)]
+    pub validation_fix_attempts: u32,
+    /// Index into `validations` of the failure awaiting the fixer.
+    #[serde(default)]
+    pub pending_validation_fix: Option<usize>,
     /// Last error message, if the run failed.
     #[serde(default)]
     pub last_error: Option<String>,
@@ -84,6 +114,9 @@ impl RunState {
             updated_at: now,
             status: RunStatus::Running,
             last_error: None,
+            validations: Vec::new(),
+            validation_fix_attempts: 0,
+            pending_validation_fix: None,
         }
     }
 

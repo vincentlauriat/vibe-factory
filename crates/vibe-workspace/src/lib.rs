@@ -66,6 +66,11 @@
 //!    project was on, and reports [`MergeOutcome::NeedsHumanReview`] with the
 //!    conflicting files.
 //!
+//! With required checks, the pipeline calls `merge_validated` instead: it prepares a
+//! detached integration worktree, resolves conflicts there, invokes the host validator,
+//! checks that the candidate and target stayed unchanged, and fast-forwards the target
+//! to the exact tested commit. Validation failure never publishes the candidate.
+//!
 //! `discard` removes the worktree (`git worktree remove --force`) and deletes
 //! the task branch; already-missing resources are not an error.
 //!

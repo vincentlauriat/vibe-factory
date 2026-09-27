@@ -299,6 +299,7 @@ pub struct Harness {
     pub cancel_on_commit: Arc<Mutex<Option<watch::Sender<bool>>>>,
     pub config: VibeConfig,
     pub registry: Registry,
+    pub tools: ToolRegistry,
 }
 
 impl Harness {
@@ -322,6 +323,7 @@ impl Harness {
             cancel_on_commit: Arc::new(Mutex::new(None)),
             config,
             registry: Registry::new(),
+            tools: ToolRegistry::new(),
         }
     }
 
@@ -381,7 +383,7 @@ impl Harness {
             providers: Arc::new(Resolver(self.router.clone())),
             store,
             workspace: Arc::new(InPlaceWorkspace),
-            tools: ToolRegistry::new(),
+            tools: self.tools.clone(),
             events: self.events.clone(),
             config: self.config.clone(),
             project_root: self.root(),

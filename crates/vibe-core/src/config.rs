@@ -102,6 +102,13 @@ pub struct PipelineConfig {
     /// Whether to merge automatically after QA approval.
     #[serde(default)]
     pub auto_merge: bool,
+    /// Required shell checks, run in order before marking ready or merging.
+    #[serde(default)]
+    pub validation_commands: Vec<String>,
+    /// Maximum automatic fixes of required validation failures over a whole run.
+    /// Zero disables automatic validation fixes. Resumes retain the consumed budget.
+    #[serde(default = "default_validation_fix_attempts")]
+    pub max_validation_fix_attempts: u32,
     /// How merge conflicts are handled: `manual` (report for a human) or
     /// `assisted` (let the `merge_resolver` agent's model try first).
     #[serde(default)]
@@ -119,6 +126,10 @@ pub enum MergeStrategy {
     Manual,
     /// A model attempts to resolve conflicts; unresolved files go to a human.
     Assisted,
+}
+
+fn default_validation_fix_attempts() -> u32 {
+    2
 }
 
 fn default_qa_rounds() -> u32 {
@@ -146,6 +157,8 @@ impl Default for PipelineConfig {
             max_phase_retries: default_phase_retries(),
             workspace: default_workspace(),
             auto_merge: false,
+            validation_commands: Vec::new(),
+            max_validation_fix_attempts: default_validation_fix_attempts(),
             merge_strategy: MergeStrategy::Manual,
         }
     }

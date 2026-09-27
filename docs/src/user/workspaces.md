@@ -82,7 +82,16 @@ is `git status --short` in the worktree.
 
 ## Merge behaviour
 
-Merging integrates the task branch into the base branch **in your project checkout**:
+With configured `pipeline.validation_commands` and `auto_merge = true`, integration is
+prepared in a detached temporary worktree. The commands run against the combined result,
+including assisted conflict resolutions. Only a passing, unchanged candidate is published
+by fast-forwarding the base branch to that exact commit. A failed check, unresolved conflict,
+changed target or unsupported provider pauses in `review`; the target is not updated by the
+integration. Resume builds and checks a fresh candidate. See
+[Required validation commands](configuration.md#required-validation-commands-unreleased).
+
+Without configured validation commands, merging integrates the task branch into the base
+branch **in your project checkout** using the original algorithm:
 
 1. Anything left uncommitted in the worktree is committed as `vibe: checkpoint`, excluding
    `.vibe/`, with the neutral identity `Vibe Factory <vibe-factory@localhost>`.
@@ -98,7 +107,7 @@ Merging integrates the task branch into the base branch **in your project checko
 
 After a successful merge your checkout stays on the base branch. The worktree and branch are
 kept until you discard the task. With `pipeline.auto_merge = true` the merge runs as soon as
-QA approves; otherwise the task waits in `ready`.
+QA and required validations approve; otherwise the task waits in `ready` after its task checks.
 
 ### Assisted conflict resolution
 

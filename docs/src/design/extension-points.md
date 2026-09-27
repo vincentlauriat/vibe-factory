@@ -165,6 +165,8 @@ pub trait WorkspaceProvider: Send + Sync {
     fn name(&self) -> &str;                                               // e.g. "git_worktree"
     async fn open(&self, project_root: &Path, task: &Task) -> Result<Workspace>;
     async fn merge(&self, workspace: &Workspace) -> Result<MergeOutcome>;
+    async fn merge_validated(&self, workspace: &Workspace,
+        validator: &mut dyn MergeValidator) -> Result<MergeOutcome>; // default: error
     async fn discard(&self, workspace: &Workspace) -> Result<()>;
     async fn changes(&self, _workspace: &Workspace) -> Result<String> { Ok(String::new()) }
 }
@@ -181,6 +183,13 @@ pub trait WorkspaceProvider: Send + Sync {
   `Error::workspace` for failures that are not conflicts.
 - `discard` is idempotent; already-missing resources are not an error.
 - `changes` is a human-readable summary for reviewers.
+
+When mandatory validation commands are configured, the pipeline calls `merge_validated`.
+Implementations must prepare the combined candidate without changing the target, call
+`validator.validate(&candidate).await`, reject candidate/target changes during validation,
+and publish exactly the checked result. Validation errors must leave the target unchanged.
+The default implementation returns an error; it never calls the unchecked `merge` method.
+The in-place implementation validates the existing workspace and has no rollback boundary.
 
 **Example.** A provider handing every task a plain scratch directory, merged by hand:
 

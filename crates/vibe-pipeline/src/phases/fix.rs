@@ -1,4 +1,4 @@
-//! `fix`: the QA fixer addresses the latest QA report, then QA runs again.
+//! `fix`: address a pending validation failure or the latest QA report, then rerun QA.
 
 use std::collections::HashSet;
 
@@ -6,7 +6,7 @@ use vibe_core::{AgentRole, Error, Phase, QaReport, Result, TaskStatus};
 
 use super::{lenient_string, lenient_strings};
 use crate::context::{PhaseResult, RunContext, Transition};
-use crate::kickoff::{KickoffData, kickoff_for};
+use crate::kickoff::{KickoffData, kickoff_for, truncate_middle};
 use crate::store::MemoryFile;
 
 /// Number of consecutive QA rounds reporting the same issue title after
@@ -61,6 +61,9 @@ pub fn repeated_issue(reports: &[QaReport], rounds: usize) -> Option<String> {
 /// same issue title was reported in [`ESCALATION_ROUNDS`] consecutive
 /// rounds.
 pub async fn run_fix(ctx: &mut RunContext) -> Result<PhaseResult> {
+    if let Some(index) = ctx.state.pending_validation_fix {
+        return run_validation_fix(ctx, index).await;
+    }
     let reports = ctx.store.load_qa_reports(ctx.task.id).await?;
     let Some(last) = reports.last().cloned() else {
         return Err(Error::other("no QA report to fix"));
@@ -94,6 +97,74 @@ pub async fn run_fix(ctx: &mut RunContext) -> Result<PhaseResult> {
             format!("- Round {} reported: {}\n", r.round, titles.join("; "))
         })
         .collect();
+    run_fixer(
+        ctx,
+        qa_report,
+        prior,
+        format!("round {}", last.round),
+        format!("vibe: address QA round {}", last.round),
+    )
+    .await
+}
+
+/// Reserve the attempt before calling a model so a crash cannot reset the budget.
+async fn run_validation_fix(ctx: &mut RunContext, index: usize) -> Result<PhaseResult> {
+    let failure = ctx
+        .state
+        .validations
+        .get(index)
+        .filter(|v| !v.passed)
+        .ok_or_else(|| Error::other("invalid pending validation failure"))?;
+    let max = ctx.config.pipeline.max_validation_fix_attempts;
+    if ctx.state.validation_fix_attempts >= max {
+        ctx.state.pending_validation_fix = None;
+        return Ok(
+            PhaseResult::ok(Phase::Fix, "validation fix budget exhausted")
+                .with_success(false)
+                .then(Transition::Stop {
+                    status: TaskStatus::Review,
+                    reason: format!(
+                        "validation fix budget exhausted ({max} attempts); human review needed"
+                    ),
+                    pause: true,
+                }),
+        );
+    }
+    let report = format!(
+        "# Required validation failure\n\nCommand: `{}`\n\nExit code: {}\nTimed out: {}\n\nOutput:\n{}\n\nFix the implementation. Do not change the validation command, configuration or weaken tests. The pipeline will independently rerun every required check after QA.",
+        failure.command,
+        failure.metadata["exit_code"],
+        failure.metadata["timed_out"],
+        truncate_middle(&failure.output, 12_000),
+    );
+    let prior = format!(
+        "{} automatic validation fix attempt(s) already started in this run.",
+        ctx.state.validation_fix_attempts
+    );
+    ctx.state.validation_fix_attempts += 1;
+    let attempt = ctx.state.validation_fix_attempts;
+    ctx.state.touch();
+    ctx.store.save_run_state(&ctx.state).await?;
+    let result = run_fixer(
+        ctx,
+        report,
+        prior,
+        format!("validation attempt {attempt}/{max}"),
+        format!("vibe: address required validation attempt {attempt}"),
+    )
+    .await?;
+    // The pipeline persists this together with the next phase (QA).
+    ctx.state.pending_validation_fix = None;
+    Ok(result)
+}
+
+async fn run_fixer(
+    ctx: &mut RunContext,
+    qa_report: String,
+    prior: String,
+    label: String,
+    commit_message: String,
+) -> Result<PhaseResult> {
     let spec_text = ctx.spec_text();
     let memory = ctx.memory_text().await?;
     let agent = ctx.agent_spec(&AgentRole::QaFixer)?;
@@ -115,8 +186,7 @@ pub async fn run_fix(ctx: &mut RunContext) -> Result<PhaseResult> {
     let out = vibe_agents::parse_structured::<FixerOutput>(&outcome.final_text).unwrap_or_default();
     let ok = outcome.is_success() && !out.status.trim().eq_ignore_ascii_case("failed");
     let summary = format!(
-        "round {}: fixer {} ({} issue(s) reported fixed)",
-        last.round,
+        "{label}: fixer {} ({} issue(s) reported fixed)",
         if out.status.is_empty() {
             "finished"
         } else {
@@ -126,8 +196,7 @@ pub async fn run_fix(ctx: &mut RunContext) -> Result<PhaseResult> {
     );
     ctx.note(&format!("QA fix {summary}.\n\n{}", out.summary.trim()))
         .await?;
-    ctx.commit(&format!("vibe: address QA round {}", last.round))
-        .await;
+    ctx.commit(&commit_message).await;
     Ok(PhaseResult::ok(Phase::Fix, summary)
         .with_success(ok)
         .then(Transition::Goto { phase: Phase::Qa }))

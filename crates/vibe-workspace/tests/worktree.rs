@@ -738,3 +738,213 @@ async fn missing_baseline_refuses_merge() {
         MergeOutcome::Merged { .. }
     ));
 }
+
+struct CheckCandidate<F>(F);
+
+#[async_trait::async_trait]
+impl<F> vibe_core::MergeValidator for CheckCandidate<F>
+where
+    F: FnMut(&vibe_core::Workspace) -> Result<()> + Send,
+{
+    async fn validate(&mut self, candidate: &vibe_core::Workspace) -> Result<()> {
+        (self.0)(candidate)
+    }
+}
+
+#[tokio::test]
+async fn validated_merge_checks_combined_tree_before_publishing() {
+    for divergent in [false, true] {
+        let repo = Repo::new();
+        let p = provider();
+        let ws = p
+            .open(&repo.root, &Task::new("Validated", ""))
+            .await
+            .unwrap();
+        repo.commit_file(&ws.root, "feature.txt", "feature\n", "feature");
+        if divergent {
+            repo.commit_file(&repo.root, "base.txt", "base\n", "base update");
+        }
+        let before = git(&repo.root, &["rev-parse", "HEAD"]);
+        let mut checked = None;
+        let mut check = CheckCandidate(|candidate: &vibe_core::Workspace| {
+            assert_ne!(candidate.root, repo.root);
+            assert_ne!(candidate.root, ws.root);
+            assert_eq!(git(&repo.root, &["rev-parse", "HEAD"]), before);
+            assert_eq!(
+                std::fs::read_to_string(candidate.root.join("feature.txt")).unwrap(),
+                "feature\n"
+            );
+            assert_eq!(candidate.root.join("base.txt").exists(), divergent);
+            checked = Some(git(&candidate.root, &["rev-parse", "HEAD"]));
+            Ok(())
+        });
+        let outcome = p.merge_validated(&ws, &mut check).await.unwrap();
+        assert_eq!(
+            outcome,
+            MergeOutcome::Merged {
+                commit: checked.clone()
+            }
+        );
+        assert_eq!(Some(git(&repo.root, &["rev-parse", "HEAD"])), checked);
+        assert_eq!(Git::new(&repo.root).worktree_list().await.unwrap().len(), 2);
+    }
+}
+
+#[tokio::test]
+async fn validated_assisted_merge_checks_resolution_and_preserves_target_on_failure() {
+    for pass in [false, true] {
+        let repo = Repo::new();
+        let p = provider().with_merge_strategy(MergeStrategy::Assisted {
+            provider: Arc::new(ResolvingProvider),
+            model: "m".into(),
+        });
+        repo.commit_file(
+            &repo.root,
+            "a.txt",
+            &format!("{PREAMBLE}line 1\nline 2\nline 3\n"),
+            "initial shared text",
+        );
+        let ws = p
+            .open(&repo.root, &Task::new("Validate resolved conflict", ""))
+            .await
+            .unwrap();
+        repo.commit_file(
+            &ws.root,
+            "a.txt",
+            &format!("{PREAMBLE}line 1\nfrom task\nline 3\n"),
+            "task",
+        );
+        repo.commit_file(
+            &repo.root,
+            "a.txt",
+            &format!("{PREAMBLE}line 1\nfrom base\nline 3\n"),
+            "base",
+        );
+        let before = git(&repo.root, &["rev-parse", "HEAD"]);
+        let mut check = CheckCandidate(|candidate: &vibe_core::Workspace| {
+            assert_eq!(git(&repo.root, &["rev-parse", "HEAD"]), before);
+            assert_eq!(
+                std::fs::read_to_string(candidate.root.join("a.txt")).unwrap(),
+                format!("{PREAMBLE}line 1\nfrom base and task\nline 3\n")
+            );
+            if pass {
+                Ok(())
+            } else {
+                Err(vibe_core::Error::workspace(
+                    "resolved code failed acceptance",
+                ))
+            }
+        });
+        let result = p.merge_validated(&ws, &mut check).await;
+        if pass {
+            assert!(matches!(result.unwrap(), MergeOutcome::Merged { .. }));
+            assert!(repo.read("a.txt").contains("from base and task"));
+        } else {
+            assert!(result.unwrap_err().message.contains("failed acceptance"));
+            assert_eq!(git(&repo.root, &["rev-parse", "HEAD"]), before);
+            assert!(repo.read("a.txt").contains("from base\n"));
+        }
+        assert_eq!(git(&repo.root, &["status", "--porcelain"]), "");
+        assert_eq!(Git::new(&repo.root).worktree_list().await.unwrap().len(), 2);
+    }
+}
+
+#[tokio::test]
+async fn validated_merge_rejects_candidate_edits_and_commits() {
+    for mode in ["tracked", "untracked", "committed"] {
+        let repo = Repo::new();
+        let p = provider();
+        let ws = p
+            .open(&repo.root, &Task::new("Mutating check", ""))
+            .await
+            .unwrap();
+        repo.commit_file(&ws.root, "feature.txt", "feature\n", "task");
+        let before = git(&repo.root, &["rev-parse", "HEAD"]);
+        let mut check = CheckCandidate(|candidate: &vibe_core::Workspace| {
+            match mode {
+                "tracked" => std::fs::write(candidate.root.join("a.txt"), "changed").unwrap(),
+                "untracked" => std::fs::write(candidate.root.join("new.txt"), "new").unwrap(),
+                _ => repo.commit_file(&candidate.root, "a.txt", "changed", "unexpected commit"),
+            }
+            Ok(())
+        });
+        let error = p.merge_validated(&ws, &mut check).await.unwrap_err();
+        assert!(error.message.contains("candidate changed"), "{error}");
+        assert_eq!(git(&repo.root, &["rev-parse", "HEAD"]), before);
+    }
+}
+
+#[tokio::test]
+async fn validated_merge_preserves_target_changes_made_while_checking() {
+    let repo = Repo::new();
+    let p = provider();
+    let ws = p
+        .open(&repo.root, &Task::new("Concurrent target", ""))
+        .await
+        .unwrap();
+    repo.commit_file(&ws.root, "feature.txt", "feature\n", "task");
+    let mut check = CheckCandidate(|_: &vibe_core::Workspace| {
+        repo.commit_file(&repo.root, "human.txt", "human\n", "human update");
+        Ok(())
+    });
+    let error = p.merge_validated(&ws, &mut check).await.unwrap_err();
+    assert!(error.message.contains("target changed"), "{error}");
+    assert_eq!(repo.read("human.txt"), "human\n");
+    assert!(!repo.root.join("feature.txt").exists());
+    // Retrying constructs and validates a new candidate containing the human update.
+    let mut check = CheckCandidate(|candidate: &vibe_core::Workspace| {
+        assert!(candidate.root.join("human.txt").exists());
+        assert!(candidate.root.join("feature.txt").exists());
+        Ok(())
+    });
+    assert!(matches!(
+        p.merge_validated(&ws, &mut check).await.unwrap(),
+        MergeOutcome::Merged { .. }
+    ));
+}
+
+#[tokio::test]
+async fn validated_manual_conflicts_do_not_touch_target_or_call_validator() {
+    let repo = Repo::new();
+    let p = provider();
+    let ws = p
+        .open(&repo.root, &Task::new("Manual conflicts", ""))
+        .await
+        .unwrap();
+    repo.commit_file(&ws.root, "a.txt", "task\n", "task");
+    repo.commit_file(&repo.root, "a.txt", "base\n", "base");
+    let before = git(&repo.root, &["rev-parse", "HEAD"]);
+    let mut check = CheckCandidate(|_: &vibe_core::Workspace| -> Result<()> {
+        panic!("unresolved conflicts must not be validated")
+    });
+    assert!(matches!(
+        p.merge_validated(&ws, &mut check).await.unwrap(),
+        MergeOutcome::NeedsHumanReview { .. }
+    ));
+    assert_eq!(git(&repo.root, &["rev-parse", "HEAD"]), before);
+    assert_eq!(git(&repo.root, &["status", "--porcelain"]), "");
+    assert_eq!(Git::new(&repo.root).worktree_list().await.unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn validated_no_changes_still_checks_the_target_snapshot() {
+    let repo = Repo::new();
+    let p = provider();
+    let ws = p
+        .open(&repo.root, &Task::new("Already integrated", ""))
+        .await
+        .unwrap();
+    let mut checked = false;
+    let mut check = CheckCandidate(|_: &vibe_core::Workspace| -> Result<()> {
+        checked = true;
+        Err(vibe_core::Error::workspace("target tests failed"))
+    });
+    assert!(
+        p.merge_validated(&ws, &mut check)
+            .await
+            .unwrap_err()
+            .message
+            .contains("target tests failed")
+    );
+    assert!(checked);
+}

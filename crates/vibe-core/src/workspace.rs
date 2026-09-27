@@ -53,6 +53,13 @@ pub enum MergeOutcome {
     },
 }
 
+/// Host-owned checks for the exact integration candidate, before the target is changed.
+#[async_trait::async_trait]
+pub trait MergeValidator: Send {
+    /// Reject the integration by returning an error. The candidate must not be modified.
+    async fn validate(&mut self, candidate: &Workspace) -> Result<()>;
+}
+
 /// Creates, integrates and disposes of workspaces.
 #[async_trait::async_trait]
 pub trait WorkspaceProvider: Send + Sync {
@@ -64,6 +71,20 @@ pub trait WorkspaceProvider: Send + Sync {
 
     /// Integrate the workspace into the project's main line.
     async fn merge(&self, workspace: &Workspace) -> Result<MergeOutcome>;
+
+    /// Prepare an integration candidate, validate it, then publish only that candidate.
+    /// The target must remain unchanged if validation fails. Providers must also reject
+    /// changes to the candidate or target made while the validator was running.
+    /// The default fails closed; implementing `merge` alone does not support this gate.
+    async fn merge_validated(
+        &self,
+        _workspace: &Workspace,
+        _validator: &mut dyn MergeValidator,
+    ) -> Result<MergeOutcome> {
+        Err(crate::Error::workspace(
+            "workspace provider does not support validated integration",
+        ))
+    }
 
     /// Remove the workspace and its resources.
     async fn discard(&self, workspace: &Workspace) -> Result<()>;
@@ -102,6 +123,15 @@ impl WorkspaceProvider for InPlaceWorkspace {
         Ok(MergeOutcome::NoChanges)
     }
 
+    async fn merge_validated(
+        &self,
+        workspace: &Workspace,
+        validator: &mut dyn MergeValidator,
+    ) -> Result<MergeOutcome> {
+        validator.validate(workspace).await?;
+        Ok(MergeOutcome::NoChanges)
+    }
+
     async fn discard(&self, _workspace: &Workspace) -> Result<()> {
         Ok(())
     }
@@ -110,6 +140,50 @@ impl WorkspaceProvider for InPlaceWorkspace {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct LegacyProvider;
+
+    #[async_trait::async_trait]
+    impl WorkspaceProvider for LegacyProvider {
+        fn name(&self) -> &str {
+            "legacy"
+        }
+        async fn open(&self, root: &std::path::Path, task: &Task) -> Result<Workspace> {
+            InPlaceWorkspace.open(root, task).await
+        }
+        async fn merge(&self, _: &Workspace) -> Result<MergeOutcome> {
+            panic!("validated integration must not fall back to an unchecked merge")
+        }
+        async fn discard(&self, _: &Workspace) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    struct UnexpectedValidator;
+    #[async_trait::async_trait]
+    impl MergeValidator for UnexpectedValidator {
+        async fn validate(&mut self, _: &Workspace) -> Result<()> {
+            panic!("legacy provider has no integration candidate")
+        }
+    }
+
+    #[tokio::test]
+    async fn legacy_provider_refuses_validated_integration_without_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = LegacyProvider
+            .open(dir.path(), &Task::new("t", ""))
+            .await
+            .unwrap();
+        let error = LegacyProvider
+            .merge_validated(&workspace, &mut UnexpectedValidator)
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .message
+                .contains("does not support validated integration")
+        );
+    }
 
     #[tokio::test]
     async fn in_place_uses_project_root() {

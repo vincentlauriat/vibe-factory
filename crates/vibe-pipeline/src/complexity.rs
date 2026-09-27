@@ -22,7 +22,8 @@ use vibe_core::{Complexity, Phase, Task};
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Profile {
     /// Phases run after [`Phase::Assess`], in order. [`Phase::Fix`] is only
-    /// entered when QA requests changes.
+    /// entered when QA requests changes. A pending required-validation failure can
+    /// also enter Fix even when this list omits it.
     pub phases: Vec<Phase>,
     /// Run the `spec_researcher` step.
     pub research: bool,
@@ -46,7 +47,7 @@ impl Profile {
     }
 
     /// The phase following `phase` in canonical order that the profile
-    /// runs, skipping [`Phase::Fix`] (which is only reached from QA).
+    /// runs, skipping [`Phase::Fix`] (which is reached by an explicit QA or validation transition).
     #[must_use]
     pub fn next_after(&self, phase: Phase) -> Option<Phase> {
         Phase::ALL

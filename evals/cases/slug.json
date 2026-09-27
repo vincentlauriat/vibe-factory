@@ -1,0 +1,9 @@
+{
+  "id": "slug",
+  "title": "Implement a slug function with tests",
+  "task": "Add public fn slug(input: &str) -> String. Lowercase ASCII letters; retain ASCII digits; replace each run of other characters with one hyphen; omit leading/trailing hyphens. Non-ASCII characters count as separators. Add unit tests. Keep greeting unchanged.",
+  "files": {
+    "src/lib.rs": "pub fn greeting() -> &'static str { \"hello\" }\n"
+  },
+  "oracle": "#[test]\nfn slug_contract() {\n    assert_eq!(fixture::slug(\"  Hello, WORLD!  \"), \"hello-world\");\n    assert_eq!(fixture::slug(\"A___B---42\"), \"a-b-42\");\n    assert_eq!(fixture::slug(\"\"), \"\");\n    assert_eq!(fixture::slug(\"\u00e9?!\"), \"\");\n    assert_eq!(fixture::slug(\"a\u00e9b\"), \"a-b\");\n    assert_eq!(fixture::greeting(), \"hello\");\n}\n"
+}

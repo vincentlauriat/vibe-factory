@@ -36,13 +36,14 @@ documented trait, and plugins can be written in Rust or in any language.
 | Git worktree isolation, fast-forward or merge, conflict reporting | ✅ |
 | Providers: Anthropic, OpenAI-compatible (OpenAI, Groq, Mistral, xAI, OpenRouter, Ollama), mock | ✅ |
 | Per-phase model and thinking level | ✅ |
-| Built-in tools: read, write, edit, list, glob, grep, sandboxed shell | ✅ |
+| Built-in tools: read, write, edit, list, glob, grep, policy-checked shell | ✅ |
 | Shell security policy (blocked programs, per-command validators, allowlist) and path containment | ✅ |
 | Agents as data: override or add agents in `.vibe/agents/*.toml` | ✅ |
 | Hooks: observe, veto and enrich agent actions | ✅ |
 | Plugins: JSON-RPC over stdio, MCP-compatible tools, Rust helper | ✅ |
 | Structured artefacts (JSON) with repair and retry | ✅ |
 | Resume a run from its persisted state | ✅ |
+| Required validation commands before ready/merge (unreleased) | ✅ |
 | `vibe` CLI with live event output | ✅ |
 | User guide, design book, ADRs, API docs | ✅ |
 | Web tools, TUI board, HTTP server, container workspaces, issue importers | roadmap |
@@ -106,6 +107,9 @@ docs/               mdBook: user guide, design book, ADRs
 ```
 
 ## Development
+
+The v0.2 reliability work includes [reproducible evaluations](evals/README.md) and
+[required validation commands](docs/src/user/configuration.md#required-validation-commands-unreleased).
 
 ```sh
 cargo build --workspace

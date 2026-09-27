@@ -979,3 +979,232 @@ async fn without_resetter_leftovers_are_noted() {
     let progress = h.store.load_progress(task.id).await.unwrap();
     assert!(progress.contains("attempt 1 of subtask 1 `Flaky` left uncommitted changes in place"));
 }
+
+#[tokio::test]
+async fn required_validation_fails_closed_without_shell_tool() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.validation_commands = vec!["exit 0".into()];
+    h.config.pipeline.auto_merge = true;
+    let task = h.task("Fix typo", "teh -> the").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "Only", "subtasks": [{"title": "Fix typo", "description": "edit"}]}
+        ]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Review);
+    assert!(!report.is_success());
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert!(!state.validations[0].passed);
+    assert!(state.validations[0].output.contains("registered bash tool"));
+}
+
+/// Scripted shell outcomes let these tests observe the fixer context and replay order.
+struct ValidationShell {
+    outcomes: std::sync::Mutex<std::collections::VecDeque<bool>>,
+    commands: std::sync::Mutex<Vec<String>>,
+}
+
+impl ValidationShell {
+    fn new(outcomes: &[bool]) -> Arc<Self> {
+        Arc::new(Self {
+            outcomes: std::sync::Mutex::new(outcomes.iter().copied().collect()),
+            commands: std::sync::Mutex::new(Vec::new()),
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl vibe_core::Tool for ValidationShell {
+    fn name(&self) -> &str {
+        "bash"
+    }
+    fn description(&self) -> &str {
+        "Scripted validation shell"
+    }
+    fn input_schema(&self) -> serde_json::Value {
+        json!({})
+    }
+    async fn call(
+        &self,
+        ctx: &vibe_core::ToolContext,
+        input: serde_json::Value,
+    ) -> vibe_core::Result<vibe_core::ToolOutput> {
+        assert_eq!(ctx.agent, "pipeline_validation");
+        assert!(ctx.workspace_root.exists());
+        self.commands
+            .lock()
+            .unwrap()
+            .push(input["command"].as_str().unwrap().into());
+        let passed = self
+            .outcomes
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("unexpected validation call");
+        Ok(vibe_core::ToolOutput {
+            content: if passed {
+                "tests passed"
+            } else {
+                "assertion failed: expected upper bound to be inclusive"
+            }
+            .into(),
+            is_error: !passed,
+            metadata: json!({"exit_code": if passed { 0 } else { 1 }, "timed_out": false}),
+        })
+    }
+}
+
+async fn validation_harness(
+    outcomes: &[bool],
+    fixes: usize,
+) -> (Harness, vibe_core::Task, Arc<ValidationShell>) {
+    let mut h = Harness::new().await;
+    h.config.pipeline.validation_commands = vec!["cargo test".into()];
+    let shell = ValidationShell::new(outcomes);
+    h.tools.register(shell.clone());
+    let task = h.task("Fix typo", "teh -> the").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "Only", "subtasks": [{"title": "Fix typo", "description": "edit"}]}
+        ]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("fixed")]);
+    h.router.route(
+        REVIEWER,
+        None,
+        (0..=fixes).map(|_| qa("approved", &[])).collect(),
+    );
+    h.router
+        .route(FIXER, None, (0..fixes).map(|_| fixer_done()).collect());
+    (h, task, shell)
+}
+
+#[tokio::test]
+async fn validation_failure_reaches_fixer_and_all_checks_replay_after_qa() {
+    let (mut h, task, shell) = validation_harness(&[true, false, true, true], 1).await;
+    h.config.pipeline.validation_commands = vec!["cargo check".into(), "cargo test".into()];
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Ready);
+    assert_eq!(report.state.validation_fix_attempts, 1);
+    assert_eq!(report.state.pending_validation_fix, None);
+    assert_eq!(
+        *shell.commands.lock().unwrap(),
+        vec!["cargo check", "cargo test", "cargo check", "cargo test"]
+    );
+    assert_eq!(
+        phases(&report),
+        vec![
+            Phase::Assess,
+            Phase::Plan,
+            Phase::Build,
+            Phase::Qa,
+            Phase::Merge,
+            Phase::Fix,
+            Phase::Qa,
+            Phase::Merge
+        ]
+    );
+    let fixer = &h.router.calls_for("fixer")[0];
+    assert!(fixer.system.contains("cargo test"));
+    assert!(
+        fixer
+            .system
+            .contains("expected upper bound to be inclusive")
+    );
+    assert!(
+        fixer
+            .system
+            .contains("Do not change the validation command")
+    );
+    assert_eq!(h.router.calls_for("reviewer").len(), 2);
+    assert!(
+        h.commits
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|m| m.contains("required validation attempt 1"))
+    );
+}
+
+#[tokio::test]
+async fn validation_fix_budget_survives_resume_and_manual_repair_still_passes() {
+    let (h, task, _) = validation_harness(&[false, false, false, false, true], 2).await;
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Review);
+    assert_eq!(report.state.validation_fix_attempts, 2);
+    assert_eq!(h.router.calls_for("fixer").len(), 2);
+    let resumed = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(resumed.final_status, TaskStatus::Review);
+    assert_eq!(resumed.state.validation_fix_attempts, 2);
+    assert_eq!(
+        h.router.calls_for("fixer").len(),
+        2,
+        "resume must not reset the budget"
+    );
+    let repaired = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(repaired.final_status, TaskStatus::Ready);
+    assert_eq!(repaired.state.validations.len(), 5);
+    assert_eq!(repaired.state.validation_fix_attempts, 2);
+}
+
+#[tokio::test]
+async fn interrupted_validation_fix_with_consumed_budget_does_not_call_model() {
+    let (h, task, _) = validation_harness(&[false, false, false], 2).await;
+    h.pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    // Simulate a crash after reserving the last attempt but before advancing to QA.
+    let mut state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    state.current_phase = Phase::Fix;
+    state.pending_validation_fix = Some(2);
+    state.status = RunStatus::Running;
+    h.store.save_run_state(&state).await.unwrap();
+    let report = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(report.final_status, TaskStatus::Review);
+    assert_eq!(h.router.calls_for("fixer").len(), 2);
+    assert_eq!(report.state.validation_fix_attempts, 2);
+    assert_eq!(report.state.pending_validation_fix, None);
+}
+
+#[tokio::test]
+async fn validation_fix_resumes_after_a_hook_interrupts_the_fix_phase() {
+    let (mut h, task, _) = validation_harness(&[false, true], 1).await;
+    h.registry.add_hook(Arc::new(AbortPhase(Phase::Fix)));
+    let interrupted = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(interrupted.final_status, TaskStatus::Cancelled);
+    assert_eq!(interrupted.state.current_phase, Phase::Fix);
+    assert_eq!(interrupted.state.pending_validation_fix, Some(0));
+    assert_eq!(interrupted.state.validation_fix_attempts, 0);
+    assert!(h.router.calls_for("fixer").is_empty());
+    h.registry = vibe_core::Registry::new();
+    let resumed = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(resumed.final_status, TaskStatus::Ready);
+    assert_eq!(resumed.state.validation_fix_attempts, 1);
+    assert_eq!(resumed.state.pending_validation_fix, None);
+    assert_eq!(h.router.calls_for("fixer").len(), 1);
+}
