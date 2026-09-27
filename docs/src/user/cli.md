@@ -270,11 +270,15 @@ memory stores.
 vibe tui
 ```
 
-A terminal board of the project: tasks on the left (a `●` marks the ones a process is
-running, whichever terminal started them), the selected task on the right with its run
-state, a budget gauge and three tabs: **Activity** (phases, agents, tools, validations,
-approvals, and the text of the current step as the model writes it), **Plan** (subtasks and
-their status) and **Changes** (the workspace diff summary).
+A terminal view of the project with three screens, listed in the title bar: **Tasks** (`T`),
+**Activity** (`A`) and **History** (`H`). `q` quits from any of them; `Esc` closes what is
+open, then goes back to Tasks, and quits only from Tasks (not from its Trace tab).
+
+**Tasks** is the board: tasks on the left (a `●` marks the ones a process is running,
+whichever terminal started them), the selected task on the right with its run state, a
+budget gauge and four tabs: **Activity** (phases, agents, tools, validations, approvals, and
+the text of the current step as the model writes it), **Plan** (subtasks and their status),
+**Changes** (the workspace diff summary) and **Trace** (the tool calls of the last run).
 
 | Key | Action |
 |-----|--------|
@@ -284,7 +288,47 @@ their status) and **Changes** (the workspace diff summary).
 | `c` | cancel its run (also one started in another terminal) |
 | `a` / `x` | approve / reject what the run waits for (a rejection asks for a reason) |
 | `Tab` | next tab |
+| `g` | read the tasks again |
 | `q` | quit; runs started from the UI are cancelled and stay resumable |
+
+The **Trace** tab lists the calls of a run, one per line: `seq role subtask tool duration exit
+err` (`error` when the tool failed, `timeout`, or `no result` for a call that never
+returned). While it is shown, `↑` `↓` move among the calls instead of the tasks (`Tab` to
+another tab to select tasks again); the other task keys keep working.
+
+| Key (Trace tab) | Action |
+|-----------------|--------|
+| `↑` `↓` | select a call (in an expanded call or its output: scroll) |
+| `[` / `]` | previous / next run, when the task has several |
+| `Enter` | expand the call: its arguments as JSON and a preview of its output |
+| `o` | load its complete output from `.vibe/tool-output/` into a scrollable pane (`PgUp` `PgDn`); a note says when it was not traced or is gone, and when the call was paired with its result by order (logs from before 0.5) |
+| `Esc` | close the output, then collapse the call |
+| `g` | load the calls again (they are also loaded each time the tab is entered) |
+
+**Activity** is the feed of every task's events, oldest first, each prefixed with the task
+number (`#003`). It opens on the last 200 events and follows new ones.
+
+| Key (Activity) | Action |
+|----------------|--------|
+| `↑` `↓` (`PgUp` `PgDn`) | select an event; the feed stops following |
+| `f` | follow the newest event again, or stop |
+| `1` … `7` | show or hide agents, tools, phases, git, approvals, budget, logs |
+| `Enter` | open the event's task on the Tasks screen |
+| `g` | load the last 200 events again (also done each time the screen is entered) |
+
+A log that cannot be read is reported once in the status line; the other tasks keep coming.
+
+**History** lists the finished tasks (ready and done; `a` adds failed and cancelled ones) as
+`vibe history` does: number, title, status, runs, commits, changed files, tokens, active time,
+cost (`-` without a `[pricing]` table), with the notation of `vibe history`: `+` marks a lower
+bound, `~` an approximate file count; `finished` is the end of the last run, else the last
+activity. `Enter` opens the task: its runs (state, start, duration, tokens), commits, changed
+files (status, where the list comes from, whether it is approximate), validations, last QA
+report and errors; `↑` `↓` scroll it and `Esc` closes it. The list is loaded each time the
+screen is entered; `g` loads it again.
+
+History and trace data are loaded in the background on entry, so the screen stays responsive
+on large projects ("Loading…" shows meanwhile).
 
 The UI reads the same files and events as the other commands, so `vibe run`, `vibe approve`
 or `vibe cancel` in another terminal show up in it. Runs use the project configuration

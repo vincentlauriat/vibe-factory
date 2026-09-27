@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use vibe_core::{SubtaskId, Task, VibeConfig};
-use vibe_pipeline::history::{Cost, FileStatus, RunSummary, RunSummaryState, TaskHistory};
+use vibe_pipeline::history::{FileStatus, RunSummary, RunSummaryState, TaskHistory};
 use vibe_pipeline::{
     ChangedFilesSource, HistoryFilter, PipelineStore, project_history, task_history,
 };
@@ -16,8 +16,8 @@ use super::{resolve_task, subtask_labels};
 use crate::app::{self, load_config, open_store, worktree_location};
 use crate::cli::HistoryArgs;
 use crate::util::{
-    Table, Ui, enum_name, human_duration, human_tokens, print_out, relative_time, short_sha, style,
-    styled_status, truncate,
+    Table, Ui, cost_text, enum_name, files_count, finished_at, human_duration, human_tokens,
+    lower_bound, print_out, relative_time, short_sha, style, styled_status, truncate,
 };
 
 /// Run `vibe history`.
@@ -76,7 +76,7 @@ pub async fn run(root: &Path, args: HistoryArgs, ui: Ui) -> Result<u8> {
 /// Branch of a task for the history: the recorded one, else the one the
 /// worktree provider derives (tasks run before 0.5). Other workspace
 /// providers have no branch to compare.
-fn task_branch(root: &Path, config: &VibeConfig, task: &Task) -> Option<String> {
+pub(crate) fn task_branch(root: &Path, config: &VibeConfig, task: &Task) -> Option<String> {
     task.branch.clone().or_else(|| {
         app::uses_worktrees(&config.pipeline.workspace)
             .then(|| worktree_location(root, task).branch)
@@ -89,17 +89,8 @@ fn table(histories: &[TaskHistory]) -> String {
         "#", "title", "status", "runs", "commits", "files", "tokens", "active", "cost", "finished",
     ]);
     for h in histories {
-        let finished = h
-            .runs
-            .iter()
-            .rev()
-            .find_map(|r| r.finished_at)
-            .unwrap_or(h.last_activity);
-        let files = format!(
-            "{}{}",
-            h.changed_files.files.len(),
-            if h.changed_files.approximate { "~" } else { "" }
-        );
+        let finished = finished_at(h);
+        let files = files_count(h);
         table.row([
             h.number.to_string(),
             truncate(&h.task.title, 40),
@@ -136,19 +127,6 @@ fn table(histories: &[TaskHistory]) -> String {
         out.push('\n');
     }
     out
-}
-
-/// `value`, marked `+` when it is only a lower bound.
-fn lower_bound(value: String, complete: bool) -> String {
-    if complete { value } else { format!("{value}+") }
-}
-
-/// `0.42 USD`, marked `+` when some tokens could not be priced.
-fn cost_text(cost: &Cost) -> String {
-    lower_bound(
-        format!("{:.2} {}", cost.amount, cost.currency),
-        cost.complete,
-    )
 }
 
 fn run_state(run: &RunSummary) -> String {
@@ -407,22 +385,4 @@ fn detail(
         }
     }
     out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lower_bounds_and_costs() {
-        console::set_colors_enabled(false);
-        assert_eq!(lower_bound("12k".into(), true), "12k");
-        assert_eq!(lower_bound("12k".into(), false), "12k+");
-        let cost = Cost {
-            amount: 0.4249,
-            currency: "USD".into(),
-            complete: false,
-        };
-        assert_eq!(cost_text(&cost), "0.42 USD+");
-    }
 }

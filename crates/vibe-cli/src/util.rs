@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use console::{Style, measure_text_width};
 use vibe_core::config::VIBE_DIR;
 use vibe_core::{Task, TaskStatus};
+use vibe_pipeline::history::{Cost, TaskHistory};
 
 /// Output settings shared by every command.
 #[derive(Debug, Clone, Copy)]
@@ -329,9 +330,54 @@ pub fn task_label(number: Option<u32>, task: &Task) -> String {
     }
 }
 
+/// `value`, marked `+` when it is only a lower bound.
+pub fn lower_bound(value: String, complete: bool) -> String {
+    if complete { value } else { format!("{value}+") }
+}
+
+/// `0.42 USD`, marked `+` when some tokens could not be priced.
+pub fn cost_text(cost: &Cost) -> String {
+    lower_bound(
+        format!("{:.2} {}", cost.amount, cost.currency),
+        cost.complete,
+    )
+}
+
+/// Number of files a task changed, marked `~` when approximate.
+pub fn files_count(h: &TaskHistory) -> String {
+    format!(
+        "{}{}",
+        h.changed_files.files.len(),
+        if h.changed_files.approximate { "~" } else { "" }
+    )
+}
+
+/// When a task finished: the end of its last finished run, else its last
+/// activity.
+pub fn finished_at(h: &TaskHistory) -> DateTime<Utc> {
+    h.runs
+        .iter()
+        .rev()
+        .find_map(|r| r.finished_at)
+        .unwrap_or(h.last_activity)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lower_bounds_and_costs() {
+        console::set_colors_enabled(false);
+        assert_eq!(lower_bound("12k".into(), true), "12k");
+        assert_eq!(lower_bound("12k".into(), false), "12k+");
+        let cost = Cost {
+            amount: 0.4249,
+            currency: "USD".into(),
+            complete: false,
+        };
+        assert_eq!(cost_text(&cost), "0.42 USD+");
+    }
 
     #[test]
     fn project_root_search_stops_at_the_repository_and_the_home() {
