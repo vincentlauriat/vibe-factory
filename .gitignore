@@ -23,3 +23,9 @@ CHANGES.md
 PLAN.md
 .omc/
 __pycache__/
+
+# Local secrets
+.env
+
+# Raw evaluation results (published baselines live in evals/baselines)
+results/

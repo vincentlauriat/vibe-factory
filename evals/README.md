@@ -66,7 +66,9 @@ python3 evals/run_suite.py results/2026-10-01-claude \
 ```
 
 `--max-tokens` bounds each run (see run budgets in the configuration guide); omit it for
-no limit. Use a new destination for every baseline: the runners never overwrite anything.
+no limit. `--jobs N` runs up to N evaluations at once (each in its own
+directory); a full suite takes about two hours with one job. Mind the provider's rate
+limits when raising it. Use a new destination for every baseline: the runners never overwrite anything.
 The suite writes `summary.md` and `summary.json` next to the per-run directories:
 
 | Column | Meaning |
@@ -93,8 +95,8 @@ whether the refactoring cases really share code are not checked by the oracles.
 
 Published baselines are in [`baselines/`](baselines/):
 
-* [Claude Sonnet 5, 2026-09-27](baselines/2026-09-27-claude-sonnet-5.md) (partial: 16 runs
-  over six cases): 16/16 successful, about four minutes and 150 000 tokens per run.
+* [Claude Sonnet 5, 2026-09-27](baselines/2026-09-27-claude-sonnet-5.md) (ten cases, three
+  repetitions): 30/30 successful, about four minutes and 130 000 tokens per run.
 
 ## One run
 

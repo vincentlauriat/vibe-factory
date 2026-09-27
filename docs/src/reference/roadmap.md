@@ -27,9 +27,9 @@ Vibe Factory is young. The list below is ordered by priority, not by date.
 - [x] Cancellation-safe plugin writer task
 - [x] Cross-platform release qualification and migration guide
 
-Carried over: a published real-model baseline. A first, partial one is published
+Carried over: a published real-model baseline, done in 0.3
 ([Claude Sonnet 5, 2026-09-27](https://github.com/vincentlauriat/vibe-factory/blob/main/evals/baselines/2026-09-27-claude-sonnet-5.md):
-16/16 runs over six of the ten cases); the full suite is still to run.
+30/30 runs over the ten cases).
 
 ## 0.3 — interaction foundations and terminal UI (done, unreleased)
 
@@ -37,7 +37,7 @@ The engine learns to stream, to wait for a human and to outlive the terminal tha
 it, then gets a terminal UI. See [ADR-007](../design/adr/007-one-seam-many-interfaces.md).
 
 - [x] Real-model evaluation baseline, published with the framework commit and model
-      (partial: six of ten cases on Claude Sonnet 5; the full suite remains to run)
+      (Claude Sonnet 5: 30/30 runs over the ten cases)
 - [x] Streaming completions and live agent text
 - [x] Events v2: sequence numbers, schema version, validation, integration, budget and
       artefact events, replay and follow

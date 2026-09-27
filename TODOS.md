@@ -14,12 +14,13 @@ then a terminal UI on top of it.
 
 ### 1. Real-model baseline (carried over from 0.2)
 - [x] Run `evals/run_suite.py` with 3 repetitions on at least one named model
-      (Claude Sonnet 5, stopped after 16 runs: 16/16)
+      (Claude Sonnet 5, 30/30)
 - [x] Publish `summary.md` with the framework commit, toolchain and model
       (`evals/baselines/2026-09-27-claude-sonnet-5.md`)
-- [ ] Finish the suite: `lru`, `money`, `semver`, `slug` and two more `inventory` runs
-- [ ] Review a sample of runs by hand (tests added, shared code in refactoring cases)
-- [ ] `run_suite.py --jobs N` to run cases in parallel (a full suite takes about 2 hours)
+- [x] Finish the suite: `lru`, `money`, `semver`, `slug` and two more `inventory` runs (30/30)
+- [x] Review a sample of runs by hand (tests added, shared code in refactoring cases)
+- [x] Tighten the `catalog` task: `search` must be built on the helper `find` uses (rerun: 3/3 with one shared function)
+- [x] `run_suite.py --jobs N` to run cases in parallel (a full suite takes about 2 hours)
 
 ### 2. Streaming completions
 - [x] `ModelProvider::stream` with a default that falls back to `complete`
