@@ -38,7 +38,7 @@ The oracles check behaviour only. The final workspace of every run was compared 
 baseline commit for what they miss:
 
 * Tests: every run added tests (7 to 24 `#[test]` functions, 13 on average) and none
-  removed or rewrote an existing one. `inventory` runs also added an integration test file.
+  removed an existing one. `inventory` runs also added an integration test file.
 * `money`: in the three runs, `invoice_line` and `refund_line` are one line each, a call to
   `crate::money::format_cents`; no formatting code is left in either module.
 * `catalog`: the three runs moved the comparison into a separate module used by both `find`
