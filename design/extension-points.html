@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+            window.path_to_searchindex_js = "../searchindex-72713264.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2dd03f19.js"></script>
@@ -331,6 +331,8 @@ pub trait WorkspaceProvider: Send + Sync {
     fn name(&amp;self) -&gt; &amp;str;                                               // e.g. "git_worktree"
     async fn open(&amp;self, project_root: &amp;Path, task: &amp;Task) -&gt; Result&lt;Workspace&gt;;
     async fn merge(&amp;self, workspace: &amp;Workspace) -&gt; Result&lt;MergeOutcome&gt;;
+    async fn merge_validated(&amp;self, workspace: &amp;Workspace,
+        validator: &amp;mut dyn MergeValidator) -&gt; Result&lt;MergeOutcome&gt;; // default: error
     async fn discard(&amp;self, workspace: &amp;Workspace) -&gt; Result&lt;()&gt;;
     async fn changes(&amp;self, _workspace: &amp;Workspace) -&gt; Result&lt;String&gt; { Ok(String::new()) }
 }</code></pre>
@@ -346,6 +348,12 @@ not leave the project half-merged: abort and restore before reporting conflicts.
 <li><code>discard</code> is idempotent; already-missing resources are not an error.</li>
 <li><code>changes</code> is a human-readable summary for reviewers.</li>
 </ul>
+<p>When mandatory validation commands are configured, the pipeline calls <code>merge_validated</code>.
+Implementations must prepare the combined candidate without changing the target, call
+<code>validator.validate(&amp;candidate).await</code>, reject candidate/target changes during validation,
+and publish exactly the checked result. Validation errors must leave the target unchanged.
+The default implementation returns an error; it never calls the unchecked <code>merge</code> method.
+The in-place implementation validates the existing workspace and has no rollback boundary.</p>
 <p><strong>Example.</strong> A provider handing every task a plain scratch directory, merged by hand:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {

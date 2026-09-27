@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+            window.path_to_searchindex_js = "../searchindex-72713264.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2dd03f19.js"></script>
@@ -285,13 +285,63 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in <a href="providers.html">P
 <tr><td><code>max_parallel_subtasks</code></td><td>integer</td><td><code>3</code></td><td>subtasks implemented at the same time (minimum 1)</td></tr>
 <tr><td><code>max_phase_retries</code></td><td>integer</td><td><code>2</code></td><td>extra planner attempts when the plan is invalid (so 3 attempts by default)</td></tr>
 <tr><td><code>workspace</code></td><td>string</td><td><code>"git_worktree"</code></td><td><code>git_worktree</code>, <code>in_place</code>, or a workspace provider registered by a plugin</td></tr>
-<tr><td><code>auto_merge</code></td><td>bool</td><td><code>false</code></td><td>merge the task branch as soon as QA approves; otherwise the task stops in <code>ready</code></td></tr>
+<tr><td><code>auto_merge</code></td><td>bool</td><td><code>false</code></td><td>merge after QA approval and required validations; otherwise stop in <code>ready</code></td></tr>
+<tr><td><code>validation_commands</code></td><td>list of strings</td><td><code>[]</code></td><td>mandatory shell checks before ready/merge; see below</td></tr>
+<tr><td><code>max_validation_fix_attempts</code></td><td>integer</td><td><code>2</code></td><td>automatic validation fixes over the whole run, including resumes; <code>0</code> disables them</td></tr>
 <tr><td><code>merge_strategy</code></td><td><code>"manual"</code> or <code>"assisted"</code></td><td><code>"manual"</code></td><td><code>manual</code> reports conflicts for a human; <code>assisted</code> lets a model resolve conflict markers first</td></tr>
 </tbody>
 </table>
 </div>
 <p>What these limits do at run time is described in <a href="../design/pipeline.html">The pipeline</a>;
 workspaces and merging in <a href="workspaces.html">Workspaces and merging</a>.</p>
+<h2 id="required-validation-commands-unreleased"><a class="header" href="#required-validation-commands-unreleased">Required validation commands (unreleased)</a></h2>
+<pre><code class="language-toml">[pipeline]
+validation_commands = ["cargo fmt --all -- --check", "cargo test --offline"]
+max_validation_fix_attempts = 2
+</code></pre>
+<p>The default is <code>[]</code> for compatibility. Each configured command is mandatory and runs
+sequentially from the task workspace root at the start of the merge phase, after normal
+QA approval and before either marking the task ready or merging it automatically.
+The pipeline calls the registered <code>bash</code> tool directly, without asking a model to interpret
+its result. Tool hooks and the existing shell policy still apply. Custom <code>bash</code> tools must
+return structured <code>exit_code: 0</code> metadata for success; tool registrations are trusted.
+The timeout is <code>security.command_timeout_secs</code> (bounded by the shell tool to 1–600 seconds).</p>
+<p>A nonzero exit or timeout sends the command, exit status and captured output to the QA fixer.
+The fixer commits its changes, a fresh QA review runs, then <strong>every required command runs
+again</strong> before integration. This applies even to the trivial complexity profile. A favorable
+model verdict alone never satisfies a command check.</p>
+<p><code>max_validation_fix_attempts</code> defaults to 2 and limits automatic validation corrections over
+the <strong>whole run</strong>, including resumes. Set it to 0 for manual correction only. Attempts are
+reserved and saved before invoking the fixer, so an interrupted attempt still consumes one.
+The existing QA review/fix limits also remain in effect. After exhausting the validation
+budget, the run pauses with task status <code>review</code>. A denied/empty command, missing tool or
+execution error without an exit status pauses immediately for a human; it is not sent to
+an agent to work around the policy. Later validation commands do not run after a failure.</p>
+<p>Results, output and metadata remain in <code>run.json</code> under <code>validations</code>; the persisted
+<code>validation_fix_attempts</code> counter and <code>pending_validation_fix</code> index track correction and
+recovery. Notes are also written to <code>progress.md</code>. Correct the workspace or configuration
+and use <code>vibe run &lt;task&gt; --resume</code>: the gate rechecks all commands without granting fresh
+automatic attempts. To grant more attempts explicitly, increase the configured limit.
+Cancellation is checked between commands and before merge; a running command remains
+bounded by its timeout.</p>
+<p>Use checking commands, not formatters that rewrite sources. With <code>auto_merge = true</code>,
+the commands also run on an isolated integration candidate that combines the latest target
+branch and the task, <strong>after</strong> any assisted conflict resolution. Validation records include
+<code>integration</code> (false for task checks, true for integration checks) and <code>workspace_root</code>.
+A failed integration check pauses for human review without spending task-fixer attempts;
+the target branch is not updated. Resuming rebuilds a candidate from the current target.</p>
+<p>The git provider rejects tracked changes, new non-ignored files or commits left by a check
+in the candidate. Build outputs must be ignored. It also refuses publication if the target
+branch, current checkout, tracked files or guarded repository configuration changed during
+validation. Only the already-tested commit can be fast-forwarded into the target.
+Temporary candidate worktrees are removed after success or failure; the persisted output
+and progress notes remain. This validates repository content, not production deployment.</p>
+<p>With no validation commands the previous merge behavior is preserved. In-place mode has
+no separate integration: checks run again on the project itself, with no rollback guarantee.
+Third-party workspace providers must implement <code>merge_validated</code> to support gated automatic
+integration; the default refuses it rather than falling back to an unchecked merge.
+External manual <code>git merge</code> commands are outside this gate. Configuration is loaded by the
+host, not accepted from an agent’s QA report.</p>
 <h2 id="security"><a class="header" href="#security"><code>[security]</code></a></h2>
 <div class="table-wrapper">
 <table>

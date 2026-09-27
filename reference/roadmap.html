@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+            window.path_to_searchindex_js = "../searchindex-72713264.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2dd03f19.js"></script>
@@ -194,18 +194,26 @@
 <li><input disabled="" type="checkbox" checked=""> <code>vibe</code> CLI</li>
 <li><input disabled="" type="checkbox" checked=""> User guide, design book, ADRs, API docs</li>
 </ul>
-<h2 id="next"><a class="header" href="#next">Next</a></h2>
+<h2 id="02--reliability-in-development"><a class="header" href="#02--reliability-in-development">0.2 — reliability (in development)</a></h2>
 <ul>
-<li><input disabled="" type="checkbox"> Web fetch and web search tools (with domain allow/deny lists)</li>
-<li><input disabled="" type="checkbox"> Streaming completions and live token output in the CLI</li>
-<li><input disabled="" type="checkbox"> Terminal UI board (<code>vibe board</code>) with live events</li>
-<li><input disabled="" type="checkbox"> HTTP/WebSocket server crate so desktop or web front-ends can drive the pipeline</li>
-<li><input disabled="" type="checkbox"> Issue tracker importers (GitHub, GitLab) as plugins</li>
-<li><input disabled="" type="checkbox"> Container workspace provider (Docker/Podman) as a plugin</li>
-<li><input disabled="" type="checkbox"> Persistent memory store with full-text search, shared across tasks</li>
-<li><input disabled="" type="checkbox"> Multi-account provider pools with automatic fail-over on rate limits</li>
-<li><input disabled="" type="checkbox"> Cost and token budgets per run with hard stops</li>
-<li><input disabled="" type="checkbox"> Changelog and release-notes generation from completed tasks</li>
+<li><input disabled="" type="checkbox" checked=""> Required commands before ready/merge, persistent results and replay on resume</li>
+<li><input disabled="" type="checkbox" checked=""> Three reproducible Rust evaluation fixtures and an independent acceptance runner</li>
+<li><input disabled="" type="checkbox"> Run real-model evaluations; expand the suite to ten tasks and record success, time and tokens</li>
+<li><input disabled="" type="checkbox" checked=""> Feed deterministic validation failures into the bounded QA/fix loop</li>
+<li><input disabled="" type="checkbox" checked=""> Validate the integration candidate, including assisted conflict resolution, before publication</li>
+<li><input disabled="" type="checkbox"> Worktree per subtask, ordered integration and conflict tests</li>
+<li><input disabled="" type="checkbox"> Container workspace provider with explicit network, mounts and resource limits</li>
+<li><input disabled="" type="checkbox"> Persistent token and duration budgets across resumes</li>
+<li><input disabled="" type="checkbox"> Cancellation-safe plugin writer task</li>
+<li><input disabled="" type="checkbox"> Cross-platform release qualification and migration guide</li>
+</ul>
+<h2 id="03--interaction-and-capabilities"><a class="header" href="#03--interaction-and-capabilities">0.3 — interaction and capabilities</a></h2>
+<ul>
+<li><input disabled="" type="checkbox"> Streaming completions and live token output</li>
+<li><input disabled="" type="checkbox"> Terminal UI board with live events</li>
+<li><input disabled="" type="checkbox"> Web fetch and search tools</li>
+<li><input disabled="" type="checkbox"> Richer persistent memory across tasks</li>
+<li><input disabled="" type="checkbox"> HTTP/WebSocket server and issue tracker importers</li>
 </ul>
 <h2 id="ideas"><a class="header" href="#ideas">Ideas</a></h2>
 <ul>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+            window.path_to_searchindex_js = "../searchindex-72713264.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2dd03f19.js"></script>
@@ -255,7 +255,15 @@ Uncommitted changes:
 <p>The first part is <code>git diff --stat &lt;base&gt;...HEAD</code> (changes since the fork point); the second
 is <code>git status --short</code> in the worktree.</p>
 <h2 id="merge-behaviour"><a class="header" href="#merge-behaviour">Merge behaviour</a></h2>
-<p>Merging integrates the task branch into the base branch <strong>in your project checkout</strong>:</p>
+<p>With configured <code>pipeline.validation_commands</code> and <code>auto_merge = true</code>, integration is
+prepared in a detached temporary worktree. The commands run against the combined result,
+including assisted conflict resolutions. Only a passing, unchanged candidate is published
+by fast-forwarding the base branch to that exact commit. A failed check, unresolved conflict,
+changed target or unsupported provider pauses in <code>review</code>; the target is not updated by the
+integration. Resume builds and checks a fresh candidate. See
+<a href="configuration.html#required-validation-commands-unreleased">Required validation commands</a>.</p>
+<p>Without configured validation commands, merging integrates the task branch into the base
+branch <strong>in your project checkout</strong> using the original algorithm:</p>
 <ol>
 <li>Anything left uncommitted in the worktree is committed as <code>vibe: checkpoint</code>, excluding
 <code>.vibe/</code>, with the neutral identity <code>Vibe Factory &lt;vibe-factory@localhost&gt;</code>.</li>
@@ -270,7 +278,7 @@ files. Your checkout is left clean.</li>
 </ol>
 <p>After a successful merge your checkout stays on the base branch. The worktree and branch are
 kept until you discard the task. With <code>pipeline.auto_merge = true</code> the merge runs as soon as
-QA approves; otherwise the task waits in <code>ready</code>.</p>
+QA and required validations approve; otherwise the task waits in <code>ready</code> after its task checks.</p>
 <h3 id="assisted-conflict-resolution"><a class="header" href="#assisted-conflict-resolution">Assisted conflict resolution</a></h3>
 <p>The worktree provider can instead ask a model to resolve conflicts (<code>MergeStrategy::Assisted</code>).
 For each conflicting file it sends the content with its markers, asks for the fully merged
