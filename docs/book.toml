@@ -1,0 +1,20 @@
+[book]
+title = "Vibe Factory"
+description = "An open, extensible framework for autonomous multi-agent software development"
+authors = ["Vincent Lauriat"]
+language = "en"
+src = "src"
+
+[build]
+create-missing = false
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/vincentlauriat/vibe-factory"
+edit-url-template = "https://github.com/vincentlauriat/vibe-factory/edit/main/docs/{path}"
+site-url = "/vibe-factory/"
+
+[output.html.fold]
+enable = true
+level = 1

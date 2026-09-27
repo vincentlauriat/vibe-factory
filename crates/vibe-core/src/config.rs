@@ -97,6 +97,23 @@ pub struct PipelineConfig {
     /// Whether to merge automatically after QA approval.
     #[serde(default)]
     pub auto_merge: bool,
+    /// How merge conflicts are handled: `manual` (report for a human) or
+    /// `assisted` (let the `merge_resolver` agent's model try first).
+    #[serde(default)]
+    pub merge_strategy: MergeStrategy,
+}
+
+/// Conflict handling strategy at merge time.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeStrategy {
+    /// Conflicts are reported for a human to resolve.
+    #[default]
+    Manual,
+    /// A model attempts to resolve conflicts; unresolved files go to a human.
+    Assisted,
 }
 
 fn default_qa_rounds() -> u32 {
@@ -124,6 +141,7 @@ impl Default for PipelineConfig {
             max_phase_retries: default_phase_retries(),
             workspace: default_workspace(),
             auto_merge: false,
+            merge_strategy: MergeStrategy::Manual,
         }
     }
 }
@@ -175,7 +193,9 @@ pub struct PluginConfig {
     /// Environment variables for the process.
     #[serde(default)]
     pub env: BTreeMap<String, String>,
-    /// Working directory of the process (default: the project root).
+    /// Working directory of the process. The CLI fills it with the project
+    /// root when absent; the raw plugin client falls back to the host's
+    /// current directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<PathBuf>,
     /// Capabilities the plugin claims to offer (`tools`, `agents`, `hooks`);
@@ -202,8 +222,9 @@ pub struct VibeConfig {
     /// Per-phase overrides.
     #[serde(default)]
     pub phases: PhaseModels,
-    /// Providers by name.
-    #[serde(default)]
+    /// Providers by name. When the table is absent the built-in
+    /// `anthropic`, `openai` and `ollama` entries are used.
+    #[serde(default = "default_providers")]
     pub providers: BTreeMap<String, ProviderConfig>,
     /// Pipeline tuning.
     #[serde(default)]
@@ -227,40 +248,46 @@ fn default_model() -> String {
     "anthropic/claude-sonnet-5".to_string()
 }
 
+/// Built-in provider table used when the configuration declares none.
+#[must_use]
+pub fn default_providers() -> BTreeMap<String, ProviderConfig> {
+    let mut providers = BTreeMap::new();
+    providers.insert(
+        "anthropic".to_string(),
+        ProviderConfig {
+            kind: "anthropic".into(),
+            api_key_env: Some("ANTHROPIC_API_KEY".into()),
+            ..Default::default()
+        },
+    );
+    providers.insert(
+        "openai".to_string(),
+        ProviderConfig {
+            kind: "openai".into(),
+            api_key_env: Some("OPENAI_API_KEY".into()),
+            ..Default::default()
+        },
+    );
+    providers.insert(
+        "ollama".to_string(),
+        ProviderConfig {
+            kind: "openai".into(),
+            base_url: Some("http://localhost:11434/v1".into()),
+            default_model: Some("qwen2.5-coder".into()),
+            ..Default::default()
+        },
+    );
+    providers
+}
+
 impl Default for VibeConfig {
     fn default() -> Self {
-        let mut providers = BTreeMap::new();
-        providers.insert(
-            "anthropic".to_string(),
-            ProviderConfig {
-                kind: "anthropic".into(),
-                api_key_env: Some("ANTHROPIC_API_KEY".into()),
-                ..Default::default()
-            },
-        );
-        providers.insert(
-            "openai".to_string(),
-            ProviderConfig {
-                kind: "openai".into(),
-                api_key_env: Some("OPENAI_API_KEY".into()),
-                ..Default::default()
-            },
-        );
-        providers.insert(
-            "ollama".to_string(),
-            ProviderConfig {
-                kind: "openai".into(),
-                base_url: Some("http://localhost:11434/v1".into()),
-                default_model: Some("qwen2.5-coder".into()),
-                ..Default::default()
-            },
-        );
         Self {
             default_provider: default_provider(),
             default_model: default_model(),
             default_thinking: ThinkingLevel::Medium,
             phases: PhaseModels::default(),
-            providers,
+            providers: default_providers(),
             pipeline: PipelineConfig::default(),
             security: SecurityConfig::default(),
             plugins: Vec::new(),
@@ -348,6 +375,14 @@ thinking = "high"
         assert_eq!(t, ThinkingLevel::High);
         let (m, _) = cfg.model_for(Phase::Build);
         assert_eq!(m.provider, "anthropic");
+    }
+
+    #[test]
+    fn missing_providers_table_uses_builtins() {
+        let cfg = VibeConfig::from_toml("default_model = \"anthropic/sonnet\"").unwrap();
+        assert!(cfg.providers.contains_key("anthropic"));
+        assert!(cfg.providers.contains_key("ollama"));
+        assert_eq!(cfg.pipeline.merge_strategy, MergeStrategy::Manual);
     }
 
     #[test]

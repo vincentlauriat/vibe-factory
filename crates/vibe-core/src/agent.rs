@@ -115,7 +115,8 @@ impl std::fmt::Display for AgentRole {
 pub enum ToolSelection {
     /// No tools at all (pure text generation).
     None,
-    /// Read-only tools: `read_file`, `glob`, `grep`, `list_dir`.
+    /// Read-only tools: `read_file`, `glob`, `grep`, `list_dir`, plus the
+    /// web tools (`web_fetch`, `web_search`) when a plugin provides them.
     ReadOnly,
     /// Read-only tools plus `write_file` (for producing documents).
     ReadWrite,
@@ -154,7 +155,8 @@ impl ToolSelection {
     }
 }
 
-/// Tools considered read-only by [`ToolSelection::ReadOnly`].
+/// Tools considered read-only by [`ToolSelection::ReadOnly`]. Names that are
+/// not registered are simply ignored at resolution time.
 pub const READ_ONLY_TOOLS: &[&str] = &[
     "read_file",
     "glob",

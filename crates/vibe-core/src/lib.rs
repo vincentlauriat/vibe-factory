@@ -48,7 +48,8 @@ pub use agent::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, ModelSelection, ThinkingLevel, ToolSelection,
 };
 pub use config::{
-    PhaseModels, PipelineConfig, PluginConfig, ProviderConfig, SecurityConfig, VibeConfig,
+    MergeStrategy, PhaseModels, PipelineConfig, PluginConfig, ProviderConfig, SecurityConfig,
+    VibeConfig,
 };
 pub use error::{Error, ErrorKind, Result};
 pub use event::{Envelope, Event, EventBus, EventSink};

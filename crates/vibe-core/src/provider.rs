@@ -24,10 +24,12 @@ impl ModelRef {
         }
     }
 
-    /// Parse `provider/model`. A bare `model` is attributed to `default_provider`.
+    /// Parse `provider/model`. A bare `model` is attributed to
+    /// `default_provider`; `provider/` (empty model) selects that provider's
+    /// default model (empty `model` field).
     pub fn parse(s: &str, default_provider: &str) -> Self {
         match s.split_once('/') {
-            Some((p, m)) if !p.is_empty() && !m.is_empty() => Self::new(p, m),
+            Some((p, m)) if !p.is_empty() => Self::new(p, m),
             _ => Self::new(default_provider, s),
         }
     }
@@ -234,6 +236,10 @@ mod tests {
             ModelRef::new("anthropic", "claude-sonnet-5")
         );
         assert_eq!(ModelRef::new("a", "b").to_string(), "a/b");
+        assert_eq!(
+            ModelRef::parse("ollama/", "anthropic"),
+            ModelRef::new("ollama", "")
+        );
     }
 
     #[test]
