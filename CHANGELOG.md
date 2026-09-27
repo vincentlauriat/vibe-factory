@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows
   with a stable cursor (`events_log`), the history of finished work rebuilt from events and
   git (`history`: runs, commits, changed files, validations, QA, tokens, active time) and
   the trace of a run's tool calls (`trace`).
+- A native macOS app, `apps/macos/VibeFactory` (SwiftUI, macOS 14+): opens a project and
+  starts `vibe serve` for it, or connects to a running server; task board, detail with spec,
+  plan, QA, live activity and changes, approvals, menu bar item and notifications. Built
+  and tested by a dedicated CI workflow.
 - `[pricing."<provider>/<model>"]` in `config.toml`: prices per million tokens, used to
   show a cost in the history when every model of a task has one.
 
