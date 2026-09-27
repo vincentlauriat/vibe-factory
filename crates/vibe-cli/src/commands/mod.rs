@@ -5,6 +5,7 @@ pub mod approval;
 pub mod config;
 pub mod doctor;
 pub mod events;
+pub mod history;
 pub mod init;
 pub mod memory;
 pub mod plugins;
@@ -12,6 +13,7 @@ pub mod pr;
 pub mod run;
 pub mod status;
 pub mod task;
+pub mod trace;
 
 use std::io::Write;
 use std::path::Path;
@@ -57,6 +59,8 @@ pub async fn dispatch(cli: Cli) -> Result<u8> {
         Command::Tui => crate::tui::run(&find_project_root(project)?).await,
         Command::Serve(args) => crate::server::run(&find_project_root(project)?, args, ui).await,
         Command::Events(args) => events::run(&find_project_root(project)?, args, ui).await,
+        Command::History(args) => history::run(&find_project_root(project)?, args, ui).await,
+        Command::Trace(args) => trace::run(&find_project_root(project)?, args, ui).await,
         Command::Status => status::run(&find_project_root(project)?, ui).await,
         Command::Config(cmd) => config::run(&find_project_root(project)?, cmd, ui),
         Command::Agents(cmd) => agents::run(&find_project_root(project)?, cmd, ui),
@@ -82,6 +86,22 @@ pub async fn resolve_task(store: &Arc<FileTaskStore>, reference: &str) -> Result
 /// Sequence number of a task, if indexed.
 pub async fn task_number(store: &FileTaskStore, task: &Task) -> Option<u32> {
     store.entry(task.id).await.ok().flatten().map(|e| e.number)
+}
+
+/// `pos/total title` of every subtask of the task's plan, by id.
+pub async fn subtask_labels(
+    store: &FileTaskStore,
+    task: &Task,
+) -> std::collections::HashMap<vibe_core::SubtaskId, String> {
+    use vibe_core::TaskStore;
+    let Ok(Some(plan)) = store.load_plan(task.id).await else {
+        return Default::default();
+    };
+    let total = plan.len();
+    plan.subtasks()
+        .enumerate()
+        .map(|(i, s)| (s.id, format!("{}/{total} {}", i + 1, s.title)))
+        .collect()
 }
 
 /// Whether the project has been initialised.

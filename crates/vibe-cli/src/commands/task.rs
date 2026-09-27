@@ -192,6 +192,9 @@ async fn show(root: &Path, store: &Arc<FileTaskStore>, reference: &str, ui: Ui) 
     if !task.labels.is_empty() {
         println!("  labels      {}", task.labels.join(", "));
     }
+    if let Some(branch) = &task.branch {
+        println!("  branch      {branch}");
+    }
     println!("  id          {}", task.id);
     println!("  created     {}", relative_time(task.created_at));
     println!("  updated     {}", relative_time(task.updated_at));

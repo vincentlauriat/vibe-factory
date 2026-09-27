@@ -8,7 +8,7 @@
 //! [`parse_event_log`].
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -274,6 +274,9 @@ pub struct AllEventsFollower {
     store: FileTaskStore,
     after: Option<EventCursor>,
     readers: BTreeMap<TaskId, (u32, EventReader)>,
+    /// Logs [`AllEventsFollower::from_end`] could not read: they are moved
+    /// to their end at the first poll that can read them.
+    unpositioned: BTreeSet<TaskId>,
 }
 
 /// What one [`AllEventsFollower::poll`] found.
@@ -295,17 +298,26 @@ impl AllEventsFollower {
             store: FileTaskStore::at_root(store.root().to_path_buf()),
             after,
             readers: BTreeMap::new(),
+            unpositioned: BTreeSet::new(),
         }
     }
 
     /// Follow every log of `store` from now on: the first poll returns only
     /// events appended after this call (every event of a task created
-    /// later).
+    /// later). Only an unreadable index fails: a log that cannot be read
+    /// now is reported by each poll until it can be, then followed from
+    /// its end at that time.
     pub async fn from_end(store: &FileTaskStore) -> Result<Self> {
         let mut follower = Self::new(store, None);
         for (id, entry) in follower.store.entries().await? {
             let path = follower.store.root().join(&entry.dir).join(EVENTS_FILE);
-            let reader = EventReader::at_end(path).await?;
+            let reader = match EventReader::at_end(path.clone()).await {
+                Ok(reader) => reader,
+                Err(_) => {
+                    follower.unpositioned.insert(id);
+                    EventReader::new(path)
+                }
+            };
             follower.readers.insert(id, (entry.number, reader));
         }
         Ok(follower)
@@ -317,6 +329,7 @@ impl AllEventsFollower {
     pub async fn poll(&mut self) -> Result<PollResult> {
         let entries = self.store.entries().await?;
         self.readers.retain(|id, _| entries.contains_key(id));
+        self.unpositioned.retain(|id| entries.contains_key(id));
         for (id, entry) in &entries {
             self.readers.entry(*id).or_insert_with(|| {
                 let path = self.store.root().join(&entry.dir).join(EVENTS_FILE);
@@ -325,6 +338,16 @@ impl AllEventsFollower {
         }
         let mut out = PollResult::default();
         for (id, (number, reader)) in &mut self.readers {
+            if self.unpositioned.contains(id) {
+                match EventReader::at_end(reader.path().to_path_buf()).await {
+                    Ok(at_end) => {
+                        *reader = at_end;
+                        self.unpositioned.remove(id);
+                    }
+                    Err(e) => out.errors.push((*id, e)),
+                }
+                continue;
+            }
             match reader.read_new().await {
                 Ok(envelopes) => out.events.extend(tag(*id, *number, envelopes, self.after)),
                 Err(e) => out.errors.push((*id, e)),
@@ -549,6 +572,48 @@ mod tests {
         assert!(second.errors.is_empty());
         let tasks: Vec<TaskId> = second.events.iter().map(|e| e.task).collect();
         assert_eq!(tasks, vec![ids[1]]);
+    }
+
+    #[tokio::test]
+    async fn a_follower_from_the_end_reports_an_unreadable_log_and_goes_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FileTaskStore::open(dir.path()).unwrap();
+        let (a, b) = (Task::new("Alpha", ""), Task::new("Beta", ""));
+        store.save_task(&a).await.unwrap();
+        store.save_task(&b).await.unwrap();
+        let log_a = store.task_dir(a.id).await.unwrap().join(EVENTS_FILE);
+        let broken = store.task_dir(b.id).await.unwrap().join(EVENTS_FILE);
+        std::fs::create_dir(&broken).unwrap();
+        let run = RunId::new();
+        let now = Utc::now();
+        append(&log_a, &line(1, now, run));
+
+        let mut follower = AllEventsFollower::from_end(&store).await.unwrap();
+        append(&log_a, &line(2, now, run));
+        let first = follower.poll().await.unwrap();
+        let seqs: Vec<u64> = first
+            .events
+            .iter()
+            .map(|e| e.envelope.seq.unwrap())
+            .collect();
+        assert_eq!(seqs, vec![2]);
+        assert_eq!(first.errors.len(), 1);
+        assert_eq!(first.errors[0].0, b.id);
+
+        // Repaired with a history: only what is appended afterwards comes.
+        std::fs::remove_dir(&broken).unwrap();
+        append(&broken, &line(1, now, run));
+        let second = follower.poll().await.unwrap();
+        assert!(second.errors.is_empty());
+        assert!(second.events.is_empty());
+        append(&broken, &line(2, now, run));
+        let third = follower.poll().await.unwrap();
+        let got: Vec<(TaskId, u64)> = third
+            .events
+            .iter()
+            .map(|e| (e.task, e.envelope.seq.unwrap()))
+            .collect();
+        assert_eq!(got, vec![(b.id, 2)]);
     }
 
     #[tokio::test]

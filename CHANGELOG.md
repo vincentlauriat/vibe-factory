@@ -20,6 +20,17 @@ All notable changes to this project are documented here. The format follows
   with a stable cursor (`events_log`), the history of finished work rebuilt from events and
   git (`history`: runs, commits, changed files, validations, QA, tokens, active time) and
   the trace of a run's tool calls (`trace`).
+- `vibe history [REF] [--all]`: what was delivered, per task — runs with their state, commits,
+  changed files (from git, with the fast-forward case handled), validations, last QA verdict,
+  tokens, active time and, with a `[pricing]` table, a cost.
+- `vibe trace <REF> [--run ID | --all] [--tool NAME] [--subtask ID] [--full]`: every tool call
+  of a run with its complete arguments, duration, exit code and output (the complete text with
+  `--full`), grouped by subtask and role.
+- `vibe events` without a task: the activity of every task, chronological, prefixed with the
+  task number; `--since`, `--type` (repeatable) and `--task` (repeatable) filters, `--follow`
+  from the end; `--json` prints envelopes tagged with the task.
+- `vibe serve --exit-on-stdin-eof`: the server stops, as on Ctrl-C, when its standard input
+  closes — for clients that run it as a child process.
 - A native macOS app, `apps/macos/VibeFactory` (SwiftUI, macOS 14+): opens a project and
   starts `vibe serve` for it, or connects to a running server; task board, detail with spec,
   plan, QA, live activity and changes, approvals, menu bar item and notifications. Built
@@ -30,6 +41,8 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 - A run that fails before its first phase (workspace, storage) now always ends with a
   `run_finished` event.
+- `vibe events <REF> --follow` kept following a resumed run to its end; it used to stop at the
+  `run_finished` left by the pause. JSON outputs no longer panic on a closed pipe (`| head`).
 - The run lock is released explicitly when a run ends. It was only released when its file
   closed, and a child process started meanwhile by another thread (git, a validation
   command) kept a copy of the descriptor open until its `exec`, so an immediate resume

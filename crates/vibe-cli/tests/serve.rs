@@ -232,3 +232,63 @@ async fn evaluation_summaries_are_listed() {
     let off: Value = start().get("/api/evals").await.json().await.unwrap();
     assert_eq!(off["enabled"], false);
 }
+
+#[test]
+fn closing_stdin_stops_the_server_with_exit_on_stdin_eof() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q", "-b", "main"]);
+    std::fs::write(root.join("README.md"), "# demo\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "init"]);
+    let vibe = assert_cmd::cargo::cargo_bin("vibe");
+    assert!(
+        Command::new(&vibe)
+            .arg("init")
+            .current_dir(root)
+            .stdout(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let mut child = Command::new(&vibe)
+        .args([
+            "--json",
+            "serve",
+            "--exit-on-stdin-eof",
+            "--port",
+            "0",
+            "--provider",
+            "mock",
+        ])
+        .current_dir(root)
+        .env("HOME", root.join(".home"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut first = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut first)
+        .unwrap();
+    let info: Value = serde_json::from_str(&first).expect("serve prints its address as JSON");
+    assert!(info["port"].as_u64().unwrap() > 0);
+    let token_file = root.join(".vibe").join("server.token");
+    assert!(token_file.exists());
+
+    drop(child.stdin.take());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("the server did not stop within 5 s of stdin closing");
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(status.code(), Some(0));
+    assert!(!token_file.exists(), "the token file is removed on exit");
+}

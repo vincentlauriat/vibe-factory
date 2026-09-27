@@ -87,6 +87,12 @@ impl Renderer {
         }
     }
 
+    /// Text of one event as it is printed, or `None` when it is not shown
+    /// at this verbosity (whatever `--json` says).
+    pub async fn text(&self, envelope: &Envelope) -> Option<String> {
+        self.line(&envelope.event).await
+    }
+
     /// Text of one event, or `None` when it is not shown at this verbosity.
     async fn line(&self, event: &Event) -> Option<String> {
         Some(match event {

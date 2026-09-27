@@ -20,9 +20,21 @@ pub struct Ui {
 }
 
 impl Ui {
-    /// Print a JSON value on one line.
+    /// Print a JSON value on one line. A closed standard output
+    /// (`vibe --json … | head`) is not an error.
     pub fn print_json(&self, value: &serde_json::Value) {
-        println!("{value}");
+        let _ = print_out(&format!("{value}\n"));
+    }
+}
+
+/// Write `text` to standard output. `Ok(false)` when the reader went away
+/// (`vibe … | head`): the command should then stop quietly.
+pub fn print_out(text: &str) -> Result<bool> {
+    let mut out = std::io::stdout().lock();
+    match out.write_all(text.as_bytes()).and_then(|()| out.flush()) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(false),
+        Err(e) => Err(e.into()),
     }
 }
 
