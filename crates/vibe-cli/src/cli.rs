@@ -55,6 +55,25 @@ pub enum Command {
     Task(TaskCommand),
     /// Run a task through the pipeline.
     Run(RunArgs),
+    /// Approve what a paused run is waiting for (`pipeline.approvals`).
+    Approve {
+        /// Task number, `NNN-slug` directory name, or id prefix.
+        #[arg(value_name = "REF")]
+        reference: String,
+        /// A note recorded with the approval.
+        #[arg(long)]
+        comment: Option<String>,
+    },
+    /// Reject what a paused run is waiting for; the reason goes back to the
+    /// agents that produced it.
+    Reject {
+        /// Task number, `NNN-slug` directory name, or id prefix.
+        #[arg(value_name = "REF")]
+        reference: String,
+        /// Why, in terms the agents can act on.
+        #[arg(long)]
+        reason: String,
+    },
     /// Replay the logged events of a task's run, optionally following new ones.
     Events(EventsArgs),
     /// Project summary: tasks per status, last runs, active worktrees.

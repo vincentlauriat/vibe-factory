@@ -268,6 +268,20 @@ never redone; interrupted ones are retried. When a **failed** run resumes at `bu
 and skipped subtasks go back to pending with their attempt counters reset, and a progress
 note says how many.
 
+## Approval gates
+
+`pipeline.approvals` lists `ApprovalGate`s. Before a phase runs, the driver computes the
+gate it must pass (`Plan` needs `Spec` when a spec exists, `Build` needs `Plan`, `Merge`
+needs `Merge`). A gate without a valid approval sets `RunState::pending_approval`,
+publishes `approval_requested` once, then `paused`, and ends the run as `paused` (task
+`review`) at that phase. `RunState::resolve_approval`, called by `vibe approve` and
+`vibe reject`, records the decision. On resume an approved gate lets the phase run; a
+rejected one redirects to the producer: `Spec` and `Plan` take the reason through
+`RunContext::take_rejection` and put it in their prompt, `Merge` becomes a QA report with
+one high severity "Human review" issue and forces the fix phase (`pending_human_fix`), even
+in profiles without it. A completed `Spec` revokes the spec and plan approvals, `Plan` the
+plan approval, `Build` and `Fix` the merge approval.
+
 ## Budgets
 
 `run.json` accumulates the tokens (`usage`) and active milliseconds (`active_ms`) of every

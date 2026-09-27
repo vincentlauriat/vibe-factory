@@ -51,8 +51,8 @@ pub use agent::{
 };
 pub use budget::{BudgetExceeded, BudgetLimits, RunBudget};
 pub use config::{
-    MergeStrategy, PhaseModels, PipelineConfig, PluginConfig, ProviderConfig, SecurityConfig,
-    VibeConfig,
+    ApprovalGate, MergeStrategy, PhaseModels, PipelineConfig, PluginConfig, ProviderConfig,
+    SecurityConfig, VibeConfig,
 };
 pub use error::{Error, ErrorKind, Result};
 pub use event::{Artefact, EVENT_SCHEMA_VERSION, Envelope, Event, EventBus, EventSink};

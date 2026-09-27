@@ -5,7 +5,7 @@
 //! [`crate::Pipeline::resume`] from [`RunState::current_phase`].
 
 use chrono::{DateTime, Utc};
-use vibe_core::{Phase, RunId, TaskId, Usage};
+use vibe_core::{ApprovalGate, Error, Phase, Result, RunId, TaskId, Usage};
 
 use crate::complexity::Profile;
 
@@ -58,6 +58,20 @@ pub struct ValidationResult {
     pub metadata: serde_json::Value,
 }
 
+/// A human decision on an [`ApprovalGate`].
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ApprovalRecord {
+    /// What was decided on.
+    pub gate: ApprovalGate,
+    /// Approved, or rejected.
+    pub approved: bool,
+    /// The approver's note, or the reason of the rejection.
+    #[serde(default)]
+    pub comment: String,
+    /// When.
+    pub at: DateTime<Utc>,
+}
+
 /// State of one pipeline run, persisted as `run.json` in the task directory.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RunState {
@@ -100,6 +114,22 @@ pub struct RunState {
     /// across resumes (time spent paused is not counted).
     #[serde(default)]
     pub active_ms: u64,
+    /// Gate the run is waiting on, if any.
+    #[serde(default)]
+    pub pending_approval: Option<ApprovalGate>,
+    /// Gates approved and still valid (regenerating the artefact revokes).
+    #[serde(default)]
+    pub approved_gates: Vec<ApprovalGate>,
+    /// A rejection not yet handed to the phase that must redo its work.
+    #[serde(default)]
+    pub rejection: Option<ApprovalRecord>,
+    /// Every decision taken during the run.
+    #[serde(default)]
+    pub approvals: Vec<ApprovalRecord>,
+    /// A merge rejection turned into a QA report that the fixer must address,
+    /// even with a profile that normally skips the fix phase.
+    #[serde(default)]
+    pub pending_human_fix: bool,
     /// Last error message, if the run failed.
     #[serde(default)]
     pub last_error: Option<String>,
@@ -126,7 +156,49 @@ impl RunState {
             pending_validation_fix: None,
             usage: Usage::default(),
             active_ms: 0,
+            pending_approval: None,
+            approved_gates: Vec::new(),
+            rejection: None,
+            approvals: Vec::new(),
+            pending_human_fix: false,
         }
+    }
+
+    /// Record a human decision on the pending gate. Fails when the run is
+    /// not waiting for one, or when a rejection comes without a reason.
+    pub fn resolve_approval(
+        &mut self,
+        approved: bool,
+        comment: impl Into<String>,
+    ) -> Result<ApprovalRecord> {
+        let comment = comment.into();
+        let gate = self
+            .pending_approval
+            .ok_or_else(|| Error::config("the run is not waiting for an approval"))?;
+        if !approved && comment.trim().is_empty() {
+            return Err(Error::config(
+                "a rejection needs a reason: it is what the agents will work from",
+            ));
+        }
+        let record = ApprovalRecord {
+            gate,
+            approved,
+            comment,
+            at: Utc::now(),
+        };
+        self.pending_approval = None;
+        self.approvals.push(record.clone());
+        if approved {
+            if !self.approved_gates.contains(&gate) {
+                self.approved_gates.push(gate);
+            }
+            self.rejection = None;
+        } else {
+            self.approved_gates.retain(|g| *g != gate);
+            self.rejection = Some(record.clone());
+        }
+        self.touch();
+        Ok(record)
     }
 
     /// Bump `updated_at`.

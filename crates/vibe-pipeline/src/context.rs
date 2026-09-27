@@ -419,6 +419,21 @@ impl RunContext {
         Ok(truncate_head(&out, MEMORY_MAX_CHARS))
     }
 
+    /// Take the pending rejection of `gate`, as feedback for the phase that
+    /// redoes the rejected work.
+    pub fn take_rejection(&mut self, gate: vibe_core::ApprovalGate) -> Option<String> {
+        if self.state.rejection.as_ref()?.gate != gate {
+            return None;
+        }
+        self.state.rejection.take().map(|r| {
+            format!(
+                "### Human review of the previous version\n\nA human rejected the previous {gate} \
+                 with this reason. Address it explicitly:\n\n{}\n",
+                r.comment.trim()
+            )
+        })
+    }
+
     /// Publish [`vibe_core::Event::ArtefactWritten`].
     pub async fn artefact_written(&self, artefact: vibe_core::Artefact) {
         self.events

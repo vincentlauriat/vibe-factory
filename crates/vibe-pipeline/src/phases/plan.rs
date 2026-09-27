@@ -157,7 +157,10 @@ pub async fn run_plan(ctx: &mut RunContext) -> Result<PhaseResult> {
     let spec_text = ctx.spec_text();
     let spec = ctx.agent_spec(&AgentRole::Planner)?;
     let attempts = ctx.config.pipeline.max_phase_retries + 1;
-    let mut feedback = String::new();
+    let human = ctx
+        .take_rejection(vibe_core::ApprovalGate::Plan)
+        .unwrap_or_default();
+    let mut feedback = human.clone();
     for attempt in 1..=attempts {
         let runner = ctx
             .runner(&spec)?
@@ -206,7 +209,7 @@ pub async fn run_plan(ctx: &mut RunContext) -> Result<PhaseResult> {
                 .await;
         }
         feedback = format!(
-            "Your previous plan was rejected: {error}. Produce a corrected, complete plan."
+            "{human}Your previous plan was rejected: {error}. Produce a corrected, complete plan."
         );
     }
     Err(Error::other(format!(

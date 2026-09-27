@@ -162,6 +162,24 @@ pub enum Event {
         /// Which artefact.
         artefact: Artefact,
     },
+    /// The run stopped to wait for a human decision.
+    ApprovalRequested {
+        /// Run id.
+        run: RunId,
+        /// What is to be approved.
+        gate: crate::config::ApprovalGate,
+    },
+    /// A human approved or rejected.
+    ApprovalResolved {
+        /// Run id.
+        run: RunId,
+        /// What was decided on.
+        gate: crate::config::ApprovalGate,
+        /// Whether it was approved.
+        approved: bool,
+        /// The approver's note or the reason of the rejection.
+        comment: String,
+    },
     /// A retry is about to happen.
     Retrying {
         /// Run id.
@@ -217,6 +235,8 @@ impl Event {
         "subtask_integrated",
         "budget_updated",
         "artefact_written",
+        "approval_requested",
+        "approval_resolved",
         "retrying",
         "paused",
         "run_finished",
@@ -241,6 +261,8 @@ impl Event {
             Event::SubtaskIntegrated { .. } => "subtask_integrated",
             Event::BudgetUpdated { .. } => "budget_updated",
             Event::ArtefactWritten { .. } => "artefact_written",
+            Event::ApprovalRequested { .. } => "approval_requested",
+            Event::ApprovalResolved { .. } => "approval_resolved",
             Event::Retrying { .. } => "retrying",
             Event::Paused { .. } => "paused",
             Event::RunFinished { .. } => "run_finished",
@@ -266,6 +288,8 @@ impl Event {
             | Event::SubtaskIntegrated { run, .. }
             | Event::BudgetUpdated { run, .. }
             | Event::ArtefactWritten { run, .. }
+            | Event::ApprovalRequested { run, .. }
+            | Event::ApprovalResolved { run, .. }
             | Event::Retrying { run, .. }
             | Event::Paused { run, .. }
             | Event::RunFinished { run, .. } => Some(*run),

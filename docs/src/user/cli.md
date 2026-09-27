@@ -195,6 +195,17 @@ with `run_id`, `task_id`, `final_status`, `run_status`, `success`, `exit_code`,
 vibe run 1 --json | jq -r 'select(.event.type == "phase_finished") | "\(.event.phase): \(.event.summary)"'
 ```
 
+## `vibe approve` and `vibe reject`
+
+```sh
+vibe approve <REF> [--comment TEXT]
+vibe reject <REF> --reason TEXT
+```
+
+Answer the approval a paused run is waiting for (see
+[Human approvals](configuration.md#human-approvals)). The run is not resumed: continue it
+with `vibe run <REF> --resume`. Both fail when the run is not waiting for an approval.
+
 ## `vibe events`
 
 ```sh

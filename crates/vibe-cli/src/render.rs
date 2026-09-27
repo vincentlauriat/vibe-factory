@@ -229,6 +229,23 @@ impl Renderer {
                 }
             }
             Event::BudgetUpdated { .. } => return None,
+            Event::ApprovalRequested { gate, .. } => style::warn()
+                .apply_to(format!("⏸ approval needed: the {gate}"))
+                .to_string(),
+            Event::ApprovalResolved {
+                gate,
+                approved,
+                comment,
+                ..
+            } => {
+                let verb = if *approved { "approved" } else { "rejected" };
+                let note = if comment.trim().is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", truncate(comment.trim(), 100))
+                };
+                format!("  ✓ {gate} {verb}{note}")
+            }
             Event::ArtefactWritten { artefact, .. } => {
                 if self.verbose == 0 {
                     return None;

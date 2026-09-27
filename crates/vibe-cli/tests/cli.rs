@@ -1213,3 +1213,56 @@ fn events_replays_numbered_events_and_follows_to_the_end() {
         .success()
         .stdout(predicate::str::contains("run finished"));
 }
+
+#[test]
+fn approval_gate_pauses_and_approve_lets_the_run_continue() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    p.vibe()
+        .args(["config", "set", "pipeline.approvals", "[\"plan\"]"])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--workspace", "in_place"])
+        .assert()
+        .code(2)
+        .stdout(predicate::str::contains("approval needed: the plan"));
+    let state: Value =
+        serde_json::from_slice(&std::fs::read(p.task_dir(1).join("run.json")).unwrap()).unwrap();
+    assert_eq!(state["pending_approval"], "plan");
+
+    p.vibe().args(["reject", "1"]).assert().failure();
+    p.vibe()
+        .args(["approve", "1", "--comment", "fine"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("plan of task 1 approved"));
+    p.vibe().args(["approve", "1"]).assert().code(1);
+    p.vibe()
+        .args([
+            "run",
+            "1",
+            "--resume",
+            "--provider",
+            "mock",
+            "--workspace",
+            "in_place",
+        ])
+        .assert()
+        .success();
+    assert_eq!(p.task_json(1)["status"], "ready");
+
+    let out = p.vibe().args(["--json", "events", "1"]).output().unwrap();
+    let lines: Vec<Value> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let seqs: Vec<u64> = lines.iter().map(|l| l["seq"].as_u64().unwrap()).collect();
+    assert_eq!(seqs, (1..=seqs.len() as u64).collect::<Vec<_>>());
+    assert!(
+        lines
+            .iter()
+            .any(|l| l["event"]["type"] == "approval_resolved" && l["event"]["comment"] == "fine")
+    );
+}

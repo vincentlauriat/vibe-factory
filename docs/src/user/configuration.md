@@ -104,6 +104,7 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in [Providers and models](pro
 | `max_validation_fix_attempts` | integer | `2` | automatic validation fixes over the whole run, including resumes; `0` disables them |
 | `merge_strategy` | `"manual"` or `"assisted"` | `"manual"` | `manual` reports conflicts for a human; `assisted` lets a model resolve conflict markers first |
 | `isolate_subtasks` | bool | `true` | with `git_worktree`, one worktree per subtask attempt, integrated one at a time; see [Workspaces](workspaces.md#one-worktree-per-subtask-attempt) |
+| `approvals` | list of `"spec"`, `"plan"`, `"merge"` | `[]` | where the run waits for a human decision; see [Human approvals](#human-approvals) |
 | `max_tokens` | integer | none | input plus output tokens of the whole run, including resumes; the run pauses when reached |
 | `max_duration_secs` | integer | none | active time of the whole run in seconds, including resumes; the run pauses when reached |
 
@@ -191,6 +192,34 @@ invocation with `vibe run <REF> --resume --max-tokens N --max-duration 2h`, to c
 
 The token limit counts the agents' model calls. The calls made by `merge_strategy =
 "assisted"` to resolve conflict markers are not counted.
+
+## Human approvals
+
+```toml
+[pipeline]
+approvals = ["plan", "merge"]
+```
+
+Each listed gate pauses the run (exit code 2, task `review`) until a human decides:
+
+| Gate | The run stops | A rejection goes back to |
+|------|---------------|--------------------------|
+| `spec` | after the specification, before planning (only when the profile writes a spec) | the spec phase |
+| `plan` | after the plan, before building | the planner |
+| `merge` | after QA approval, before the merge phase (validation, integration or marking ready) | the fixer, through a QA report titled "Human review", then QA again |
+
+```sh
+vibe task show 3                       # read the spec, plan or QA report
+vibe approve 3 --comment "ok"          # or:
+vibe reject 3 --reason "Split the migration into its own subtask"
+vibe run 3 --resume
+```
+
+The decision is stored in `run.json` (`approvals`, `pending_approval`, `rejection`) and
+logged as an `approval_resolved` event. A rejection needs a reason: it is handed to the
+agents that redo the work. Regenerating an artefact revokes its approval, so a new plan is
+approved again, and a merge is approved again after any new build or fix. Resuming without
+a decision pauses again at the same gate.
 
 ## `[workspace.container]`
 

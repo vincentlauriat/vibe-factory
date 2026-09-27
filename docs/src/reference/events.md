@@ -48,6 +48,8 @@ types and fields they do not know. Removing or changing a field increments `sche
 | `validation_finished` | `run`, `command`, `integration`, `passed`, `exit_code` | a required validation command finished |
 | `budget_updated` | `run`, `tokens`, `token_limit`, `active_ms`, `duration_limit_ms` | after each phase and each subtask attempt |
 | `artefact_written` | `run`, `artefact` (`{"kind":"spec"}`, `{"kind":"plan"}`, `{"kind":"qa_report","round":n}`) | the spec, the plan or a QA report was written |
+| `approval_requested` | `run`, `gate` (`spec`, `plan`, `merge`) | the run pauses until a human decides (`pipeline.approvals`) |
+| `approval_resolved` | `run`, `gate`, `approved`, `comment` | `vibe approve` or `vibe reject` answered; logged by that command |
 | `retrying` | `run`, `what`, `attempt`, `delay_ms` | before a retry |
 | `paused` | `run`, `reason` | the run stops and waits for a human |
 | `run_finished` | `run`, `success`, `status` | the run ends, always last, also after `paused` |

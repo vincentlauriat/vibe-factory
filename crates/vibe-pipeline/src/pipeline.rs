@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{OnceCell, watch};
 use vibe_core::{
-    Complexity, Envelope, Error, ErrorKind, Event, EventBus, EventSink, HookDecision, Phase,
-    Registry, Result, RunBudget, RunId, SubtaskStatus, Task, TaskId, TaskStatus, ToolRegistry,
-    Usage, VibeConfig, WorkspaceProvider,
+    ApprovalGate, Complexity, Envelope, Error, ErrorKind, Event, EventBus, EventSink, HookDecision,
+    Phase, QaIssue, QaReport, QaVerdict, Registry, Result, RunBudget, RunId, Severity,
+    SubtaskStatus, Task, TaskId, TaskStatus, ToolRegistry, Usage, VibeConfig, WorkspaceProvider,
 };
 
 use crate::complexity::{Profile, heuristic_complexity, profile_for};
@@ -156,6 +156,68 @@ fn sync_accounting(ctx: &mut RunContext, base: (Usage, u64), started: Instant) {
     ctx.state.usage = base.0.combined(ctx.usage);
     let now = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     ctx.state.active_ms = base.1.saturating_add(now);
+}
+
+/// Whether the fix phase must run although the profile skips it.
+fn fix_forced(phase: Phase, state: &RunState) -> bool {
+    phase == Phase::Fix && (state.pending_validation_fix.is_some() || state.pending_human_fix)
+}
+
+/// The configured gate `phase` must pass before it runs, if any.
+fn gate_before(phase: Phase, ctx: &RunContext) -> Option<ApprovalGate> {
+    let gate = match phase {
+        // Only when there is a spec to approve (quick profiles have none).
+        Phase::Plan if ctx.spec.is_some() => ApprovalGate::Spec,
+        Phase::Build => ApprovalGate::Plan,
+        Phase::Merge => ApprovalGate::Merge,
+        _ => return None,
+    };
+    ctx.config
+        .pipeline
+        .approvals
+        .contains(&gate)
+        .then_some(gate)
+}
+
+/// A phase that regenerates an approved artefact revokes its approval.
+fn revoke_approvals(state: &mut RunState, phase: Phase) {
+    let revoked: &[ApprovalGate] = match phase {
+        Phase::Spec => &[ApprovalGate::Spec, ApprovalGate::Plan],
+        Phase::Plan => &[ApprovalGate::Plan],
+        Phase::Build | Phase::Fix => &[ApprovalGate::Merge],
+        _ => &[],
+    };
+    state.approved_gates.retain(|g| !revoked.contains(g));
+    if phase == Phase::Fix {
+        state.pending_human_fix = false;
+    }
+}
+
+/// Turn a merge rejection into a QA report for the fixer.
+async fn human_review_report(ctx: &mut RunContext, reason: &str) -> Result<()> {
+    ctx.state.qa_round += 1;
+    let report = QaReport {
+        task_id: ctx.task.id,
+        round: ctx.state.qa_round,
+        verdict: QaVerdict::ChangesRequested,
+        summary: "Rejected by a human reviewer before merge.".into(),
+        issues: vec![QaIssue {
+            severity: Severity::High,
+            title: "Human review".into(),
+            detail: reason.to_string(),
+            requirement: None,
+            file: None,
+            line: None,
+            suggested_fix: None,
+        }],
+    };
+    ctx.store.save_qa_report(&report).await?;
+    ctx.artefact_written(vibe_core::Artefact::QaReport {
+        round: report.round,
+    })
+    .await;
+    ctx.state.pending_human_fix = true;
+    ctx.store.save_run_state(&ctx.state).await
 }
 
 /// Pause the run because a budget limit was reached: the run stays
@@ -417,8 +479,7 @@ impl Pipeline {
             let Some(phase) = current else {
                 break (ctx.task.status, RunStatus::Finished);
             };
-            let pending_fix = phase == Phase::Fix && ctx.state.pending_validation_fix.is_some();
-            if !(ctx.profile.has(phase) || pending_fix) {
+            if !(ctx.profile.has(phase) || fix_forced(phase, &ctx.state)) {
                 current = ctx.profile.next_after(phase);
                 continue;
             }
@@ -431,6 +492,54 @@ impl Pipeline {
                 ctx.state.current_phase = phase;
                 ctx.state.last_error = Some("cancelled".into());
                 break (TaskStatus::Cancelled, RunStatus::Cancelled);
+            }
+            if let Some(gate) = gate_before(phase, &ctx) {
+                if ctx.state.rejection.as_ref().is_some_and(|r| r.gate == gate) {
+                    // Send the work back to the phase that produced it.
+                    let back = match gate {
+                        ApprovalGate::Spec => Phase::Spec,
+                        ApprovalGate::Plan => Phase::Plan,
+                        ApprovalGate::Merge => {
+                            let reason = ctx
+                                .state
+                                .rejection
+                                .take()
+                                .map(|r| r.comment)
+                                .unwrap_or_default();
+                            human_review_report(&mut ctx, &reason).await?;
+                            Phase::Fix
+                        }
+                    };
+                    let _ = ctx
+                        .note(&format!(
+                            "The {gate} was rejected: back to the {back} phase."
+                        ))
+                        .await;
+                    current = Some(back);
+                    continue;
+                }
+                if !ctx.state.approved_gates.contains(&gate) {
+                    ctx.state.current_phase = phase;
+                    if ctx.state.pending_approval != Some(gate) {
+                        ctx.state.pending_approval = Some(gate);
+                        events
+                            .publish(Event::ApprovalRequested { run: run_id, gate })
+                            .await;
+                    }
+                    let reason = format!(
+                        "waiting for approval of the {gate}: `vibe approve` to continue, \
+                         `vibe reject --reason \"…\"` to send it back"
+                    );
+                    events
+                        .publish(Event::Paused {
+                            run: run_id,
+                            reason: reason.clone(),
+                        })
+                        .await;
+                    let _ = ctx.note(&format!("Run paused: {reason}.")).await;
+                    ctx.state.last_error = Some(reason);
+                    break (TaskStatus::Review, RunStatus::Paused);
+                }
             }
             ctx.phase = phase;
             ctx.state.current_phase = phase;
@@ -478,6 +587,7 @@ impl Pipeline {
                         .await;
                     ctx.registry.after_phase(phase, &ctx.task, r.success).await;
                     ctx.state.completed_phases.push(phase);
+                    revoke_approvals(&mut ctx.state, phase);
                     let next = r.next.clone();
                     phases_run.push(r);
                     match next {
@@ -584,7 +694,7 @@ impl Pipeline {
                     let mut next = next;
                     while let Some(p) = next
                         && !ctx.profile.has(p)
-                        && !(p == Phase::Fix && ctx.state.pending_validation_fix.is_some())
+                        && !fix_forced(p, &ctx.state)
                     {
                         next = ctx.profile.next_after(p);
                     }

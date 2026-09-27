@@ -1511,3 +1511,150 @@ async fn logged_events_are_numbered_across_resumes() {
         2
     );
 }
+
+async fn approve(h: &Harness, task: vibe_core::TaskId, approved: bool, comment: &str) {
+    let mut state = h.store.load_run_state(task).await.unwrap().unwrap();
+    state.resolve_approval(approved, comment).unwrap();
+    h.store.save_run_state(&state).await.unwrap();
+}
+
+fn one_subtask_plan() -> vibe_core::CompletionResponse {
+    plan_json(json!([{"name": "Only", "subtasks": [
+        {"title": "Fix the typo", "description": "edit README"}
+    ]}]))
+}
+
+#[tokio::test]
+async fn plan_gate_pauses_until_approved() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.approvals = vec![vibe_core::ApprovalGate::Plan];
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(PLANNER, None, vec![one_subtask_plan()]);
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let pipeline = h.pipeline();
+
+    let paused = pipeline.run(task.id, RunOptions::default()).await.unwrap();
+    assert_eq!(paused.final_status, TaskStatus::Review);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert_eq!(state.current_phase, Phase::Build);
+    assert_eq!(state.pending_approval, Some(vibe_core::ApprovalGate::Plan));
+    assert!(h.router.calls_for("coder").is_empty());
+    assert!(h.collector.events().iter().any(|e| matches!(
+        e,
+        Event::ApprovalRequested {
+            gate: vibe_core::ApprovalGate::Plan,
+            ..
+        }
+    )));
+
+    // Resuming without a decision pauses again, without a new request.
+    pipeline.resume(task.id).await.unwrap();
+    let requests = h
+        .collector
+        .events()
+        .iter()
+        .filter(|e| matches!(e, Event::ApprovalRequested { .. }))
+        .count();
+    assert_eq!(requests, 1);
+
+    approve(&h, task.id, true, "looks right").await;
+    let done = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(done.final_status, TaskStatus::Ready, "{done:#?}");
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.approvals.len(), 1);
+    assert!(state.approvals[0].approved);
+    assert_eq!(state.pending_approval, None);
+}
+
+#[tokio::test]
+async fn rejected_plan_is_redone_with_the_reason() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.approvals = vec![vibe_core::ApprovalGate::Plan];
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router
+        .route(PLANNER, None, vec![one_subtask_plan(), one_subtask_plan()]);
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let pipeline = h.pipeline();
+    pipeline.run(task.id, RunOptions::default()).await.unwrap();
+
+    approve(&h, task.id, false, "Also fix the same typo in docs/").await;
+    let again = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(
+        again.final_status,
+        TaskStatus::Review,
+        "waits for the new plan"
+    );
+    let planners = h.router.calls_for("planner");
+    assert_eq!(planners.len(), 2);
+    let second = format!("{}{}", planners[1].system, planners[1].user);
+    assert!(
+        second.contains("Also fix the same typo in docs/"),
+        "{second}"
+    );
+    assert!(!format!("{}{}", planners[0].system, planners[0].user).contains("docs/"));
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.rejection, None, "the planner consumed it");
+    assert_eq!(state.pending_approval, Some(vibe_core::ApprovalGate::Plan));
+
+    approve(&h, task.id, true, "").await;
+    let done = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(done.final_status, TaskStatus::Ready);
+}
+
+#[tokio::test]
+async fn rejected_merge_goes_to_the_fixer_then_asks_again() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.approvals = vec![vibe_core::ApprovalGate::Merge];
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(PLANNER, None, vec![one_subtask_plan()]);
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(
+        REVIEWER,
+        None,
+        vec![qa("approved", &[]), qa("approved", &[])],
+    );
+    h.router.route(FIXER, None, vec![fixer_done()]);
+    let pipeline = h.pipeline();
+    let options = || RunOptions {
+        complexity_override: Some(Complexity::Trivial),
+        ..RunOptions::default()
+    };
+    let paused = pipeline.run(task.id, options()).await.unwrap();
+    assert_eq!(paused.final_status, TaskStatus::Review);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.current_phase, Phase::Merge);
+
+    approve(&h, task.id, false, "The README title must stay in English").await;
+    let again = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(
+        phases(&again),
+        vec![Phase::Fix, Phase::Qa],
+        "the trivial profile still runs the fixer for a human rejection"
+    );
+    let fixer = &h.router.calls_for("fixer")[0];
+    assert!(format!("{}{}", fixer.system, fixer.user).contains("must stay in English"));
+    let reports = h.store.load_qa_reports(task.id).await.unwrap();
+    assert_eq!(reports.len(), 3, "review, human review, review");
+    assert_eq!(reports[1].issues[0].title, "Human review");
+
+    approve(&h, task.id, true, "ok").await;
+    let done = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(done.final_status, TaskStatus::Ready);
+}
+
+#[test]
+fn approvals_need_a_pending_gate_and_rejections_a_reason() {
+    let mut state = vibe_pipeline::RunState::new(
+        vibe_core::RunId::new(),
+        vibe_core::TaskId::new(),
+        Phase::Build,
+    );
+    assert!(state.resolve_approval(true, "").is_err());
+    state.pending_approval = Some(vibe_core::ApprovalGate::Plan);
+    assert!(state.resolve_approval(false, "  ").is_err());
+    assert!(state.resolve_approval(false, "why").is_ok());
+    assert_eq!(state.rejection.as_ref().unwrap().comment, "why");
+}

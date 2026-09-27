@@ -120,22 +120,26 @@ fn spec_path(ctx: &RunContext) -> String {
 pub async fn run_spec(ctx: &mut RunContext) -> Result<PhaseResult> {
     let memory = ctx.memory_text().await?;
     let mut steps = Vec::new();
+    let human = ctx
+        .take_rejection(vibe_core::ApprovalGate::Spec)
+        .unwrap_or_default();
 
     // 1. Gatherer.
     let spec_g = ctx.agent_spec(&AgentRole::SpecGatherer)?;
     let runner = ctx
         .runner(&spec_g)?
         .var("memory", memory.clone())
-        .var("prior_context", "");
+        .var("prior_context", human.clone());
     let mut data = KickoffData::new(&ctx.task);
     data.memory = &memory;
+    data.prior_context = &human;
     let msg = kickoff_for(&spec_g.role, &data, &spec_g.system_prompt);
     let (gathered, outcome) =
         vibe_agents::run_structured::<SpecDraft>(&runner, &spec_g, msg).await?;
     ctx.record(&outcome);
     steps.push("gatherer");
     let mut prior = format!(
-        "### Gathered requirements (JSON)\n\n{}\n",
+        "{human}### Gathered requirements (JSON)\n\n{}\n",
         pretty(&gathered)
     );
     let mut draft = gathered;

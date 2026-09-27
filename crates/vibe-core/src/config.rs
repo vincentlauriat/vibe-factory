@@ -125,6 +125,10 @@ pub struct PipelineConfig {
     /// workspace.
     #[serde(default = "default_true")]
     pub isolate_subtasks: bool,
+    /// Points where the run waits for a human decision (`vibe approve` or
+    /// `vibe reject`): after the spec, after the plan, before merging.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub approvals: Vec<ApprovalGate>,
     /// Maximum input plus output tokens of a run, counted across resumes.
     /// When reached the run pauses; raise the limit and resume to continue.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -143,6 +147,37 @@ impl PipelineConfig {
             max_tokens: self.max_tokens,
             max_duration: self.max_duration_secs.map(std::time::Duration::from_secs),
         }
+    }
+}
+
+/// A point where a run waits for a human decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalGate {
+    /// The specification, before planning.
+    Spec,
+    /// The plan, before building.
+    Plan,
+    /// The reviewed result, before the merge phase (validation, integration
+    /// or marking the task ready).
+    Merge,
+}
+
+impl ApprovalGate {
+    /// Lower-case name, as in the configuration.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Spec => "spec",
+            Self::Plan => "plan",
+            Self::Merge => "merge",
+        }
+    }
+}
+
+impl std::fmt::Display for ApprovalGate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -196,6 +231,7 @@ impl Default for PipelineConfig {
             max_validation_fix_attempts: default_validation_fix_attempts(),
             merge_strategy: MergeStrategy::Manual,
             isolate_subtasks: true,
+            approvals: Vec::new(),
             max_tokens: None,
             max_duration_secs: None,
         }
