@@ -250,7 +250,8 @@ async fn signed_thinking_is_replayed_on_the_next_tool_turn() {
     // Second turn: the assistant message must start with the signed block.
     Mock::given(method("POST"))
         .and(body_partial_json(json!({
-            "thinking": {"type": "enabled", "budget_tokens": 4096},
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": "medium"},
             "messages": [
                 {"role": "user"},
                 {"role": "assistant", "content": [signed.clone(), {"type": "tool_use", "id": "toolu_1"}]},

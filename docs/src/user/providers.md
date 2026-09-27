@@ -57,6 +57,7 @@ Every `[providers.<name>]` table accepts:
 | Key | Kinds | Type | Effect |
 |-----|-------|------|--------|
 | `headers` | anthropic, openai, ollama | table of strings | extra HTTP headers sent with every request |
+| `thinking` | anthropic | `"adaptive"` or `"budget"` | force the thinking form instead of choosing it from the model id (see [Thinking levels](#thinking-levels)) |
 | `auth` | anthropic | `"api_key"` (default) or `"bearer"` | `bearer` sends the key as `Authorization: Bearer` with the OAuth beta header instead of `x-api-key` |
 | `require_api_key` | openai, ollama | bool | default `false` when `base_url` is set, `true` on the official OpenAI endpoint; with `false`, no `Authorization` header is sent when the key is missing |
 | `max_tokens_param` | openai, ollama | string | name of the output-budget field; default `max_completion_tokens` on the official endpoint, `max_tokens` elsewhere |
@@ -131,17 +132,25 @@ also pin a model regardless of the phase; see [Customising agents](agents.md).
 
 ## Thinking levels
 
-| Level | Budget | Anthropic | OpenAI-compatible |
-|-------|--------|-----------|-------------------|
-| `off` | none | no extended thinking | no `reasoning_effort` |
-| `low` | 1 024 tokens | extended thinking, 1 024 | `reasoning_effort = "low"` |
-| `medium` | 4 096 | 4 096 | `"medium"` |
-| `high` | 16 384 | 16 384 | `"high"` |
-| `max` | 32 768 | 32 768 | `"high"` |
+| Level | Budget | Anthropic, current models | Anthropic, older models | OpenAI-compatible |
+|-------|--------|---------------------------|-------------------------|-------------------|
+| `off` | none | no `thinking` | no `thinking` | no `reasoning_effort` |
+| `low` | 1 024 tokens | adaptive, effort `low` | `budget_tokens: 1024` | `reasoning_effort = "low"` |
+| `medium` | 4 096 | adaptive, effort `medium` | 4 096 | `"medium"` |
+| `high` | 16 384 | adaptive, effort `high` | 16 384 | `"high"` |
+| `max` | 32 768 | adaptive, effort `max` | 32 768 | `"high"` |
 
 On OpenAI-compatible servers the level is only sent when `reasoning` is enabled (see
-above); otherwise it is ignored. With Anthropic, enabling thinking removes the temperature
-from the request, as the API requires.
+above); otherwise it is ignored.
+
+With Anthropic, current models (Claude 4.6 and later: Sonnet 5, Opus 5 and 5.5, Fable, Opus
+4.6 to 4.8, Sonnet 4.6) take `thinking: {type: "adaptive"}` with `output_config.effort` and
+reject `budget_tokens` and sampling parameters, so vibe never sends a temperature to them.
+Older models (Haiku 4.5, Claude 4.5 and before) and unknown model ids keep
+`budget_tokens`, and thinking removes the temperature as the API requires. The form is
+chosen from the model id; set `extra.thinking = "adaptive"` or `"budget"` on the provider to
+force it, for example behind a gateway that renames models. Model ids are sent as is, so the
+choice follows `claude-...` names.
 
 ## Recipes
 

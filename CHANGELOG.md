@@ -33,6 +33,12 @@ All notable changes to this project are documented here. The format follows
 - `ANTHROPIC_WORKSPACE_ID`: sent as the `anthropic-workspace-id` header, required by API keys
   that are not scoped to a workspace.
 
+### Fixed
+- Anthropic: current models (Claude 4.6 and later, including the default `claude-sonnet-5`)
+  get adaptive thinking with an effort level instead of `budget_tokens`, and no temperature,
+  both of which they reject with HTTP 400. Older models keep the budget form;
+  `extra.thinking` forces either one.
+
 ### Changed
 - Assisted conflict resolution counts against the run budget, and also resolves conflicts
   between subtasks before an attempt is failed.
