@@ -223,6 +223,11 @@ pub fn human_tokens(n: u64) -> String {
     }
 }
 
+/// First 8 characters of a commit id, for display.
+pub fn short_sha(commit: &str) -> &str {
+    commit.get(..8).unwrap_or(commit)
+}
+
 /// Truncate to at most `max` characters, adding `…` when cut. Newlines are
 /// replaced by spaces.
 pub fn truncate(text: &str, max: usize) -> String {

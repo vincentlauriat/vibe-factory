@@ -15,6 +15,12 @@ pub const VIBE_DIR: &str = ".vibe";
 /// Name of the configuration file inside [`VIBE_DIR`].
 pub const CONFIG_FILE: &str = "config.toml";
 
+/// Directory inside [`VIBE_DIR`] holding saved tool outputs (ignored by git).
+pub const TOOL_OUTPUT_DIR: &str = "tool-output";
+
+/// Default of [`PipelineConfig::trace_max_chars`].
+pub const DEFAULT_TRACE_MAX_CHARS: usize = 100_000;
+
 /// Configuration of one model provider.
 #[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub struct ProviderConfig {
@@ -141,6 +147,15 @@ pub struct PipelineConfig {
     /// (time spent paused is not counted). When reached the run pauses.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_duration_secs: Option<u64>,
+    /// Keep the complete output of every tool call under
+    /// `.vibe/tool-output/<task>/<run>/`, referenced by the
+    /// `tool_returned` events.
+    #[serde(default = "default_true")]
+    pub trace_outputs: bool,
+    /// Maximum number of characters kept per traced tool output; longer
+    /// outputs are cut and end with a marker line.
+    #[serde(default = "default_trace_max_chars")]
+    pub trace_max_chars: usize,
 }
 
 impl PipelineConfig {
@@ -202,6 +217,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_trace_max_chars() -> usize {
+    DEFAULT_TRACE_MAX_CHARS
+}
+
 fn default_validation_fix_attempts() -> u32 {
     2
 }
@@ -239,6 +258,8 @@ impl Default for PipelineConfig {
             approvals: Vec::new(),
             max_tokens: None,
             max_duration_secs: None,
+            trace_outputs: true,
+            trace_max_chars: DEFAULT_TRACE_MAX_CHARS,
         }
     }
 }

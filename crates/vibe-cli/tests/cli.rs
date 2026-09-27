@@ -504,6 +504,8 @@ fn dry_run_with_mock_then_resume_then_discard() {
     assert!(exists(&dir.join("qa_report_1.json")));
     let branches = p.git(&["branch", "--list", "vibe/*"]);
     assert!(branches.contains("vibe/add-a-json-flag"), "{branches}");
+    let recorded = p.task_json(1)["branch"].as_str().unwrap().to_string();
+    assert!(branches.contains(&recorded), "{recorded} in {branches}");
 
     let status = p.json(&["status"]);
     assert_eq!(status["by_status"]["ready"], 1);
@@ -527,11 +529,21 @@ fn dry_run_with_mock_then_resume_then_discard() {
         .stderr(predicate::str::contains("--yes"));
     assert!(exists(&dir));
 
+    // Traced tool outputs are filed under the task directory's name.
+    let trace = p
+        .root()
+        .join(".vibe")
+        .join("tool-output")
+        .join(dir.file_name().unwrap());
+    std::fs::create_dir_all(trace.join("run")).unwrap();
+    std::fs::write(trace.join("run").join("c.txt"), "output").unwrap();
+
     p.vibe()
         .args(["task", "discard", "1", "--yes"])
         .assert()
         .success();
     assert!(!exists(&dir));
+    assert!(!exists(&trace), "tool outputs removed");
     assert!(p.git(&["branch", "--list", "vibe/*"]).trim().is_empty());
     assert!(!exists(&worktree), "worktree removed");
     assert!(

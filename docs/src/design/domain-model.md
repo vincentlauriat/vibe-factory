@@ -43,6 +43,7 @@ A `Task` is the unit of work handed to the pipeline.
 | `labels` | `Vec<String>` | `default` |
 | `source` | `TaskSource` | `default` (`manual`) |
 | `created_at`, `updated_at` | `DateTime<Utc>` | RFC 3339 strings |
+| `branch` | `Option<String>` | `default`, omitted when `None`; the workspace branch recorded by the last run |
 
 `Task::new` creates a backlog task; `set_status` and `touch` bump `updated_at`; `slug()`
 applies `slugify` (lowercase ASCII alphanumerics separated by `-`, at most 48 characters,

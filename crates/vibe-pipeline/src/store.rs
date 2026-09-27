@@ -163,6 +163,14 @@ pub trait PipelineStore: TaskStore {
         let _ = id;
         Ok(Vec::new())
     }
+
+    /// Name of the task's directory (`NNN-slug`), which also names its
+    /// directory of tool outputs under `.vibe/tool-output/`. Default: none
+    /// (the task id is used instead).
+    async fn task_dir_name(&self, id: TaskId) -> Result<Option<String>> {
+        let _ = id;
+        Ok(None)
+    }
 }
 
 /// Shared handle to a pipeline store.
@@ -591,6 +599,10 @@ impl PipelineStore for FileTaskStore {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
             Err(e) => Err(e.into()),
         }
+    }
+
+    async fn task_dir_name(&self, id: TaskId) -> Result<Option<String>> {
+        Ok(self.entry(id).await?.map(|e| e.dir))
     }
 
     async fn load_events(&self, id: TaskId) -> Result<Vec<Envelope>> {

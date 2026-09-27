@@ -440,14 +440,30 @@ pub struct WorktreeLocation {
     pub path: PathBuf,
 }
 
-/// Where the git worktree of `task` lives (whether or not it exists).
+/// Where the git worktree of `task` lives (whether or not it exists): the
+/// branch recorded by its last run, else the one the provider would pick
+/// now (which moves when the title changes).
 pub fn worktree_location(root: &Path, task: &Task) -> WorktreeLocation {
     let provider = GitWorktreeProvider::new();
+    let (branch, name) = match &task.branch {
+        Some(branch) => {
+            // Worktree directories are named after the branch without its
+            // prefix; any other branch names its directory as is (with `/`
+            // flattened), never after the current title.
+            let name = branch
+                .strip_prefix(vibe_workspace::worktree::BRANCH_PREFIX)
+                .unwrap_or(branch)
+                .replace(['/', '\\'], "-");
+            (branch.clone(), name)
+        }
+        None => (
+            GitWorktreeProvider::task_branch(task),
+            GitWorktreeProvider::task_name(task),
+        ),
+    };
     WorktreeLocation {
-        branch: GitWorktreeProvider::task_branch(task),
-        path: provider
-            .worktrees_root(root)
-            .join(GitWorktreeProvider::task_name(task)),
+        branch,
+        path: provider.worktrees_root(root).join(name),
     }
 }
 
@@ -501,6 +517,19 @@ mod tests {
         assert!(
             loc.path
                 .starts_with(Path::new("/p").join(".vibe").join("worktrees"))
+        );
+    }
+
+    #[test]
+    fn worktree_location_prefers_the_recorded_branch() {
+        let mut t = Task::new("Add login", "");
+        t.branch = Some("vibe/add-login-1234abcd".into());
+        t.title = "Renamed since".into();
+        let loc = worktree_location(Path::new("/p"), &t);
+        assert_eq!(loc.branch, "vibe/add-login-1234abcd");
+        assert_eq!(
+            loc.path,
+            Path::new("/p/.vibe/worktrees").join("add-login-1234abcd")
         );
     }
 }

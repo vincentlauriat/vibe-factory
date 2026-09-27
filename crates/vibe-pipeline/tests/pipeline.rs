@@ -97,6 +97,348 @@ async fn trivial_task_skips_spec() {
             ..
         }
     )));
+    // The run totals survive in the log, not only in `run.json`.
+    let Some(Event::RunFinished {
+        usage,
+        active_ms,
+        started_at,
+        ..
+    }) = events.last()
+    else {
+        panic!("the run ends with run_finished");
+    };
+    assert_eq!(*usage, state.usage);
+    assert!(usage.total() > 0);
+    assert_eq!(*active_ms, state.active_ms);
+    assert_eq!(*started_at, state.started_at);
+    // The subtask commit is announced with its subtask.
+    let plan = h.store.load_plan(task.id).await.unwrap().unwrap();
+    let subtask = plan.subtasks().next().unwrap().id;
+    let committed: Vec<&Event> = events
+        .iter()
+        .filter(|e| matches!(e, Event::Committed { .. }))
+        .collect();
+    assert_eq!(
+        committed,
+        vec![&Event::Committed {
+            run: report.run_id,
+            subtask: Some(subtask),
+            commit: "abc123".into(),
+            message: "vibe: complete subtask 1 - Fix the typo".into(),
+            // The fake committer does not use git.
+            files: Vec::new(),
+        }]
+    );
+    // Sessions name the model the resolver picked.
+    let default_model = vibe_core::VibeConfig::default().default_model;
+    assert!(events.iter().all(|e| match e {
+        Event::AgentStarted { model, .. } => default_model.ends_with(&format!("/{model}")),
+        _ => true,
+    }));
+    // In place: no branch to record.
+    assert_eq!(saved.branch, None);
+}
+
+/// Workspace provider in place whose merge "succeeds" on a named branch.
+struct MergingOnBranch;
+
+#[async_trait::async_trait]
+impl vibe_core::WorkspaceProvider for MergingOnBranch {
+    fn name(&self) -> &str {
+        "merging"
+    }
+    async fn open(
+        &self,
+        root: &std::path::Path,
+        t: &vibe_core::Task,
+    ) -> vibe_core::Result<vibe_core::Workspace> {
+        let mut ws = vibe_core::InPlaceWorkspace.open(root, t).await?;
+        ws.branch = Some("vibe/fix-it-1234".into());
+        ws.base_branch = Some("main".into());
+        Ok(ws)
+    }
+    async fn merge(&self, _w: &vibe_core::Workspace) -> vibe_core::Result<vibe_core::MergeOutcome> {
+        Ok(vibe_core::MergeOutcome::Merged {
+            commit: Some("feedbeef".into()),
+        })
+    }
+    async fn discard(&self, _w: &vibe_core::Workspace) -> vibe_core::Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn auto_merge_publishes_merged_and_records_the_branch() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.auto_merge = true;
+    let task = h.task("Fix typo in docs", "").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "W", "subtasks": [{"title": "A", "description": "a"}]}
+        ]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("a")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let store: Arc<dyn PipelineStore> = h.store.clone();
+    let pipeline = vibe_pipeline::Pipeline::new(vibe_pipeline::PipelineDeps {
+        registry: Arc::new(h.registry.clone()),
+        providers: Arc::new(Resolver(h.router.clone())),
+        store,
+        workspace: Arc::new(MergingOnBranch),
+        tools: vibe_core::ToolRegistry::new(),
+        events: h.events.clone(),
+        config: h.config.clone(),
+        project_root: h.root(),
+        committer: Some(h.committer()),
+        resetter: None,
+        subtask_workspaces: None,
+    });
+    let report = pipeline.run(task.id, RunOptions::default()).await.unwrap();
+    assert_eq!(report.final_status, TaskStatus::Done);
+    let merged: Vec<Event> = h
+        .collector
+        .events()
+        .into_iter()
+        .filter(|e| matches!(e, Event::Merged { .. }))
+        .collect();
+    assert_eq!(
+        merged,
+        vec![Event::Merged {
+            run: report.run_id,
+            commit: "feedbeef".into(),
+            branch: "vibe/fix-it-1234".into(),
+            base: "main".into(),
+        }]
+    );
+    let saved = h.store.load_task(task.id).await.unwrap();
+    assert_eq!(saved.branch.as_deref(), Some("vibe/fix-it-1234"));
+}
+
+#[tokio::test]
+async fn auto_merge_with_nothing_to_merge_publishes_no_merged_event() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.auto_merge = true;
+    let task = h.task("Fix typo in docs", "").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "W", "subtasks": [{"title": "A", "description": "a"}]}
+        ]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("a")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    // In place merges nothing.
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Done);
+    assert!(
+        !h.collector
+            .events()
+            .iter()
+            .any(|e| matches!(e, Event::Merged { .. }))
+    );
+}
+
+/// Workspace provider whose `open` always fails.
+struct Unopenable;
+
+#[async_trait::async_trait]
+impl vibe_core::WorkspaceProvider for Unopenable {
+    fn name(&self) -> &str {
+        "unopenable"
+    }
+    async fn open(
+        &self,
+        _root: &std::path::Path,
+        _t: &vibe_core::Task,
+    ) -> vibe_core::Result<vibe_core::Workspace> {
+        Err(vibe_core::Error::workspace("cannot open"))
+    }
+    async fn merge(&self, _w: &vibe_core::Workspace) -> vibe_core::Result<vibe_core::MergeOutcome> {
+        Ok(vibe_core::MergeOutcome::NoChanges)
+    }
+    async fn discard(&self, _w: &vibe_core::Workspace) -> vibe_core::Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn failed_workspace_open_finishes_the_run_unsuccessfully_with_its_totals() {
+    let h = Harness::new().await;
+    let mut task = h.task("Fix typo in docs", "").await;
+    // A ready task run again from QA must not look successful.
+    task.set_status(TaskStatus::Ready);
+    h.store.save_task(&task).await.unwrap();
+    let mut prev = vibe_pipeline::RunState::new(vibe_core::RunId::new(), task.id, Phase::Qa);
+    prev.usage = vibe_core::Usage {
+        input_tokens: 7,
+        output_tokens: 3,
+        ..vibe_core::Usage::default()
+    };
+    prev.active_ms = 1234;
+    prev.status = RunStatus::Paused;
+    h.store.save_run_state(&prev).await.unwrap();
+    let store: Arc<dyn PipelineStore> = h.store.clone();
+    let pipeline = vibe_pipeline::Pipeline::new(vibe_pipeline::PipelineDeps {
+        registry: Arc::new(h.registry.clone()),
+        providers: Arc::new(Resolver(h.router.clone())),
+        store,
+        workspace: Arc::new(Unopenable),
+        tools: vibe_core::ToolRegistry::new(),
+        events: h.events.clone(),
+        config: h.config.clone(),
+        project_root: h.root(),
+        committer: None,
+        resetter: None,
+        subtask_workspaces: None,
+    });
+    assert!(pipeline.resume(task.id).await.is_err());
+    let finished: Vec<Event> = h
+        .collector
+        .events()
+        .into_iter()
+        .filter(|e| matches!(e, Event::RunFinished { .. }))
+        .collect();
+    assert_eq!(
+        finished,
+        vec![Event::RunFinished {
+            run: prev.run_id,
+            success: false,
+            status: TaskStatus::Ready,
+            usage: prev.usage,
+            active_ms: 1234,
+            started_at: prev.started_at,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn a_storage_error_mid_run_still_finishes_the_run() {
+    let h = Harness::new().await;
+    let task = h.task("Fix typo in docs", "").await;
+    // An unreadable spec makes the run fail after `run_started`.
+    std::fs::write(h.task_dir(&task).await.join("spec.json"), "{not json").unwrap();
+    assert!(
+        h.pipeline()
+            .run(task.id, RunOptions::default())
+            .await
+            .is_err()
+    );
+    let events = h.collector.events();
+    assert!(matches!(events.first(), Some(Event::RunStarted { .. })));
+    assert!(
+        matches!(
+            events.last(),
+            Some(Event::RunFinished {
+                success: false,
+                status: TaskStatus::Failed,
+                ..
+            })
+        ),
+        "{events:?}"
+    );
+    let log = std::fs::read_to_string(h.task_dir(&task).await.join("events.jsonl")).unwrap();
+    assert!(
+        log.trim_end()
+            .lines()
+            .last()
+            .unwrap()
+            .contains("\"run_finished\"")
+    );
+}
+
+/// Coder that calls the `echo` tool once, then reports.
+fn echoing_coder(h: &mut Harness) {
+    h.tools =
+        vibe_core::ToolRegistry::new().with(Arc::new(vibe_agents::test_support::EchoTool::new()));
+    h.router.route(
+        CODER,
+        None,
+        vec![
+            vibe_agents::test_support::tool_use_response(vec![(
+                "t1",
+                "echo",
+                json!({"text": "traced text"}),
+            )]),
+            coder_done("a"),
+        ],
+    );
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "W", "subtasks": [{"title": "A", "description": "a"}]}
+        ]))],
+    );
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+}
+
+#[tokio::test]
+async fn tool_outputs_are_traced_under_the_task_directory() {
+    let mut h = Harness::new().await;
+    let task = h.task("Fix typo in docs", "").await;
+    echoing_coder(&mut h);
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    let dir_name = h
+        .task_dir(&task)
+        .await
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    let events = h.collector.events();
+    let (call, file) = events
+        .iter()
+        .find_map(|e| match e {
+            Event::ToolReturned {
+                call, output_file, ..
+            } => Some((*call, output_file.clone().unwrap())),
+            _ => None,
+        })
+        .expect("a traced tool call");
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::ToolCalled { call: c, subtask: Some(_), .. } if *c == call
+    )));
+    assert_eq!(
+        file,
+        format!(".vibe/tool-output/{dir_name}/{}/{call}.txt", report.run_id)
+    );
+    assert_eq!(
+        std::fs::read_to_string(h.root().join(&file)).unwrap(),
+        "traced text"
+    );
+}
+
+#[tokio::test]
+async fn trace_outputs_off_writes_nothing() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.trace_outputs = false;
+    let task = h.task("Fix typo in docs", "").await;
+    echoing_coder(&mut h);
+    h.pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    let events = h.collector.events();
+    assert!(events.iter().any(|e| matches!(
+        e,
+        Event::ToolReturned {
+            output_file: None,
+            ..
+        }
+    )));
+    assert!(!h.root().join(".vibe").join("tool-output").exists());
 }
 
 #[tokio::test]
@@ -821,6 +1163,13 @@ async fn auto_merge_conflicts_leave_task_ready() {
     let progress = h.store.load_progress(task.id).await.unwrap();
     assert!(progress.contains("`src/a.rs`"));
     assert!(progress.contains("`manual` conflict strategy"));
+    // Conflicts merge nothing: no `merged` event.
+    assert!(
+        !h.collector
+            .events()
+            .iter()
+            .any(|e| matches!(e, Event::Merged { .. }))
+    );
     // Memory append path is exercised elsewhere; the store API stays usable.
     h.store
         .append_memory(task.id, MemoryFile::Gotchas, "x")
@@ -1410,6 +1759,28 @@ async fn isolated_subtasks_integrate_one_at_a_time_and_retry_conflicts() {
     assert!(
         progress.contains("conflict with work integrated since the attempt started"),
         "{progress}"
+    );
+    // The checkpoint and every successful integration are announced; the
+    // integrations carry their subtask.
+    let committed: Vec<(Option<vibe_core::SubtaskId>, String)> = h
+        .collector
+        .events()
+        .into_iter()
+        .filter_map(|e| match e {
+            Event::Committed {
+                subtask, commit, ..
+            } => Some((subtask, commit)),
+            _ => None,
+        })
+        .collect();
+    let ids: Vec<vibe_core::SubtaskId> = plan.subtasks().map(|s| s.id).collect();
+    assert_eq!(
+        committed,
+        vec![
+            (None, "abc123".to_string()),
+            (Some(ids[1]), "sha-s2-a2".to_string()),
+            (Some(ids[0]), "sha-s1-a1".to_string()),
+        ]
     );
 }
 

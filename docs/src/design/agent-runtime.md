@@ -181,6 +181,17 @@ text is written to `<workspace_root>/.vibe/tool-output/<uuid>.txt` and a note is
 `…`; read it in smaller pieces if you need more.]``. If the file cannot be written, the note
 says so instead.
 
+### Trace of tool outputs
+
+Independently of that truncation, a runner given a `ToolTrace` (`dir`, `reference`,
+`max_chars`) writes the complete output of every call to `<dir>/<call>.txt`, cut at
+`max_chars` characters with a final marker line, and reports it in `tool_returned`
+(`output_file` = `<reference>/<call>.txt`, `output_chars` = the untruncated length). The
+pipeline passes `.vibe/tool-output/<task dir>/<run>/` of the project when
+`pipeline.trace_outputs` is on. The `call` id is generated before the call and repeated on
+the return, so parallel read-only calls pair even when they return out of order;
+`exit_code` and `timed_out` are copied from the tool's metadata (`bash`).
+
 ### Provider errors and retries
 
 Providers retry transient failures themselves (see [Providers and

@@ -15,6 +15,7 @@ and which ones you may edit.
 ├── plugins/<name>/vibe-plugin.toml plugin manifests
 ├── memory.jsonl                    project memory: one lesson per line, shared by tasks
 ├── server.token                    token of a running `vibe serve` (owner-only)
+├── tool-output/<task dir>/<run>/<call>.txt   complete output of every tool call (trace store)
 ├── worktrees/                      one git worktree per task (git_worktree workspace)
 │   ├── .gitignore                  "*"
 │   └── <slug>-<id8>/               the task's workspace
@@ -45,8 +46,13 @@ and which ones you may edit.
 | `worktrees/` | the `git_worktree` workspace provider | agents, you ([Workspaces](../user/workspaces.md)) |
 | `tasks/` | `FileTaskStore` (`vibe-pipeline`) | the pipeline, `vibe task`, `vibe status` |
 
-The `tool-output/` and `specs/` directories live in the *workspace*, so with the `in_place`
-workspace they appear directly under `<project>/.vibe/`. Workspace change summaries and the
+The `tool-output/<uuid>.txt` files and the `specs/` directory live in the *workspace*, so with
+the `in_place` workspace they appear directly under `<project>/.vibe/`. The trace store
+`<project>/.vibe/tool-output/<task dir>/<run>/` is always at the project root: one file per
+tool call, named by the call id of its `tool_called`/`tool_returned` events and capped at
+`pipeline.trace_max_chars` characters (see [Events](../reference/events.md#trace-store)).
+`pipeline.trace_outputs = false` turns it off; `vibe task discard` removes the task's
+directory. Workspace change summaries and the
 merge checkpoint commit both exclude `.vibe/`.
 
 ## The task store
@@ -104,9 +110,14 @@ The shapes of `Task`, `Spec`, `Plan` and `QaReport` are documented in
   "labels": ["auth"],
   "source": { "kind": "manual" },
   "created_at": "2026-09-27T08:12:03.114Z",
-  "updated_at": "2026-09-27T08:41:57.902Z"
+  "updated_at": "2026-09-27T08:41:57.902Z",
+  "branch": "vibe/add-oauth-login-github-6f1c3e0a"
 }
 ```
+
+`branch` is recorded when a run opens a workspace that has one (absent with `in_place`);
+`vibe pr`, `vibe task show` and `vibe task discard` use it instead of recomputing the branch
+from the title.
 
 `plan.md` marks subtasks with `[ ]` pending, `[~]` in progress, `[x]` done, `[!]` failed and
 `[-]` skipped, and shows dependencies by title, the attempt count, verification steps and
@@ -201,7 +212,7 @@ reports next to the change they produced.
 | Commit | Ignore |
 |--------|--------|
 | `config.toml` (without inline `api_key` values) | `worktrees/` (ignored by `vibe init`) |
-| `agents/` | `tool-output/` (ignored by `vibe init`; only appears with `in_place`) |
+| `agents/` | `tool-output/` (ignored by `vibe init`: the trace store, plus truncated outputs with `in_place`) |
 | `plugins/` manifests you want everyone to load | `specs/` (only appears with `in_place`) |
 | `tasks/` (the default) | optionally `tasks/*/events.jsonl` and `tasks/*/run.json` |
 

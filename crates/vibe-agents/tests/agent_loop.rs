@@ -12,7 +12,7 @@ use vibe_agents::test_support::{
 };
 use vibe_agents::{
     AgentRunner, CONTEXT_WARNING_MESSAGE, CONTINUE_NUDGE, CONVERGE_MESSAGE, ContinuationPolicy,
-    INVALID_ARGUMENTS_MESSAGE, MAX_RETRY_DELAY, TRUNCATED_TWICE_MESSAGE, run_structured,
+    INVALID_ARGUMENTS_MESSAGE, MAX_RETRY_DELAY, TRUNCATED_TWICE_MESSAGE, ToolTrace, run_structured,
     run_with_continuation,
 };
 use vibe_core::agent::ThinkingLevel;
@@ -1026,4 +1026,234 @@ async fn streamed_text_is_published_as_deltas() {
     assert_eq!(text, "Hello world!");
     assert_eq!(thinking, "plan");
     assert!(saw_final);
+}
+
+/// A read-only tool returning a fixed output with command metadata, like
+/// `bash` does.
+struct CommandLikeTool;
+
+#[async_trait::async_trait]
+impl Tool for CommandLikeTool {
+    fn name(&self) -> &str {
+        "cmd"
+    }
+
+    fn description(&self) -> &str {
+        "Pretend to run a command."
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        json!({"type": "object"})
+    }
+
+    async fn call(
+        &self,
+        _ctx: &ToolContext,
+        _input: serde_json::Value,
+    ) -> vibe_core::Result<ToolOutput> {
+        let mut out = ToolOutput::error("y".repeat(50));
+        out.metadata = json!({"exit_code": 3, "timed_out": true, "duration_ms": 1});
+        Ok(out)
+    }
+}
+
+fn trace_in(dir: &std::path::Path, max_chars: usize) -> ToolTrace {
+    ToolTrace {
+        dir: dir.join("trace"),
+        reference: ".vibe/tool-output/001-t/run".into(),
+        max_chars,
+    }
+}
+
+#[tokio::test]
+async fn parallel_tool_calls_pair_by_call_id_and_are_traced() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = ToolRegistry::new()
+        .with(Arc::new(
+            EchoTool::new()
+                .named("slow")
+                .with_delay(Duration::from_millis(80)),
+        ))
+        .with(Arc::new(EchoTool::new().named("fast")))
+        .with(Arc::new(CommandLikeTool));
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        tool_use_response(vec![
+            ("c1", "slow", json!({"text": "slow output"})),
+            ("c2", "fast", json!({"text": "fast output"})),
+            ("c3", "cmd", json!({})),
+        ]),
+        text_response("done"),
+    ]));
+    let subtask = vibe_core::SubtaskId::new();
+    let r = runner(provider, tools)
+        .subtask(subtask)
+        .tool_trace(trace_in(dir.path(), 20));
+    let mut rx = r.events().subscribe();
+    r.run(&spec(), "go".into()).await.unwrap();
+
+    let mut called = std::collections::HashMap::new();
+    let mut returned = Vec::new();
+    let mut model = None;
+    while let Ok(env) = rx.try_recv() {
+        match env.event {
+            Event::AgentStarted { model: m, .. } => model = Some(m),
+            Event::ToolCalled {
+                tool,
+                call,
+                subtask: s,
+                ..
+            } => {
+                assert_eq!(s, Some(subtask));
+                assert!(!call.is_nil());
+                assert!(called.insert(call, tool).is_none(), "ids are unique");
+            }
+            Event::ToolReturned {
+                tool,
+                call,
+                subtask: s,
+                exit_code,
+                timed_out,
+                output_chars,
+                output_file,
+                ..
+            } => {
+                assert_eq!(s, Some(subtask));
+                returned.push((tool, call, exit_code, timed_out, output_chars, output_file));
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(model.as_deref(), Some("test-model"));
+    assert_eq!(called.len(), 3);
+    // The fast call returns before the slow one it follows.
+    let order: Vec<&str> = returned.iter().map(|r| r.0.as_str()).collect();
+    assert!(
+        order.iter().position(|t| *t == "fast") < order.iter().position(|t| *t == "slow"),
+        "{order:?}"
+    );
+    for (tool, call, exit_code, timed_out, output_chars, output_file) in &returned {
+        assert_eq!(called.get(call), Some(tool), "{tool} pairs with its call");
+        let file = output_file.as_deref().unwrap();
+        assert_eq!(file, format!(".vibe/tool-output/001-t/run/{call}.txt"));
+        let saved =
+            std::fs::read_to_string(dir.path().join("trace").join(format!("{call}.txt"))).unwrap();
+        match tool.as_str() {
+            "fast" => {
+                assert_eq!(saved, "fast output");
+                assert_eq!(*output_chars, 11);
+                assert_eq!((*exit_code, *timed_out), (None, false));
+            }
+            "slow" => assert_eq!(saved, "slow output"),
+            "cmd" => {
+                // Capped at 20 characters, with a marker line.
+                assert_eq!(*output_chars, 50);
+                assert_eq!((*exit_code, *timed_out), (Some(3), true));
+                let (kept, marker) = saved.split_once('\n').unwrap();
+                assert_eq!(kept, "y".repeat(20));
+                assert!(marker.contains("first 20 of 50 characters"), "{marker}");
+            }
+            other => panic!("unexpected tool {other}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_unwritable_trace_never_fails_the_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let blocker = dir.path().join("trace");
+    std::fs::write(&blocker, "a file where the trace directory should be").unwrap();
+    let tools = ToolRegistry::new().with(Arc::new(EchoTool::new()));
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        tool_use_response(vec![("c1", "echo", json!({"text": "hi"}))]),
+        text_response("done"),
+    ]));
+    let r = runner(provider.clone(), tools).tool_trace(trace_in(dir.path(), 100));
+    let mut rx = r.events().subscribe();
+    r.run(&spec(), "go".into()).await.unwrap();
+    let returned = std::iter::from_fn(|| rx.try_recv().ok())
+        .find_map(|e| match e.event {
+            Event::ToolReturned {
+                is_error,
+                output_file,
+                ..
+            } => Some((is_error, output_file)),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(returned, (false, None));
+    let results = last_tool_results(&provider.requests()[1]);
+    assert_eq!(results, vec![("c1".into(), "hi".into(), false)]);
+}
+
+#[tokio::test]
+async fn without_a_trace_no_output_is_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = ToolRegistry::new().with(Arc::new(EchoTool::new()));
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        tool_use_response(vec![("c1", "echo", json!({"text": "hi"}))]),
+        text_response("done"),
+    ]));
+    let r = runner(provider, tools).tool_context(ToolContext::new(dir.path()));
+    let mut rx = r.events().subscribe();
+    r.run(&spec(), "go".into()).await.unwrap();
+    let mut seen = false;
+    while let Ok(env) = rx.try_recv() {
+        if let Event::ToolReturned {
+            output_file,
+            output_chars,
+            ..
+        } = env.event
+        {
+            assert_eq!(output_file, None);
+            assert_eq!(output_chars, 2);
+            seen = true;
+        }
+    }
+    assert!(seen);
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn traced_outputs_are_complete_while_the_model_sees_a_truncated_copy() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = ToolRegistry::new().with(Arc::new(BigOutputTool::new(1_000)));
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        tool_use_response(vec![("c1", "big", json!({}))]),
+        text_response("ok"),
+    ]));
+    let r = runner(provider.clone(), tools)
+        .tool_context(ToolContext::new(dir.path()))
+        .max_tool_output_chars(100)
+        .tool_trace(trace_in(dir.path(), 100_000));
+    let mut rx = r.events().subscribe();
+    r.run(&spec(), "go".into()).await.unwrap();
+    // The model still gets its pointer to the workspace copy.
+    let results = last_tool_results(&provider.requests()[1]);
+    assert!(
+        results[0]
+            .1
+            .contains("showing the first 100 of 1000 characters")
+    );
+    assert_eq!(
+        std::fs::read_dir(dir.path().join(".vibe").join("tool-output"))
+            .unwrap()
+            .count(),
+        1
+    );
+    let file = std::iter::from_fn(|| rx.try_recv().ok())
+        .find_map(|e| match e.event {
+            Event::ToolReturned {
+                output_file,
+                output_chars,
+                call,
+                ..
+            } => {
+                assert_eq!(output_chars, 1_000);
+                output_file.map(|_| call)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let saved = dir.path().join("trace").join(format!("{file}.txt"));
+    assert_eq!(std::fs::read_to_string(saved).unwrap(), "x".repeat(1_000));
 }

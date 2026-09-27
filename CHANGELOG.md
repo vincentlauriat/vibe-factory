@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Events for the full picture of a run: `tool_called`/`tool_returned` carry a `call` id
+  (pairs them under parallel tools), the `subtask`, the exit code, the output length and
+  the path of the complete output; `agent_started` carries the model; new `committed`
+  (commit, message, files) and `merged` (commit, branch, base) events; `run_finished`
+  carries the run's usage, active time and start. Schema stays 2, older logs still load.
+- Trace store: the complete output of every tool call is kept under
+  `.vibe/tool-output/<task>/<run>/<call>.txt` (`pipeline.trace_outputs`, default on;
+  `pipeline.trace_max_chars`, default 100 000), removed by `vibe task discard`.
+- The task record keeps its `branch`; `vibe pr`, `task show` and `task discard` use it.
+
+### Fixed
+- A run that fails before its first phase (workspace, storage) now always ends with a
+  `run_finished` event.
+
 ## [0.4.0] — 2026-09-27
 
 Interaction release, covering the work planned for 0.3 and 0.4 (there was no 0.3 release):

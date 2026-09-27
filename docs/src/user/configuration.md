@@ -108,6 +108,8 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in [Providers and models](pro
 | `approvals` | list of `"spec"`, `"plan"`, `"merge"` | `[]` | where the run waits for a human decision; see [Human approvals](#human-approvals) |
 | `max_tokens` | integer | none | input plus output tokens of the whole run, including resumes; the run pauses when reached |
 | `max_duration_secs` | integer | none | active time of the whole run in seconds, including resumes; the run pauses when reached |
+| `trace_outputs` | bool | `true` | keep the complete output of every tool call in `.vibe/tool-output/<task>/<run>/<call>.txt` (ignored by git), referenced by the `tool_returned` events ([events](../reference/events.md#trace-store)) |
+| `trace_max_chars` | integer | `100000` | characters kept per traced tool output; longer outputs are cut and end with a marker line |
 
 What these limits do at run time is described in [The pipeline](../design/pipeline.md);
 workspaces and merging in [Workspaces and merging](workspaces.md).

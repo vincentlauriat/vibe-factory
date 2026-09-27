@@ -13,7 +13,9 @@ use std::time::{Duration, Instant};
 use vibe_core::{Envelope, Event, EventSink, Phase, Plan, SubtaskId, TaskId, TaskStore};
 use vibe_pipeline::RunReport;
 
-use crate::util::{Table, enum_name, human_duration, human_tokens, status_name, style, truncate};
+use crate::util::{
+    Table, enum_name, human_duration, human_tokens, short_sha, status_name, style, truncate,
+};
 
 /// Maximum characters of tool arguments shown on a tool call line.
 pub const TOOL_ARGS_MAX: usize = 80;
@@ -228,6 +230,35 @@ impl Renderer {
                         .to_string()
                 }
             }
+            Event::Committed {
+                commit,
+                message,
+                files,
+                ..
+            } => {
+                if self.verbose == 0 {
+                    return None;
+                }
+                style::dim()
+                    .apply_to(format!(
+                        "  · committed {} ({} file(s)): {}",
+                        short_sha(commit),
+                        files.len(),
+                        truncate(message, 100)
+                    ))
+                    .to_string()
+            }
+            Event::Merged {
+                commit,
+                branch,
+                base,
+                ..
+            } => style::ok()
+                .apply_to(format!(
+                    "  ✓ merged {branch} into {base} ({})",
+                    short_sha(commit)
+                ))
+                .to_string(),
             Event::BudgetUpdated { .. } => return None,
             Event::ApprovalRequested { gate, .. } => style::warn()
                 .apply_to(format!("⏸ approval needed: the {gate}"))
