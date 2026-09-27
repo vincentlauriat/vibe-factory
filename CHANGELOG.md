@@ -30,6 +30,9 @@ All notable changes to this project are documented here. The format follows
   open its pull request or merge request (`[integrations.github|gitlab]`).
 - A VS Code extension in `editors/vscode`, a client of `vibe serve`.
 
+- `ANTHROPIC_WORKSPACE_ID`: sent as the `anthropic-workspace-id` header, required by API keys
+  that are not scoped to a workspace.
+
 ### Changed
 - Assisted conflict resolution counts against the run budget, and also resolves conflicts
   between subtasks before an attempt is failed.

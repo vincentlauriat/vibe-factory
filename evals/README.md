@@ -53,7 +53,8 @@ point of the oracle.
 
 ## Running a real-model baseline
 
-Each run makes billable model calls. Set the provider's API key, then:
+Each run makes billable model calls. Set the provider's API key (and `ANTHROPIC_WORKSPACE_ID`
+when an Anthropic key is not scoped to a workspace), then:
 
 ```sh
 cargo build --release -p vibe-cli

@@ -26,7 +26,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use vibe_core::provider::ProviderInfo;
@@ -190,9 +190,9 @@ impl AnthropicProvider {
                 )));
             }
         };
-        let mut provider = Self::with_auth(auth)
-            .with_name(name)
-            .with_headers(headers_from_extra(&config.extra)?);
+        let mut headers = headers_from_extra(&config.extra)?;
+        add_workspace_header(&mut headers, std::env::var(WORKSPACE_ID_ENV).ok())?;
+        let mut provider = Self::with_auth(auth).with_name(name).with_headers(headers);
         if let Some(url) = &config.base_url {
             provider = provider.with_base_url(url);
         }
@@ -368,6 +368,27 @@ impl AnthropicProvider {
         };
         rb.json(body)
     }
+}
+
+/// Environment variable holding the workspace of an API key that is not
+/// scoped to one.
+pub const WORKSPACE_ID_ENV: &str = "ANTHROPIC_WORKSPACE_ID";
+
+const WORKSPACE_HEADER: &str = "anthropic-workspace-id";
+
+/// Send `anthropic-workspace-id` when a workspace is given and the
+/// configured headers do not already set it.
+fn add_workspace_header(headers: &mut HeaderMap, workspace: Option<String>) -> Result<()> {
+    let Some(workspace) = workspace.map(|w| w.trim().to_string()) else {
+        return Ok(());
+    };
+    if workspace.is_empty() || headers.contains_key(WORKSPACE_HEADER) {
+        return Ok(());
+    }
+    let value = HeaderValue::from_str(&workspace)
+        .map_err(|e| Error::config(format!("invalid {WORKSPACE_ID_ENV}: {e}")))?;
+    headers.insert(WORKSPACE_HEADER, value);
+    Ok(())
 }
 
 /// Convert one core message into the wire format, or `None` when nothing
@@ -752,6 +773,21 @@ mod tests {
 
     fn provider() -> AnthropicProvider {
         AnthropicProvider::new("sk-ant-test")
+    }
+
+    #[test]
+    fn workspace_header() {
+        let mut headers = HeaderMap::new();
+        add_workspace_header(&mut headers, None).unwrap();
+        add_workspace_header(&mut headers, Some("  ".into())).unwrap();
+        assert!(headers.is_empty());
+        add_workspace_header(&mut headers, Some(" wrkspc_01 ".into())).unwrap();
+        assert_eq!(headers[WORKSPACE_HEADER], "wrkspc_01");
+        // A header set in the configuration wins over the environment.
+        add_workspace_header(&mut headers, Some("wrkspc_02".into())).unwrap();
+        assert_eq!(headers[WORKSPACE_HEADER], "wrkspc_01");
+        let error = add_workspace_header(&mut HeaderMap::new(), Some("a\nb".into())).unwrap_err();
+        assert_eq!(error.kind, vibe_core::ErrorKind::Config);
     }
 
     #[test]
