@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-15f487dc.js";
+            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f3067f38.js"></script>
@@ -204,7 +204,7 @@ and <code>vibe &lt;command&gt; --help</code> print the same information as this 
 <tr><th>Option</th><th>Effect</th></tr>
 </thead>
 <tbody>
-<tr><td><code>-C, --project &lt;DIR&gt;</code></td><td>start directory; the project is this directory (default: the current one) or its nearest parent that contains a <code>.vibe</code> directory; <code>vibe init</code> never searches parents</td></tr>
+<tr><td><code>-C, --project &lt;DIR&gt;</code></td><td>start directory; the project is this directory (default: the current one) or its nearest parent that contains a <code>.vibe</code> directory, without leaving the git repository (the search stops at the first parent that contains <code>.git</code>) and never your home directory; <code>vibe init</code> never searches parents</td></tr>
 <tr><td><code>-v, --verbose</code></td><td>more logging on standard error: default warnings only; <code>-v</code> info, <code>-vv</code> debug, <code>-vvv</code> trace; a non-empty <code>RUST_LOG</code> wins</td></tr>
 <tr><td><code>--json</code></td><td>machine-readable output: one JSON document, or one JSON event per line for <code>vibe run</code></td></tr>
 <tr><td><code>--no-color</code></td><td>no colours; also the case when <code>NO_COLOR</code> is set or the output is not a terminal</td></tr>
