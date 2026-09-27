@@ -10,7 +10,7 @@ use vibe_core::{
     EventBus, MergeStrategy as ConfigMergeStrategy, ModelProvider, ModelRef, Phase, Registry,
     SharedWorkspaceProvider, Task, ToolRegistry, VibeConfig, Workspace, WorkspaceKind,
 };
-use vibe_pipeline::{Committer, FileTaskStore, Pipeline, PipelineDeps, PipelineStore};
+use vibe_pipeline::{Committer, FileTaskStore, Pipeline, PipelineDeps, PipelineStore, Resetter};
 use vibe_plugins::PluginHost;
 use vibe_providers::ProviderRegistry;
 use vibe_workspace::{GitWorktreeProvider, MergeStrategy as WorkspaceMergeStrategy};
@@ -149,6 +149,9 @@ pub struct AppContext {
     pub events: EventBus,
     /// Git committer, when the project is a git repository.
     pub committer: Option<Committer>,
+    /// Discards the uncommitted changes of a failed subtask attempt, when
+    /// the project is a git repository.
+    pub resetter: Option<Resetter>,
     /// Running plugins (shut down by [`AppContext::shutdown`]).
     pub plugins: PluginHost,
     /// Whether the project is a git repository.
@@ -248,6 +251,7 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
     // itself; adding a `FileEventSink` here would log them twice.
     let events = EventBus::default();
     let committer = is_git.then(git_committer);
+    let resetter = is_git.then(git_resetter);
 
     Ok(AppContext {
         root: root.to_path_buf(),
@@ -258,6 +262,7 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
         store,
         events,
         committer,
+        resetter,
         plugins,
         is_git,
     })
@@ -298,6 +303,19 @@ pub fn git_committer() -> Committer {
     })
 }
 
+/// Resetter backed by `git checkout -- . && git clean -fd -e .vibe` in the
+/// workspace: a failed subtask attempt never leaks into the next one.
+pub fn git_resetter() -> Resetter {
+    Arc::new(|root: PathBuf| {
+        Box::pin(async move {
+            let git = vibe_workspace::Git::new(&root);
+            git.run(&["checkout", "--", "."]).await?;
+            git.run(&["clean", "-fd", "-e", ".vibe"]).await?;
+            Ok(())
+        })
+    })
+}
+
 impl AppContext {
     /// A pipeline over this context.
     pub fn pipeline(&self) -> Pipeline {
@@ -313,6 +331,7 @@ impl AppContext {
             config: self.config.clone(),
             project_root: self.root.clone(),
             committer: self.committer.clone(),
+            resetter: self.resetter.clone(),
         })
     }
 
