@@ -110,6 +110,24 @@ human review as above. Enable it with `pipeline.merge_strategy = "assisted"` in
 `.vibe/config.toml`; the model used is the one configured for the `merge` phase (or
 `default_model`).
 
+## Repository configuration is guarded
+
+Agents may run `git` in the worktree, and a worktree shares the repository's local
+configuration (`.git/config`) with your checkout. To make sure an agent cannot smuggle
+executable settings into your repository, the worktree provider:
+
+- runs every git command of the framework with hooks, `fsmonitor`, pagers, editors and
+  SSH helpers neutralised (`-c core.hooksPath=<empty dir>` and friends);
+- takes a snapshot of the local configuration when the workspace is opened (kept in memory
+  and in `.vibe/worktrees/.snapshots/<task>.cfg`);
+- refuses to merge when any key changed since, except the framework's own `branch.vibe/*`
+  sections. The error lists the added, removed or modified keys, with `core.hooksPath`
+  named first when it is involved.
+
+If you changed the configuration yourself in the meantime, review the listed keys and
+either restore them or accept them (`GitWorktreeProvider::accept_config_changes` from code;
+a CLI command is on the roadmap), then run the merge again.
+
 ## Inspecting, merging and discarding by hand
 
 Everything is plain git, so you can take over at any point:

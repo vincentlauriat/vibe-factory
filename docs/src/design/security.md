@@ -96,6 +96,22 @@ The default workspace is a git worktree on its own branch
 merge step, which refuses to run on a dirty tree. Stronger isolation (containers, VMs,
 remote sandboxes) is a `WorkspaceProvider` plugin.
 
+A worktree shares `.git/config` with the user's checkout, so the provider treats the
+repository configuration as untrusted after agents have run:
+
+- every framework git command passes `NEUTRAL_CONFIG` (`core.hooksPath` pointing at an
+  empty directory, `core.fsmonitor=false`, `core.pager=cat`, `core.editor=true`,
+  `core.sshCommand=ssh`) and `GIT_CONFIG_NOSYSTEM=1`, so no hook or helper runs during a
+  checkpoint commit, a merge or a checkout;
+- `config_guard::ConfigSnapshot` captures `git config --local --list` at `open`; `merge`
+  diffs the current configuration against it and fails with the list of changed keys
+  unless only volatile keys changed (`branch.vibe/*`, `core.repositoryformatversion`).
+  A missing snapshot fails closed. `accept_config_changes` re-baselines after a human
+  review.
+
+The writing tools and the shell policy additionally refuse any path inside a `.git`
+directory, so hook scripts cannot be planted without going through the configuration.
+
 ## Secrets
 
 Provider layers scrub `sk-…`, `Bearer …`, `token=`, `api_key=` and `access_token=` from
