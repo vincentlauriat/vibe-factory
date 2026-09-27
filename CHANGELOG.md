@@ -31,6 +31,11 @@ All notable changes to this project are documented here. The format follows
   from the end; `--json` prints envelopes tagged with the task.
 - `vibe serve --exit-on-stdin-eof`: the server stops, as on Ctrl-C, when its standard input
   closes — for clients that run it as a child process.
+- `vibe tui`: an Activity screen (`A`, every task, type-group filters `1`–`7`, `f` to
+  follow, `Enter` to jump to the task), a History screen (`H`, `a` for failed and cancelled
+  tasks, `Enter` for the detail) and a Trace tab in the task detail (`Enter` expands a call,
+  `o` loads its complete output, `[`/`]` switch runs); the selected task's log is read
+  incrementally instead of re-parsed every tick.
 - A native macOS app, `apps/macos/VibeFactory` (SwiftUI, macOS 14+): opens a project and
   starts `vibe serve` for it, or connects to a running server; task board, detail with spec,
   plan, QA, live activity and changes, approvals, menu bar item and notifications. Built
