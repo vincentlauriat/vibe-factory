@@ -31,6 +31,10 @@ pub struct ProviderConfig {
     /// Default model for this provider.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_model: Option<String>,
+    /// Context window of this provider's models, in tokens (default 200 000).
+    /// Used to warn agents near the limit and stop before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u32>,
     /// Extra provider-specific settings.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra: BTreeMap<String, toml::Value>,
