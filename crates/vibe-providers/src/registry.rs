@@ -296,6 +296,10 @@ mod tests {
         assert_eq!(p.info().name, "anthropic");
         let (_, id) = reg.resolve(&ModelRef::new("anthropic", "")).unwrap();
         assert_eq!(id, "claude-sonnet-5");
+        let (_, id) = reg
+            .resolve(&ModelRef::parse("ollama/", "anthropic"))
+            .unwrap();
+        assert_eq!(id, "qwen2.5-coder");
         let (_, id) = reg.resolve(&ModelRef::new("ollama", "default")).unwrap();
         assert_eq!(id, "qwen2.5-coder");
         let (_, id) = reg.resolve(&ModelRef::new("openai", "opus")).unwrap();

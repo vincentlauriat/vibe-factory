@@ -105,12 +105,20 @@ pub fn classify_transport_error(err: reqwest::Error) -> Error {
     Error::new(ErrorKind::Network, message).with_source(err)
 }
 
+/// Upper bound applied to any server supplied `Retry-After` hint.
+pub const MAX_RETRY_AFTER: Duration = Duration::from_secs(3600);
+
 /// Parse a `Retry-After` header value expressed in (possibly fractional)
-/// seconds. HTTP-date values are ignored and yield `None`.
+/// seconds, capped at [`MAX_RETRY_AFTER`]. HTTP-date, negative and
+/// non-finite values are ignored and yield `None`.
 #[must_use]
 pub fn parse_retry_after(value: &str) -> Option<Duration> {
     let secs: f64 = value.trim().parse().ok()?;
-    (secs.is_finite() && secs >= 0.0).then(|| Duration::from_secs_f64(secs))
+    if !secs.is_finite() || secs < 0.0 {
+        return None;
+    }
+    let hint = Duration::try_from_secs_f64(secs).unwrap_or(MAX_RETRY_AFTER);
+    Some(hint.min(MAX_RETRY_AFTER))
 }
 
 /// Extract a human readable error message from a response body.
@@ -263,6 +271,11 @@ mod tests {
         assert_eq!(parse_retry_after(" 0.5 "), Some(Duration::from_millis(500)));
         assert_eq!(parse_retry_after("Wed, 21 Oct 2015 07:28:00 GMT"), None);
         assert_eq!(parse_retry_after("-1"), None);
+        assert_eq!(parse_retry_after("NaN"), None);
+        assert_eq!(parse_retry_after("inf"), None);
+        assert_eq!(parse_retry_after("120"), Some(Duration::from_secs(120)));
+        assert_eq!(parse_retry_after("7200"), Some(MAX_RETRY_AFTER));
+        assert_eq!(parse_retry_after("1e20"), Some(MAX_RETRY_AFTER));
     }
 
     #[test]

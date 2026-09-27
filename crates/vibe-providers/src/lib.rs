@@ -27,6 +27,18 @@
 //! [`vibe_core::ErrorKind::AuthFailed`] on the first call, not at construction,
 //! so a configuration listing unused providers still loads.
 //!
+//! ## Invalid tool arguments
+//!
+//! When a backend returns tool call arguments that are not a JSON object
+//! (typically truncated JSON because the output budget ran out), the call is
+//! kept as a [`vibe_core::ContentBlock::ToolUse`] whose `input` is
+//! `{"_raw": "<original text>"}` ([`openai::RAW_ARGUMENTS_KEY`]). Tool runtimes
+//! should treat an input containing `_raw` as undecodable and report it to the
+//! model instead of executing the tool. When the backend reported truncation
+//! (`finish_reason = "length"`), the response's stop reason is
+//! [`vibe_core::StopReason::MaxTokens`] even though tool calls are present, so
+//! the caller's max-tokens handling applies.
+//!
 //! ## Adding a provider
 //!
 //! 1. Implement [`vibe_core::ModelProvider`] for your type. Reuse

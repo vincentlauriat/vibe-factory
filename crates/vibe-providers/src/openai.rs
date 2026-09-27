@@ -438,10 +438,17 @@ struct WirePromptDetails {
     cached_tokens: u64,
 }
 
-/// Map a `finish_reason` onto [`StopReason`]. A response carrying tool calls
-/// is always [`StopReason::ToolUse`], whatever the backend reported.
+/// Map a `finish_reason` onto [`StopReason`].
+///
+/// `length` always yields [`StopReason::MaxTokens`], even with tool calls
+/// present (their arguments are likely truncated). Otherwise a response
+/// carrying tool calls is [`StopReason::ToolUse`], whatever the backend
+/// reported.
 #[must_use]
 pub fn map_finish_reason(reason: Option<&str>, has_tool_calls: bool) -> StopReason {
+    if reason == Some("length") {
+        return StopReason::MaxTokens;
+    }
     if has_tool_calls {
         return StopReason::ToolUse;
     }
@@ -453,14 +460,24 @@ pub fn map_finish_reason(reason: Option<&str>, has_tool_calls: bool) -> StopReas
     }
 }
 
-/// Decode tool call arguments tolerantly: a JSON string is parsed, an object
-/// is taken as is, empty or invalid input becomes `{}`.
+/// Key under which undecodable tool call arguments are preserved (see the
+/// crate docs, "Invalid tool arguments").
+pub const RAW_ARGUMENTS_KEY: &str = "_raw";
+
+/// Decode tool call arguments: a JSON string holding an object is parsed, an
+/// object is taken as is, absent or blank arguments become `{}`. Anything
+/// else (invalid or truncated JSON, a non-object value) is preserved verbatim
+/// as `{"_raw": "<text>"}` instead of being silently replaced.
 fn parse_arguments(arguments: Option<Value>) -> Value {
     match arguments {
+        None | Some(Value::Null) => json!({}),
         Some(Value::String(s)) if s.trim().is_empty() => json!({}),
-        Some(Value::String(s)) => serde_json::from_str(&s).unwrap_or_else(|_| json!({})),
+        Some(Value::String(s)) => match serde_json::from_str::<Value>(&s) {
+            Ok(v @ Value::Object(_)) => v,
+            _ => json!({ RAW_ARGUMENTS_KEY: s }),
+        },
         Some(v @ Value::Object(_)) => v,
-        _ => json!({}),
+        Some(other) => json!({ RAW_ARGUMENTS_KEY: other.to_string() }),
     }
 }
 
@@ -682,7 +699,7 @@ mod tests {
             ("call_a".into(), "read".into(), json!({"path": "x"}))
         );
         assert_eq!(calls[1], ("call_1".into(), "ls".into(), json!({})));
-        assert_eq!(calls[2].2, json!({}));
+        assert_eq!(calls[2].2, json!({"_raw": "{oops"}));
         assert_eq!(calls[3].2, json!({"k": 1}));
         assert_eq!(r.usage.input_tokens, 12);
         assert_eq!(r.usage.cache_read_tokens, 8);
@@ -701,9 +718,34 @@ mod tests {
             StopReason::MaxTokens
         );
         assert_eq!(
+            map_finish_reason(Some("length"), true),
+            StopReason::MaxTokens
+        );
+        assert_eq!(
             map_finish_reason(Some("content_filter"), false),
             StopReason::Other
         );
+    }
+
+    #[test]
+    fn truncated_tool_arguments_are_preserved_and_flag_max_tokens() {
+        let truncated = r#"{"path":"a.rs","content":"fn ma"#;
+        let value = json!({
+            "choices": [{
+                "finish_reason": "length",
+                "message": {"role": "assistant", "content": null, "tool_calls": [
+                    {"id": "c1", "type": "function", "function": {"name": "write_file", "arguments": truncated}},
+                    {"id": "c2", "type": "function", "function": {"name": "n", "arguments": "[1,2]"}}
+                ]}
+            }]
+        });
+        let r = parse_response(value, "m").unwrap();
+        assert_eq!(r.stop_reason, StopReason::MaxTokens);
+        let inputs: Vec<_> = r.message.tool_uses().map(|(_, _, v)| v.clone()).collect();
+        assert_eq!(inputs[0], json!({"_raw": truncated}));
+        assert_eq!(inputs[1], json!({"_raw": "[1,2]"}));
+        assert_eq!(parse_arguments(None), json!({}));
+        assert_eq!(parse_arguments(Some(json!(""))), json!({}));
     }
 
     #[test]
