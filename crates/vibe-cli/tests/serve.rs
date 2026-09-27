@@ -34,6 +34,10 @@ fn git(root: &std::path::Path, args: &[&str]) {
 }
 
 fn start() -> Server {
+    start_with(&[])
+}
+
+fn start_with(extra: &[&str]) -> Server {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     git(root, &["init", "-q", "-b", "main"]);
@@ -60,6 +64,7 @@ fn start() -> Server {
             "--workspace",
             "in_place",
         ])
+        .args(extra)
         .current_dir(root)
         .env("HOME", root.join(".home"))
         .env_remove("ANTHROPIC_API_KEY")
@@ -201,4 +206,28 @@ async fn create_run_and_follow_a_task() {
         s.post("/api/tasks/1/approve", json!({})).await.status(),
         409
     );
+}
+
+#[tokio::test]
+async fn evaluation_summaries_are_listed() {
+    let results = tempfile::tempdir().unwrap();
+    let suite = results.path().join("2026-10-01-model");
+    std::fs::create_dir_all(&suite).unwrap();
+    std::fs::write(
+        suite.join("summary.json"),
+        json!({"schema_version": 1, "reports": 2, "framework_commits": ["abc"],
+               "rows": [{"provider": "mock", "model": null, "case": "ALL", "runs": 2, "successes": 1,
+                         "success_rate": 0.5, "mean_seconds": 1.0, "median_seconds": 1.0,
+                         "total_tokens": 10, "mean_tokens": 5, "runs_without_usage": 0,
+                         "mean_validation_attempts": 1.0}]})
+        .to_string(),
+    )
+    .unwrap();
+    let s = start_with(&["--evals", results.path().to_str().unwrap()]);
+    let data: Value = s.get("/api/evals").await.json().await.unwrap();
+    assert_eq!(data["enabled"], true);
+    assert_eq!(data["suites"][0]["name"], "2026-10-01-model");
+    assert_eq!(data["suites"][0]["summary"]["rows"][0]["successes"], 1);
+    let off: Value = start().get("/api/evals").await.json().await.unwrap();
+    assert_eq!(off["enabled"], false);
 }

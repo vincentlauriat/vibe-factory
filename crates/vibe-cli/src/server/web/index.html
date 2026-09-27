@@ -19,6 +19,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
          background: var(--bg); color: var(--text); }
   header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
@@ -63,15 +64,30 @@
   .live { color: var(--stream); white-space: pre-wrap; word-break: break-word; margin-top: 6px; }
   pre { white-space: pre-wrap; word-break: break-word; background: var(--chip); padding: 10px; border-radius: 6px; }
   .empty { padding: 30px; text-align: center; }
+  nav.views { display: flex; gap: 4px; }
+  nav.views button { border: none; background: none; }
+  nav.views button.on { background: var(--chip); }
+  #evals { padding: 16px; max-width: 1200px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 24px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  tr.total td { font-weight: 600; }
+  .rate { display: flex; align-items: center; gap: 8px; }
+  .rate .bar { width: 80px; }
   .error { color: var(--bad); }
 </style>
 </head>
 <body>
 <header>
   <h1>Vibe Factory</h1>
+  <nav class="views">
+    <button id="view-tasks" class="on">Tasks</button>
+    <button id="view-evals">Evaluations</button>
+  </nav>
   <span id="summary" class="muted"></span>
 </header>
-<main>
+<section id="evals" hidden></section>
+<main id="board">
   <aside>
     <form class="new" id="new-task">
       <input id="new-title" placeholder="New task title" autocomplete="off" aria-label="New task title">
@@ -332,6 +348,51 @@ document.getElementById("new-task").addEventListener("submit", async (event) => 
     select(row.task.id);
   } catch (e) { alert(e.message); }
 });
+
+function showView(view) {
+  document.getElementById("board").hidden = view !== "tasks";
+  document.getElementById("evals").hidden = view !== "evals";
+  document.getElementById("view-tasks").className = view === "tasks" ? "on" : "";
+  document.getElementById("view-evals").className = view === "evals" ? "on" : "";
+  if (view === "evals") loadEvals();
+}
+document.getElementById("view-tasks").addEventListener("click", () => showView("tasks"));
+document.getElementById("view-evals").addEventListener("click", () => showView("evals"));
+
+async function loadEvals() {
+  const pane = document.getElementById("evals");
+  pane.replaceChildren(el("p", { class: "muted" }, "Loading…"));
+  let data;
+  try { data = await api("GET", "/evals"); }
+  catch (e) { pane.replaceChildren(el("p", { class: "error" }, e.message)); return; }
+  if (!data.enabled) {
+    pane.replaceChildren(el("p", { class: "muted empty" },
+      "Start the server with `vibe serve --evals <DIR>` to show the results of evals/run_suite.py."));
+    return;
+  }
+  if (!data.suites.length) {
+    pane.replaceChildren(el("p", { class: "muted empty" }, "No summary.json found yet."));
+    return;
+  }
+  const fmt = (v) => v === null || v === undefined ? "–" : String(v);
+  pane.replaceChildren(...data.suites.map((suite) => {
+    const s = suite.summary;
+    const rows = (s.rows || []).map((r) => el("tr", { class: r.case === "ALL" ? "total" : "" },
+      el("td", {}, fmt(r.provider)), el("td", {}, fmt(r.model)), el("td", {}, r.case),
+      el("td", {}, el("div", { class: "rate" },
+        el("div", { class: "bar" }, el("div", { style: `width:${(r.success_rate || 0) * 100}%;background:var(--good)` })),
+        `${r.successes}/${r.runs}`)),
+      el("td", {}, fmt(r.mean_seconds)), el("td", {}, fmt(r.median_seconds)),
+      el("td", {}, r.mean_tokens === null ? "–" : human(r.mean_tokens)),
+      el("td", {}, fmt(r.runs_without_usage)), el("td", {}, fmt(r.mean_validation_attempts))));
+    return el("div", {},
+      el("h3", {}, suite.name || "results"),
+      el("div", { class: "muted" }, `${s.reports} report(s) · framework ${(s.framework_commits || []).map((c) => c.slice(0, 10)).join(", ")}${suite.modified ? " · " + new Date(suite.modified).toLocaleString() : ""}`),
+      el("table", {},
+        el("thead", {}, el("tr", {}, ["provider", "model", "case", "success", "mean s", "median s", "mean tokens", "no usage", "validations"].map((h) => el("th", {}, h)))),
+        el("tbody", {}, rows)));
+  }));
+}
 
 if (!token) askToken();
 refreshTasks();

@@ -36,6 +36,8 @@ pub struct Inner {
     pub token: String,
     /// `Host` header values accepted (empty: any).
     pub allowed_hosts: Vec<String>,
+    /// Directory searched for evaluation summaries, if any.
+    pub evals: Option<std::path::PathBuf>,
 }
 
 /// Shared state of the server.
@@ -91,6 +93,7 @@ pub fn router(state: ServerState) -> Router {
         .route("/tasks/{task}/changes", get(changes))
         .route("/tasks/{task}/events", get(events))
         .route("/tasks/{task}/stream", get(stream))
+        .route("/evals", get(evals))
         .layer(middleware::from_fn_with_state(state.clone(), authorize));
     Router::new()
         .route("/", get(index))
@@ -298,6 +301,52 @@ async fn changes(
     let task = find(&state, &reference).await?;
     let text = crate::tui::changes(&state.ctx, task.id).await?;
     Ok(Json(json!({"changes": text})))
+}
+
+/// Deepest directory level searched for `summary.json` files.
+const EVALS_DEPTH: usize = 4;
+
+/// Every `summary.json` written by `evals/run_suite.py` under the evals
+/// directory, newest first: `[{"name", "modified", "summary"}]`.
+async fn evals(State(state): State<ServerState>) -> ApiResult<Json<Value>> {
+    let Some(dir) = state.evals.clone() else {
+        return Ok(Json(json!({"enabled": false, "suites": []})));
+    };
+    let suites = tokio::task::spawn_blocking(move || {
+        let mut found = Vec::new();
+        let mut stack = vec![(dir.clone(), 0usize)];
+        while let Some((current, depth)) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&current) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() && depth < EVALS_DEPTH {
+                    stack.push((path, depth + 1));
+                } else if path.file_name().is_some_and(|n| n == "summary.json")
+                    && let Ok(text) = std::fs::read_to_string(&path)
+                    && let Ok(summary) = serde_json::from_str::<Value>(&text)
+                {
+                    let modified = entry
+                        .metadata()
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .map(chrono::DateTime::<chrono::Utc>::from);
+                    let name = path
+                        .parent()
+                        .and_then(|p| p.strip_prefix(&dir).ok())
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default();
+                    found.push(json!({"name": name, "modified": modified, "summary": summary}));
+                }
+            }
+        }
+        found.sort_by(|a, b| b["modified"].as_str().cmp(&a["modified"].as_str()));
+        found
+    })
+    .await
+    .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(json!({"enabled": true, "suites": suites})))
 }
 
 #[derive(Deserialize, Default)]

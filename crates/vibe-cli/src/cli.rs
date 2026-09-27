@@ -300,6 +300,10 @@ pub struct ServeArgs {
     /// Drive the `mock` provider with scripted responses from a JSON file.
     #[arg(long, value_name = "FILE", conflicts_with_all = ["provider", "model"])]
     pub script: Option<std::path::PathBuf>,
+    /// Directory of evaluation results (`evals/run_suite.py` destinations)
+    /// shown in the web UI.
+    #[arg(long, value_name = "DIR")]
+    pub evals: Option<std::path::PathBuf>,
 }
 
 /// `vibe events …`

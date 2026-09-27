@@ -111,6 +111,7 @@ pub async fn run(root: &Path, args: ServeArgs, ui: Ui) -> Result<u8> {
         manager: manager.clone(),
         token,
         allowed_hosts,
+        evals: args.evals.clone(),
     });
     axum::serve(listener, api::router(state))
         .with_graceful_shutdown(async {
