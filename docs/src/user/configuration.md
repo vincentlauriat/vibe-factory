@@ -103,6 +103,8 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in [Providers and models](pro
 | `validation_commands` | list of strings | `[]` | mandatory shell checks before ready/merge; see below |
 | `max_validation_fix_attempts` | integer | `2` | automatic validation fixes over the whole run, including resumes; `0` disables them |
 | `merge_strategy` | `"manual"` or `"assisted"` | `"manual"` | `manual` reports conflicts for a human; `assisted` lets a model resolve conflict markers first |
+| `max_tokens` | integer | none | input plus output tokens of the whole run, including resumes; the run pauses when reached |
+| `max_duration_secs` | integer | none | active time of the whole run in seconds, including resumes; the run pauses when reached |
 
 What these limits do at run time is described in [The pipeline](../design/pipeline.md);
 workspaces and merging in [Workspaces and merging](workspaces.md).
@@ -164,6 +166,30 @@ Third-party workspace providers must implement `merge_validated` to support gate
 integration; the default refuses it rather than falling back to an unchecked merge.
 External manual `git merge` commands are outside this gate. Configuration is loaded by the
 host, not accepted from an agent's QA report.
+
+## Run budgets
+
+```toml
+[pipeline]
+max_tokens = 2_000_000      # input + output tokens over the whole run
+max_duration_secs = 3600    # one hour of active work
+```
+
+Both limits are off by default. They apply to a **run**, not to one invocation of
+`vibe run`: `run.json` keeps the tokens (`usage`) and the active time (`active_ms`) of every
+invocation, and a resumed run starts from those totals. Time spent paused or between
+invocations is not counted.
+
+Agents add the tokens of every model call to the budget as it happens. Once a limit is
+reached no new model call starts: running sessions stop before their next step,
+interrupted subtasks go back to pending, and the run **pauses** (exit code 2) at the phase
+it was in, with a note in `progress.md` naming the limit. A running shell command is not
+interrupted; it is bounded by its own timeout. Resuming without raising the limit pauses
+again immediately and spends nothing. Raise the limit in the configuration, or for one
+invocation with `vibe run <REF> --resume --max-tokens N --max-duration 2h`, to continue.
+
+The token limit counts the agents' model calls. The calls made by `merge_strategy =
+"assisted"` to resolve conflict markers are not counted.
 
 ## `[security]`
 
@@ -235,6 +261,8 @@ max_phase_retries = 2       # extra planner attempts on an invalid plan
 workspace = "git_worktree"  # or "in_place"
 auto_merge = false          # stop in `ready` and let me merge
 merge_strategy = "manual"
+max_tokens = 3_000_000      # pause the run beyond this, resumes included
+max_duration_secs = 7200    # and beyond two hours of active work
 
 # Security ----------------------------------------------------------------
 [security]

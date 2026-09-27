@@ -15,8 +15,8 @@ use vibe_core::agent::ThinkingLevel;
 use vibe_core::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, CompletionRequest, CompletionResponse,
     ContentBlock, Error, ErrorKind, Event, EventBus, HookDecision, Message, ModelProvider,
-    Permissions, PromptTemplate, Registry, Result, Role, RunId, StopReason, SubtaskId, Task,
-    ToolContext, ToolOutput, ToolRegistry, Usage,
+    Permissions, PromptTemplate, Registry, Result, Role, RunBudget, RunId, StopReason, SubtaskId,
+    Task, ToolContext, ToolOutput, ToolRegistry, Usage,
 };
 
 use crate::prompts::strip_doc_comment;
@@ -106,6 +106,7 @@ pub struct AgentRunner {
     max_tool_output_chars: usize,
     extra_vars: BTreeMap<String, String>,
     cancel: Option<watch::Receiver<bool>>,
+    budget: Option<Arc<RunBudget>>,
     max_provider_retries: u32,
     retry_base_delay: Duration,
 }
@@ -164,6 +165,7 @@ impl AgentRunner {
             max_tool_output_chars: DEFAULT_MAX_TOOL_OUTPUT_CHARS,
             extra_vars: BTreeMap::new(),
             cancel: None,
+            budget: None,
             max_provider_retries: 2,
             retry_base_delay: Duration::from_secs(1),
         }
@@ -249,6 +251,16 @@ impl AgentRunner {
     #[must_use]
     pub fn cancel_token(mut self, cancel: watch::Receiver<bool>) -> Self {
         self.cancel = Some(cancel);
+        self
+    }
+
+    /// Run budget: the usage of every model call is added to it, and once
+    /// one of its limits is reached the run stops before its next step with
+    /// [`AgentStop::Cancelled`], like a cancellation. Callers tell the two
+    /// apart with [`RunBudget::exceeded`].
+    #[must_use]
+    pub fn budget(mut self, budget: Arc<RunBudget>) -> Self {
+        self.budget = Some(budget);
         self
     }
 
@@ -382,6 +394,7 @@ impl AgentRunner {
 
     fn is_cancelled(&self) -> bool {
         self.cancel.as_ref().is_some_and(|rx| *rx.borrow())
+            || self.budget.as_ref().is_some_and(|b| b.exceeded().is_some())
     }
 
     async fn run_conversation(
@@ -476,6 +489,9 @@ impl AgentRunner {
             };
             steps += 1;
             usage += response.usage;
+            if let Some(budget) = &self.budget {
+                budget.add(response.usage);
+            }
 
             let mut assistant = response.message;
             assistant.role = Role::Assistant;

@@ -1208,3 +1208,121 @@ async fn validation_fix_resumes_after_a_hook_interrupts_the_fix_phase() {
     assert_eq!(resumed.state.pending_validation_fix, None);
     assert_eq!(h.router.calls_for("fixer").len(), 1);
 }
+
+#[tokio::test]
+async fn token_budget_pauses_and_survives_resume() {
+    let mut h = Harness::new().await;
+    // Every scripted answer costs 15 tokens: planner + first coder = 30.
+    h.config.pipeline.max_tokens = Some(30);
+    let task = h.task("Add export command", "Export tasks as CSV").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "Seq", "parallel": false, "subtasks": [
+                {"title": "First", "description": "a"},
+                {"title": "Second", "description": "b"}
+            ]}
+        ]))],
+    );
+    let first = subtask_key(1, 2, "First");
+    let second = subtask_key(2, 2, "Second");
+    h.router
+        .route(CODER, Some(&first), vec![coder_done("first")]);
+    h.router
+        .route(CODER, Some(&second), vec![coder_done("second")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let options = || RunOptions {
+        complexity_override: Some(Complexity::Trivial),
+        ..RunOptions::default()
+    };
+
+    let paused = h.pipeline().run(task.id, options()).await.unwrap();
+    assert_eq!(paused.final_status, TaskStatus::Backlog);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert_eq!(state.current_phase, Phase::Build);
+    assert_eq!(state.usage.total(), 30);
+    assert!(
+        state
+            .last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("token budget exhausted (30 of 30"))
+    );
+    let plan = h.store.load_plan(task.id).await.unwrap().unwrap();
+    let statuses: Vec<SubtaskStatus> = plan.subtasks().map(|s| s.status).collect();
+    assert_eq!(statuses, vec![SubtaskStatus::Done, SubtaskStatus::Pending]);
+    assert!(h.collector.events().iter().any(|e| matches!(
+        e,
+        Event::Paused { reason, .. } if reason.contains("raise the limit")
+    )));
+
+    // Resuming without raising the limit spends nothing.
+    let again = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(again.final_status, TaskStatus::Backlog);
+    assert!(again.phases.is_empty());
+    assert_eq!(h.router.calls_with_key(&second), 0);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert_eq!(state.usage.total(), 30);
+
+    h.config.pipeline.max_tokens = Some(1_000);
+    let resumed = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(resumed.final_status, TaskStatus::Ready, "{resumed:#?}");
+    assert_eq!(resumed.run_id, paused.run_id);
+    assert_eq!(resumed.usage.total(), 30, "this invocation only");
+    assert_eq!(h.router.calls_with_key(&first), 1);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Finished);
+    assert_eq!(state.usage.total(), 60, "whole run");
+}
+
+#[tokio::test]
+async fn duration_budget_counts_earlier_invocations() {
+    let mut h = Harness::new().await;
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([{"name": "Only", "subtasks": [
+            {"title": "Fix the typo", "description": "edit README"}
+        ]}]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let paused = h
+        .pipeline()
+        .run(
+            task.id,
+            RunOptions {
+                until_phase: Some(Phase::Plan),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(paused.final_status, TaskStatus::Backlog);
+
+    // Pretend the first invocation took an hour: a 30 minute budget is spent.
+    let mut state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert!(state.usage.total() > 0);
+    state.active_ms = 3_600_000;
+    h.store.save_run_state(&state).await.unwrap();
+    h.config.pipeline.max_duration_secs = Some(1_800);
+    let stopped = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(stopped.final_status, TaskStatus::Backlog);
+    assert!(h.router.calls_for("coder").is_empty());
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert!(state.active_ms >= 3_600_000);
+    assert!(
+        state
+            .last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("duration budget exhausted"))
+    );
+
+    h.config.pipeline.max_duration_secs = None;
+    let done = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(done.final_status, TaskStatus::Ready);
+}

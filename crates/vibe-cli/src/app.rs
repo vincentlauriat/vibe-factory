@@ -33,6 +33,10 @@ pub struct Overrides {
     pub auto_merge: bool,
     /// Scripted responses for the mock provider.
     pub script: Option<PathBuf>,
+    /// Token budget of the run.
+    pub max_tokens: Option<u64>,
+    /// Active time budget of the run, in seconds.
+    pub max_duration_secs: Option<u64>,
 }
 
 /// Path of the configuration file of a project.
@@ -197,6 +201,12 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
     }
     if overrides.auto_merge {
         config.pipeline.auto_merge = true;
+    }
+    if let Some(t) = overrides.max_tokens {
+        config.pipeline.max_tokens = Some(t);
+    }
+    if let Some(s) = overrides.max_duration_secs {
+        config.pipeline.max_duration_secs = Some(s);
     }
 
     // Agents and tools.

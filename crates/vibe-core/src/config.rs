@@ -113,6 +113,25 @@ pub struct PipelineConfig {
     /// `assisted` (let the `merge_resolver` agent's model try first).
     #[serde(default)]
     pub merge_strategy: MergeStrategy,
+    /// Maximum input plus output tokens of a run, counted across resumes.
+    /// When reached the run pauses; raise the limit and resume to continue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
+    /// Maximum active time of a run in seconds, counted across resumes
+    /// (time spent paused is not counted). When reached the run pauses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_duration_secs: Option<u64>,
+}
+
+impl PipelineConfig {
+    /// Budget limits of a run.
+    #[must_use]
+    pub fn budget_limits(&self) -> crate::BudgetLimits {
+        crate::BudgetLimits {
+            max_tokens: self.max_tokens,
+            max_duration: self.max_duration_secs.map(std::time::Duration::from_secs),
+        }
+    }
 }
 
 /// Conflict handling strategy at merge time.
@@ -160,6 +179,8 @@ impl Default for PipelineConfig {
             validation_commands: Vec::new(),
             max_validation_fix_attempts: default_validation_fix_attempts(),
             merge_strategy: MergeStrategy::Manual,
+            max_tokens: None,
+            max_duration_secs: None,
         }
     }
 }

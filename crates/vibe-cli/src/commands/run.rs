@@ -51,6 +51,8 @@ pub async fn run(root: &Path, args: RunArgs, ui: Ui) -> Result<u8> {
         workspace: args.workspace.clone(),
         auto_merge: args.auto_merge,
         script: args.script.clone(),
+        max_tokens: args.max_tokens,
+        max_duration_secs: args.max_duration,
     };
     let ctx = build_context(root, &overrides).await?;
     let outcome = execute(&ctx, &args, ui).await;
@@ -139,7 +141,7 @@ async fn execute(ctx: &crate::app::AppContext, args: &RunArgs, ui: Ui) -> Result
 
 /// Flags of this invocation that a `--resume` must repeat, because they are
 /// not persisted with the run (`--provider`, `--model`, `--workspace`,
-/// `--script`, `--auto-merge`). Empty, or starting with a space.
+/// `--script`, `--auto-merge`, budgets). Empty, or starting with a space.
 fn carried_flags(args: &RunArgs) -> String {
     let mut out = String::new();
     if let Some(p) = &args.provider {
@@ -156,6 +158,12 @@ fn carried_flags(args: &RunArgs) -> String {
     }
     if args.auto_merge {
         out.push_str(" --auto-merge");
+    }
+    if let Some(t) = args.max_tokens {
+        out.push_str(&format!(" --max-tokens {t}"));
+    }
+    if let Some(s) = args.max_duration {
+        out.push_str(&format!(" --max-duration {s}s"));
     }
     out
 }

@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 pub mod agent;
+pub mod budget;
 pub mod config;
 pub mod error;
 pub mod event;
@@ -47,6 +48,7 @@ pub mod workspace;
 pub use agent::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, ModelSelection, ThinkingLevel, ToolSelection,
 };
+pub use budget::{BudgetExceeded, BudgetLimits, RunBudget};
 pub use config::{
     MergeStrategy, PhaseModels, PipelineConfig, PluginConfig, ProviderConfig, SecurityConfig,
     VibeConfig,

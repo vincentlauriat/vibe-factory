@@ -9,8 +9,8 @@ use tokio::sync::watch;
 use vibe_agents::AgentRunner;
 use vibe_core::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, Complexity, Error, ErrorKind, EventBus,
-    ModelProvider, ModelRef, ModelSelection, Permissions, Phase, Plan, Registry, Result, RunId,
-    SecurityConfig, SharedProvider, Spec, Task, TaskStatus, ToolContext, ToolRegistry,
+    ModelProvider, ModelRef, ModelSelection, Permissions, Phase, Plan, Registry, Result, RunBudget,
+    RunId, SecurityConfig, SharedProvider, Spec, Task, TaskStatus, ToolContext, ToolRegistry,
     ToolSelection, Usage, VibeConfig, Workspace, WorkspaceProvider,
 };
 
@@ -258,6 +258,10 @@ pub struct RunContext {
     pub resetter: Option<Resetter>,
     /// Cancellation token.
     pub cancel: Option<watch::Receiver<bool>>,
+    /// Token and duration budget of the run, shared with its agents. A
+    /// reached limit stops the run like a cancellation; the pipeline then
+    /// pauses it instead of cancelling it.
+    pub budget: Arc<RunBudget>,
     /// Complexity forced by the caller.
     pub complexity_override: Option<Complexity>,
     /// Current specification, once written or loaded.
@@ -286,10 +290,10 @@ impl std::fmt::Debug for RunContext {
 }
 
 impl RunContext {
-    /// Whether the run has been cancelled.
+    /// Whether the run has been cancelled or reached a budget limit.
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
-        self.cancel.as_ref().is_some_and(|rx| *rx.borrow())
+        self.cancel.as_ref().is_some_and(|rx| *rx.borrow()) || self.budget.exceeded().is_some()
     }
 
     /// Agent spec for `role`: the registry's (plugins and overrides win),
@@ -340,7 +344,8 @@ impl RunContext {
         .task(self.task.clone())
         .context_window(context_window_for(&self.config, &model))
         .tool_context(ToolContext::new(self.workspace.root.clone()))
-        .permissions(self.permissions(spec));
+        .permissions(self.permissions(spec))
+        .budget(Arc::clone(&self.budget));
         if let Some(c) = &self.cancel {
             runner = runner.cancel_token(c.clone());
         }

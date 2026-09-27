@@ -322,6 +322,15 @@ pub fn summary_text(
         human_tokens(report.usage.input_tokens),
         human_tokens(report.usage.output_tokens)
     ));
+    if report.state.usage != report.usage {
+        // Resumed run: show what the whole run consumed so far.
+        out.push_str(&format!(
+            "run total  {} in / {} out, {} active\n",
+            human_tokens(report.state.usage.input_tokens),
+            human_tokens(report.state.usage.output_tokens),
+            human_duration(std::time::Duration::from_millis(report.state.active_ms))
+        ));
+    }
     if let Some(err) = &report.state.last_error {
         out.push_str(&format!("note       {}\n", truncate(err, 200)));
     }
@@ -349,6 +358,8 @@ pub fn summary_json(report: &RunReport, info: &SummaryInfo, exit_code: u8) -> se
         "exit_code": exit_code,
         "duration_ms": report.duration.as_millis() as u64,
         "usage": report.usage,
+        "run_usage": report.state.usage,
+        "run_active_ms": report.state.active_ms,
         "phases": report.phases,
         "last_error": report.state.last_error,
         "branch": info.branch,

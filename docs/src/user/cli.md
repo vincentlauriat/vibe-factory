@@ -137,6 +137,8 @@ Runs the task through the pipeline and renders its progress live.
 | `--auto-merge` | merge automatically once QA approves |
 | `--script <FILE>` | drive the `mock` provider with scripted responses from a JSON file; implies `--provider mock` on every phase and cannot be combined with `--provider` or `--model` |
 | `--resume` | continue the last run of the task where it stopped |
+| `--max-tokens <N>` | pause the run once it used N tokens, counted across resumes; overrides `pipeline.max_tokens` |
+| `--max-duration <D>` | pause the run after D of active work, counted across resumes: seconds, or `90s`, `15m`, `2h`; overrides `pipeline.max_duration_secs` |
 
 Phases are `assess`, `spec`, `plan`, `build`, `qa`, `fix`, `merge`. These flags override the
 configuration for this run only; nothing is written back. `--provider` and `--model` replace
@@ -149,7 +151,7 @@ in the [Quick start](quickstart.md#try-it-with-no-api-key).
 | Code | Meaning |
 |------|---------|
 | `0` | the task ended `ready` or `done`, or the run stopped where `--dry-run` or `--until` asked |
-| `2` | the run paused for a human: task in `review` (QA did not approve, escalation, inconclusive review) |
+| `2` | the run paused for a human: task in `review` (QA did not approve, escalation, inconclusive review), or a [run budget](configuration.md#run-budgets) was reached |
 | `1` | the run failed, or the command itself failed (unknown task, bad configuration, plugin or workspace error) |
 | `130` | the run was cancelled (`Ctrl-C`, or a hook that aborted a phase) |
 

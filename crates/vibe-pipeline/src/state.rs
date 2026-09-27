@@ -5,7 +5,7 @@
 //! [`crate::Pipeline::resume`] from [`RunState::current_phase`].
 
 use chrono::{DateTime, Utc};
-use vibe_core::{Phase, RunId, TaskId};
+use vibe_core::{Phase, RunId, TaskId, Usage};
 
 use crate::complexity::Profile;
 
@@ -93,6 +93,13 @@ pub struct RunState {
     /// Index into `validations` of the failure awaiting the fixer.
     #[serde(default)]
     pub pending_validation_fix: Option<usize>,
+    /// Tokens used by every invocation of the run, retained across resumes.
+    #[serde(default)]
+    pub usage: Usage,
+    /// Active time of every invocation of the run in milliseconds, retained
+    /// across resumes (time spent paused is not counted).
+    #[serde(default)]
+    pub active_ms: u64,
     /// Last error message, if the run failed.
     #[serde(default)]
     pub last_error: Option<String>,
@@ -117,6 +124,8 @@ impl RunState {
             validations: Vec::new(),
             validation_fix_attempts: 0,
             pending_validation_fix: None,
+            usage: Usage::default(),
+            active_ms: 0,
         }
     }
 

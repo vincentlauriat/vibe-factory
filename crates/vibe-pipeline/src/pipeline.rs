@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::{OnceCell, watch};
 use vibe_core::{
     Complexity, Envelope, Error, ErrorKind, Event, EventBus, EventSink, HookDecision, Phase,
-    Registry, Result, RunId, SubtaskStatus, Task, TaskId, TaskStatus, ToolRegistry, Usage,
-    VibeConfig, WorkspaceProvider,
+    Registry, Result, RunBudget, RunId, SubtaskStatus, Task, TaskId, TaskStatus, ToolRegistry,
+    Usage, VibeConfig, WorkspaceProvider,
 };
 
 use crate::complexity::{Profile, heuristic_complexity, profile_for};
@@ -143,6 +143,28 @@ fn status_for(phase: Phase) -> TaskStatus {
         Phase::Build => TaskStatus::Building,
         Phase::Qa | Phase::Fix | Phase::Merge => TaskStatus::Review,
     }
+}
+
+/// Fold the usage and active time of this invocation into the persisted
+/// totals of the run, which started the invocation at `base`.
+fn sync_accounting(ctx: &mut RunContext, base: (Usage, u64), started: Instant) {
+    ctx.state.usage = base.0.combined(ctx.usage);
+    let now = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    ctx.state.active_ms = base.1.saturating_add(now);
+}
+
+/// Pause the run because a budget limit was reached: the run stays
+/// resumable at the current phase once the limit is raised.
+async fn pause_for_budget(ctx: &mut RunContext, reason: String) {
+    let reason = format!("{reason}; raise the limit and resume to continue");
+    ctx.events
+        .publish(Event::Paused {
+            run: ctx.run_id,
+            reason: reason.clone(),
+        })
+        .await;
+    let _ = ctx.note(&format!("Run paused: {reason}.")).await;
+    ctx.state.last_error = Some(reason);
 }
 
 /// Runs tasks through the multi-agent pipeline.
@@ -320,6 +342,12 @@ impl Pipeline {
         let plan = store.load_plan(task.id).await?;
 
         let start = options.from_phase.unwrap_or(Phase::Assess);
+        let base = (state.usage, state.active_ms);
+        let budget = Arc::new(RunBudget::new(
+            self.config.pipeline.budget_limits(),
+            state.usage.total(),
+            Duration::from_millis(state.active_ms),
+        ));
         let profile = state.profile.clone().unwrap_or_else(|| {
             profile_for(
                 options
@@ -345,6 +373,7 @@ impl Pipeline {
             committer: self.deps.committer.clone(),
             resetter: self.deps.resetter.clone(),
             cancel: options.cancel.clone(),
+            budget,
             complexity_override: options.complexity_override,
             spec,
             plan,
@@ -377,6 +406,11 @@ impl Pipeline {
                 current = ctx.profile.next_after(phase);
                 continue;
             }
+            if let Some(exceeded) = ctx.budget.exceeded() {
+                ctx.state.current_phase = phase;
+                pause_for_budget(&mut ctx, exceeded.to_string()).await;
+                break (TaskStatus::Backlog, RunStatus::Paused);
+            }
             if ctx.is_cancelled() {
                 ctx.state.current_phase = phase;
                 ctx.state.last_error = Some("cancelled".into());
@@ -385,6 +419,7 @@ impl Pipeline {
             ctx.phase = phase;
             ctx.state.current_phase = phase;
             ctx.state.status = RunStatus::Running;
+            sync_accounting(&mut ctx, base, started);
             ctx.state.touch();
             ctx.task.set_status(status_for(phase));
             store.save_task(&ctx.task).await?;
@@ -458,6 +493,35 @@ impl Pipeline {
                         }
                     }
                 }
+                Err(e) if e.kind == ErrorKind::Cancelled && ctx.budget.exceeded().is_some() => {
+                    let reason = ctx
+                        .budget
+                        .exceeded()
+                        .map(|x| x.to_string())
+                        .unwrap_or_default();
+                    events
+                        .publish(Event::PhaseFinished {
+                            run: run_id,
+                            phase,
+                            success: false,
+                            summary: reason.clone(),
+                        })
+                        .await;
+                    ctx.registry.after_phase(phase, &ctx.task, false).await;
+                    phases_run.push(PhaseResult {
+                        phase,
+                        success: false,
+                        summary: reason.clone(),
+                        usage,
+                        next: Transition::Stop {
+                            status: TaskStatus::Backlog,
+                            reason: reason.clone(),
+                            pause: true,
+                        },
+                    });
+                    pause_for_budget(&mut ctx, reason).await;
+                    Flow::End(TaskStatus::Backlog, RunStatus::Paused)
+                }
                 Err(e) => {
                     let cancelled = e.kind == ErrorKind::Cancelled;
                     events
@@ -519,6 +583,7 @@ impl Pipeline {
                     if let Some(n) = next {
                         ctx.state.current_phase = n;
                     }
+                    sync_accounting(&mut ctx, base, started);
                     ctx.state.touch();
                     store.save_run_state(&ctx.state).await?;
                     current = next;
@@ -529,6 +594,7 @@ impl Pipeline {
         ctx.task.set_status(final_status);
         store.save_task(&ctx.task).await?;
         ctx.state.status = run_status;
+        sync_accounting(&mut ctx, base, started);
         ctx.state.touch();
         store.save_run_state(&ctx.state).await?;
         events

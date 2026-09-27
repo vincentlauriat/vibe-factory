@@ -154,6 +154,37 @@ pub struct RunArgs {
     /// Resume the last run of the task where it stopped.
     #[arg(long)]
     pub resume: bool,
+    /// Pause the run once it used this many tokens (input plus output),
+    /// counted across resumes. Overrides `pipeline.max_tokens`.
+    #[arg(long, value_name = "TOKENS")]
+    pub max_tokens: Option<u64>,
+    /// Pause the run once it was active this long, counted across resumes:
+    /// seconds, or a number followed by `s`, `m` or `h` (`90m`). Overrides
+    /// `pipeline.max_duration_secs`.
+    #[arg(long, value_name = "DURATION", value_parser = parse_duration_secs)]
+    pub max_duration: Option<u64>,
+}
+
+/// Parse `90`, `90s`, `15m` or `2h` into seconds.
+pub fn parse_duration_secs(text: &str) -> Result<u64, String> {
+    let text = text.trim();
+    let (number, unit) = match text.char_indices().last() {
+        Some((i, c)) if c.is_ascii_alphabetic() => (&text[..i], c.to_ascii_lowercase()),
+        _ => (text, 's'),
+    };
+    let value: u64 = number
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid duration `{text}`: expected e.g. 90, 90s, 15m or 2h"))?;
+    let factor = match unit {
+        's' => 1,
+        'm' => 60,
+        'h' => 3600,
+        _ => return Err(format!("invalid duration unit in `{text}`: use s, m or h")),
+    };
+    value
+        .checked_mul(factor)
+        .ok_or_else(|| format!("duration `{text}` is too large"))
 }
 
 /// `vibe config …`
@@ -324,5 +355,28 @@ mod tests {
         assert!(args.dry_run);
         assert_eq!(args.from, Some(PhaseArg::Plan));
         assert_eq!(args.complexity, Some(ComplexityArg::Simple));
+    }
+
+    #[test]
+    fn budget_flags() {
+        let Command::Run(args) = Cli::parse_from([
+            "vibe",
+            "run",
+            "1",
+            "--max-tokens",
+            "50000",
+            "--max-duration",
+            "15m",
+        ])
+        .command
+        else {
+            panic!("not a run command");
+        };
+        assert_eq!(args.max_tokens, Some(50_000));
+        assert_eq!(args.max_duration, Some(900));
+        assert_eq!(parse_duration_secs("90"), Ok(90));
+        assert_eq!(parse_duration_secs("2H"), Ok(7200));
+        assert!(parse_duration_secs("3d").is_err());
+        assert!(parse_duration_secs("m").is_err());
     }
 }

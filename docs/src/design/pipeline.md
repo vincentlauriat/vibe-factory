@@ -254,6 +254,20 @@ never redone; interrupted ones are retried. When a **failed** run resumes at `bu
 and skipped subtasks go back to pending with their attempt counters reset, and a progress
 note says how many.
 
+## Budgets
+
+`run.json` accumulates the tokens (`usage`) and active milliseconds (`active_ms`) of every
+invocation of a run. The driver builds a `vibe_core::RunBudget` from those totals and the
+`pipeline.max_tokens` / `pipeline.max_duration_secs` limits, stores it in the `RunContext`
+and hands it to every `AgentRunner`. The runner adds each model call's usage to it and
+treats a reached limit like a cancellation: no new step starts. `RunContext::is_cancelled`
+is true as well, so the build scheduler stops launching sessions and puts interrupted
+subtasks back to pending. The driver tells the two apart with `RunBudget::exceeded`: a
+cancelled phase whose budget is exhausted ends the run as `paused` (task `backlog`) at the
+same `current_phase`, and the budget is also checked before every phase. The totals are
+written to `run.json` before and after each phase and at the end of the run, so a crash
+loses at most the accounting of the phase in progress.
+
 `run` with `from_phase` is different: it starts a new run id at that phase, keeping only the
 previous profile. It is how you re-run QA after fixing things by hand (`--from qa`).
 
