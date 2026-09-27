@@ -106,8 +106,9 @@ The worktree provider can instead ask a model to resolve conflicts (`MergeStrate
 For each conflicting file it sends the content with its markers, asks for the fully merged
 file, and writes it back only if the answer contains no conflict marker. If every file is
 resolved, the merge is committed; if any file is not, the merge is aborted and reported for
-human review as above. This strategy is set by the program that builds the workspace
-provider; `.vibe/config.toml` has no key for it yet.
+human review as above. Enable it with `pipeline.merge_strategy = "assisted"` in
+`.vibe/config.toml`; the model used is the one configured for the `merge` phase (or
+`default_model`).
 
 ## Inspecting, merging and discarding by hand
 

@@ -245,8 +245,13 @@ impl RunContext {
             .cloned()
             .or_else(|| vibe_agents::builtin_agent(role))
             .ok_or_else(|| Error::config(format!("no agent registered for role `{role}`")))?;
-        if let Some(pm) = self.config.phases.get(self.phase) {
-            spec.thinking = pm.thinking;
+        if let Some(t) = self
+            .config
+            .phases
+            .get(self.phase)
+            .and_then(|pm| pm.thinking)
+        {
+            spec.thinking = t;
         }
         Ok(spec)
     }

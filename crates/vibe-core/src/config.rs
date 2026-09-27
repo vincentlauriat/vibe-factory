@@ -55,9 +55,10 @@ impl ProviderConfig {
 pub struct PhaseModel {
     /// `provider/model` or bare model on the default provider.
     pub model: String,
-    /// Thinking level.
-    #[serde(default)]
-    pub thinking: ThinkingLevel,
+    /// Thinking level override. When absent every agent of the phase keeps
+    /// the thinking level of its own [`crate::AgentSpec`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingLevel>,
 }
 
 /// Model assignment per phase.
@@ -216,9 +217,6 @@ pub struct VibeConfig {
     /// Default `provider/model` for every phase.
     #[serde(default = "default_model")]
     pub default_model: String,
-    /// Default thinking level.
-    #[serde(default)]
-    pub default_thinking: ThinkingLevel,
     /// Per-phase overrides.
     #[serde(default)]
     pub phases: PhaseModels,
@@ -285,7 +283,6 @@ impl Default for VibeConfig {
         Self {
             default_provider: default_provider(),
             default_model: default_model(),
-            default_thinking: ThinkingLevel::Medium,
             phases: PhaseModels::default(),
             providers: default_providers(),
             pipeline: PipelineConfig::default(),
@@ -327,9 +324,10 @@ impl VibeConfig {
         Ok(())
     }
 
-    /// Model and thinking level to use for a phase.
+    /// Model to use for a phase, and the thinking level override if the
+    /// phase declares one (`None` means "keep each agent's own level").
     #[must_use]
-    pub fn model_for(&self, phase: Phase) -> (ModelRef, ThinkingLevel) {
+    pub fn model_for(&self, phase: Phase) -> (ModelRef, Option<ThinkingLevel>) {
         match self.phases.get(phase) {
             Some(pm) => (
                 ModelRef::parse(&pm.model, &self.default_provider),
@@ -337,7 +335,7 @@ impl VibeConfig {
             ),
             None => (
                 ModelRef::parse(&self.default_model, &self.default_provider),
-                self.default_thinking,
+                None,
             ),
         }
     }
@@ -372,9 +370,10 @@ thinking = "high"
         let cfg = VibeConfig::from_toml(text).unwrap();
         let (m, t) = cfg.model_for(Phase::Plan);
         assert_eq!(m, ModelRef::new("openai", "gpt-5"));
-        assert_eq!(t, ThinkingLevel::High);
-        let (m, _) = cfg.model_for(Phase::Build);
+        assert_eq!(t, Some(ThinkingLevel::High));
+        let (m, t) = cfg.model_for(Phase::Build);
         assert_eq!(m.provider, "anthropic");
+        assert_eq!(t, None);
     }
 
     #[test]

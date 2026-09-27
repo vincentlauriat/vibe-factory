@@ -13,7 +13,6 @@ Without any configuration, Vibe Factory knows three providers and uses
 ```toml
 default_provider = "anthropic"
 default_model = "anthropic/claude-sonnet-5"
-default_thinking = "medium"
 
 [providers.anthropic]
 kind = "anthropic"
@@ -29,10 +28,10 @@ base_url = "http://localhost:11434/v1"
 default_model = "qwen2.5-coder"
 ```
 
-These built-in values apply only when `.vibe/config.toml` does not exist. Once the file
-exists, the providers are exactly the `[providers.*]` tables it contains: a file without any
-`[providers]` table declares no provider at all. Declare every provider you use (a file
-written from the defaults, as above, already contains the three).
+These built-in values apply when `.vibe/config.toml` does not exist **and** when the file
+contains no `[providers.*]` table at all. As soon as you declare one provider, the providers
+are exactly the tables you wrote: declare every provider you use (a file written from the
+defaults, as above, already contains the three).
 
 A provider whose key is missing still loads. It fails with an authentication error on its
 first call only, so listing providers you do not use is harmless.
@@ -107,12 +106,11 @@ ollama, openai)``.
 
 ## Models per phase
 
-Each pipeline phase can use its own model and thinking level. Phases without an entry use
-`default_model` and `default_thinking`.
+Each pipeline phase can use its own model and, optionally, its own thinking level. Phases
+without an entry use `default_model`, and every agent keeps its own thinking level.
 
 ```toml
 default_model = "anthropic/sonnet"
-default_thinking = "medium"
 
 [phases.assess]
 model = "anthropic/haiku"

@@ -49,7 +49,7 @@ documented trait, and plugins can be written in Rust or in any language.
 
 ## Install
 
-Requires Rust 1.85+ and git.
+Requires Rust 1.88+ and git.
 
 ```sh
 cargo install --git https://github.com/vincentlauriat/vibe-factory vibe-cli
