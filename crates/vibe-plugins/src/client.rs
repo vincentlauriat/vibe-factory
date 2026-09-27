@@ -89,6 +89,18 @@ impl Shared {
     }
 }
 
+/// Removes a request from the pending map when dropped.
+struct PendingGuard<'a> {
+    shared: &'a Shared,
+    id: u64,
+}
+
+impl Drop for PendingGuard<'_> {
+    fn drop(&mut self) {
+        self.shared.state().pending.remove(&self.id);
+    }
+}
+
 /// A running plugin (a child process, or any pair of byte streams) speaking
 /// the Vibe Plugin Protocol.
 ///
@@ -237,6 +249,12 @@ impl PluginProcess {
             }
             st.pending.insert(id, tx);
         }
+        // Removes the entry however this call ends, including when the
+        // caller's future is dropped while waiting.
+        let _pending = PendingGuard {
+            shared: &self.shared,
+            id,
+        };
         let params = (!params.is_null()).then_some(params);
         let request = Message::Request(Request::new(id, method, params));
         // The write is covered by the timeout too: a plugin that stops
@@ -253,11 +271,7 @@ impl PluginProcess {
                 ))
             })?
         };
-        let outcome = tokio::time::timeout(timeout, exchange).await;
-        if !matches!(outcome, Ok(Ok(_))) {
-            self.shared.state().pending.remove(&id);
-        }
-        match outcome {
+        match tokio::time::timeout(timeout, exchange).await {
             Ok(result) => result,
             Err(_) => {
                 if !written.load(Ordering::Relaxed) {
@@ -554,6 +568,31 @@ mod tests {
         let err = p.call("fail", Value::Null).await.unwrap_err();
         assert_eq!(err.kind, vibe_core::ErrorKind::Plugin);
         assert!(err.message.contains("boom"));
+    }
+
+    #[tokio::test]
+    async fn aborted_caller_leaves_no_pending_entry() {
+        let p = Arc::new(fake_plugin(|_, _| None));
+        let caller = {
+            let p = Arc::clone(&p);
+            tokio::spawn(async move { p.call("silent", Value::Null).await })
+        };
+        // Wait until the request is registered and in flight.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while p.shared.state().pending.is_empty() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "call never registered"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        assert!(p.shared.state().pending.is_empty());
+        assert!(
+            !p.is_closed(),
+            "dropping a caller must not break the connection"
+        );
     }
 
     #[tokio::test]
