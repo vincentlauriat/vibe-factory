@@ -29,8 +29,9 @@ git status                  # a clean git repository is the easiest start
 vibe init
 ```
 
-`vibe init` writes `.vibe/config.toml` with every key at its default value and adds
-`worktrees/` and `tool-output/` to `.vibe/.gitignore`. Inspect the configuration:
+`vibe init` writes `.vibe/config.toml` with every key at its default value and a commented
+`[[plugins]]` example, and adds `worktrees/` and `tool-output/` to `.vibe/.gitignore`
+(`tasks/` stays committed on purpose). Inspect the effective configuration:
 
 ```sh
 vibe config show
@@ -266,7 +267,9 @@ vibe run 1 --provider mock --dry-run
 vibe task show 1
 ```
 
-The mock assessor classifies the task as `simple`, so the spec is written by the gatherer
+This is the CLI's built-in mock, used whenever no `[providers.mock]` table is declared. A
+provider you declare yourself with `kind = "mock"` only answers plain text, so its structured
+phases fail. The mock assessor classifies the task as `simple`, so the spec is written by the gatherer
 alone, and the planner returns a one-subtask plan. Drop `--dry-run` to go through build, QA
 and merge as well.
 
@@ -291,7 +294,7 @@ answers replayed in order, or an object with answers per agent role:
 ```
 
 ```sh
-vibe run 1 --provider mock --script demo.json
+vibe run 1 --script demo.json      # implies the mock provider on every phase
 ```
 
 Each request takes the next answer routed to its role, else the next entry of `steps`, else,

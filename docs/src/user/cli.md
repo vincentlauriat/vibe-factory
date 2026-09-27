@@ -25,7 +25,7 @@ Global options may appear before or after the subcommand.
 | Option | Effect |
 |--------|--------|
 | `-C, --project <DIR>` | start directory; the project is this directory (default: the current one) or its nearest parent that contains a `.vibe` directory; `vibe init` never searches parents |
-| `-v, --verbose` | more logging on standard error: `-v` info, `-vv` debug, `-vvv` trace; `RUST_LOG`, when set, wins |
+| `-v, --verbose` | more logging on standard error: default warnings only; `-v` info, `-vv` debug, `-vvv` trace; a non-empty `RUST_LOG` wins |
 | `--json` | machine-readable output: one JSON document, or one JSON event per line for `vibe run` |
 | `--no-color` | no colours; also the case when `NO_COLOR` is set or the output is not a terminal |
 | `-h, --help` | help of the command |
@@ -50,12 +50,14 @@ nothing is an error.
 vibe init [--force]
 ```
 
-Creates `.vibe/config.toml` with every key at its default value, under a short comment, in
-the project directory (the current directory unless `-C` is given). It refuses to overwrite
-an existing file unless `--force` is given. In a git repository it also adds `worktrees/`
-and `tool-output/` to `.vibe/.gitignore` (with a comment explaining that `tasks/` is
-committable on purpose), keeping any lines already there; outside git it
-warns that worktree isolation needs git. Run `vibe doctor` afterwards. The file is described in
+Creates `.vibe/config.toml` in the project directory (the current directory unless `-C` is
+given; parents are not searched): a two-line header comment, every key at its default value,
+and a commented `[[plugins]]` example at the end, so you can append plugin tables. It refuses
+to overwrite an existing file unless `--force` is given, which rewrites the defaults. In a
+git repository it also writes `.vibe/.gitignore`, or completes an existing one without
+duplicating lines, with `worktrees/`, `tool-output/` and a comment explaining that `tasks/`
+is committed on purpose. Outside git it warns that worktree isolation needs git. It ends by
+printing the next steps; run `vibe doctor` afterwards. The file is described in
 [Configuration](configuration.md).
 
 ## `vibe task`
@@ -88,8 +90,8 @@ vibe task add "Migrate the settings page" --description-file notes/settings.md
 vibe task list [--status <STATUS>] [--all]
 ```
 
-Lists tasks, newest first, with number, status, complexity and title. With `--json`, the
-output is an array of `{"number": …, "task": {…}}` objects. `done` and
+Lists tasks by number with status, complexity and title. With `--json`, the output is an
+array of `{"number": …, "task": {…}}` objects. `done` and
 `cancelled` tasks are hidden unless `--all` is given. `--status` keeps one of `backlog`,
 `planning`, `building`, `review`, `ready`, `done`, `failed`, `cancelled`.
 
@@ -129,11 +131,11 @@ Runs the task through the pipeline and renders its progress live.
 | `--from <PHASE>` | start at this phase, reusing the persisted spec and plan |
 | `--until <PHASE>` | pause (resumably) once this phase is done |
 | `--dry-run` | only assess, specify and plan; same as `--until plan` |
-| `--provider <NAME>` | use this provider for every phase, with its default model unless `--model` is given; `mock` works without any `[providers.mock]` table |
+| `--provider <NAME>` | use this provider for every phase, with its default model unless `--model` is given; `mock` selects the built-in mock when no `[providers.mock]` table exists |
 | `--model <PROVIDER/MODEL>` | use this model for every phase; a bare model name uses the default provider (or `--provider`) |
 | `--workspace <NAME>` | `git_worktree`, `in_place`, or a workspace provider from a plugin |
 | `--auto-merge` | merge automatically once QA approves |
-| `--script <FILE>` | drive the `mock` provider with scripted responses from a JSON file; implies `--provider mock` and ignores `--provider` and `--model` |
+| `--script <FILE>` | drive the `mock` provider with scripted responses from a JSON file; implies `--provider mock` on every phase and cannot be combined with `--provider` or `--model` |
 | `--resume` | continue the last run of the task where it stopped |
 
 Phases are `assess`, `spec`, `plan`, `build`, `qa`, `fix`, `merge`. These flags override the
@@ -160,7 +162,7 @@ continues later.
 **Resuming.** `--resume` continues the last run from the phase recorded in `run.json`,
 keeping its run id, profile, spec, plan and completed subtasks. The other options still
 apply: `--from` overrides the phase to restart at, `--until` and `--dry-run` where to stop. A run that already finished
-cannot be resumed; start a new one. `--from <PHASE>` instead starts a *new* run at that phase,
+cannot be resumed (`already finished; start a new run`, exit 1); start a new one. `--from <PHASE>` instead starts a *new* run at that phase,
 reusing the artefacts on disk; use it after fixing something by hand, for example
 `vibe run 3 --from qa`. Resume semantics are detailed in
 [The pipeline](../design/pipeline.md#resume).

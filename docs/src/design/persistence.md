@@ -179,25 +179,27 @@ Stop any run of the task before editing its files.
 
 ## What to commit
 
-In a git repository, `vibe init` creates (or completes) `.vibe/.gitignore` with:
+In a git repository, `vibe init` creates (or completes, without duplicating lines)
+`.vibe/.gitignore`:
 
 ```gitignore
+# tasks/ is committed on purpose: specs, plans and QA reports are project history.
 worktrees/
 tool-output/
 ```
 
-Everything else under `.vibe/` is left to you. A useful split:
+Task directories are therefore committed by default: reviewers see the spec, plan and QA
+reports next to the change they produced.
 
-| Commit | Usually ignore |
-|--------|----------------|
+| Commit | Ignore |
+|--------|--------|
 | `config.toml` (without inline `api_key` values) | `worktrees/` (ignored by `vibe init`) |
 | `agents/` | `tool-output/` (ignored by `vibe init`; only appears with `in_place`) |
 | `plugins/` manifests you want everyone to load | `specs/` (only appears with `in_place`) |
-| `tasks/`, if you want specs, plans and QA reports reviewed with the code | `tasks/*/events.jsonl` and `tasks/*/run.json`, if you commit `tasks/` |
+| `tasks/` (the default) | optionally `tasks/*/events.jsonl` and `tasks/*/run.json` |
 
-Committing `tasks/` gives reviewers the spec, plan and QA reports next to the change; the
-event log is large and machine-oriented, and `run.json` changes on every run. To keep all
-task data local instead, add `tasks/` to `.vibe/.gitignore`.
+The event log is large and machine-oriented, and `run.json` changes on every run; add them
+to `.vibe/.gitignore` if the noise bothers you. To keep all task data local, add `tasks/`.
 
 `.vibe/worktrees/` also contains its own `.gitignore` with `*`, written when the first
 worktree is created, so worktrees never show up in your `git status` even without these
