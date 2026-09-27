@@ -19,6 +19,16 @@ All notable changes to this project are documented here. The format follows
 - `RunManager`, the single seam for interfaces (ADR-007); one process at a time per task
   (OS lock on `run.lock`), cross-process index locking, and `vibe cancel [--wait]`.
 - `vibe tui`: task board and live run view with approvals, budgets, plan and changes.
+- `vibe serve`: HTTP API over the run manager, server-sent event stream with replay, and an
+  embedded web UI (board, live activity, plan, spec, QA, changes, approvals); loopback by
+  default, Host check, random bearer token. `--evals DIR` adds an evaluation dashboard.
+- `web_fetch` (public hosts only, redirects checked, optional domain allowlist) and
+  `web_search` (SearXNG-compatible endpoint) tools, both behind the network permission.
+- Project memory in `.vibe/memory.jsonl`: lessons of a task are recalled by later ones;
+  `vibe memory list|clear`, `pipeline.project_memory`.
+- `vibe task import` for GitHub and GitLab issues, and `vibe pr` to push a ready task and
+  open its pull request or merge request (`[integrations.github|gitlab]`).
+- A VS Code extension in `editors/vscode`, a client of `vibe serve`.
 
 ### Changed
 - Assisted conflict resolution counts against the run budget, and also resolves conflicts

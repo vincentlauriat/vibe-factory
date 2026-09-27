@@ -179,7 +179,14 @@ async fn row(state: &ServerState, task: &Task) -> ApiResult<Value> {
     let store = store(state);
     let number = store.entry(task.id).await?.map(|e| e.number);
     let running = state.manager.is_active(task.id) || store.is_running(task.id).await?;
-    Ok(json!({"task": task, "number": number, "running": running}))
+    let run = store.load_run_state(task.id).await?.map(|s| {
+        json!({
+            "status": s.status,
+            "current_phase": s.current_phase,
+            "pending_approval": s.pending_approval,
+        })
+    });
+    Ok(json!({"task": task, "number": number, "running": running, "run": run}))
 }
 
 async fn list_tasks(State(state): State<ServerState>) -> ApiResult<Json<Value>> {
@@ -216,6 +223,7 @@ async fn show_task(
     let task = find(&state, &reference).await?;
     let store = store(&state);
     let mut out = row(&state, &task).await?;
+    // The full run state replaces the summary of the list.
     out["run"] = json!(store.load_run_state(task.id).await?);
     out["spec"] = json!(store.load_spec(task.id).await?);
     out["plan"] = json!(store.load_plan(task.id).await?);

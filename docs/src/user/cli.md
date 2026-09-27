@@ -314,7 +314,7 @@ with the token controls the agents. `Ctrl-C` stops the server and cancels the ru
 | Method and path | Effect |
 |-----------------|--------|
 | `GET /api/health` | name and version |
-| `GET /api/tasks` | every task with its number and whether it runs |
+| `GET /api/tasks` | every task with its number, whether it runs, and its last run's status, phase and pending approval |
 | `POST /api/tasks` `{"title", "description"}` | create a task |
 | `GET /api/tasks/{ref}` | task, run state, spec, plan and QA reports |
 | `POST /api/tasks/{ref}/run` `{"resume": bool}` | start or resume a run (202) |

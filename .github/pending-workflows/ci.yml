@@ -54,6 +54,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: python3 evals/check_cases.py
 
+  vscode:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+
   book:
     name: Build user & design docs
     runs-on: ubuntu-latest
