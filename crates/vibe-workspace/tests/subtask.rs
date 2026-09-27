@@ -191,3 +191,77 @@ async fn labels_and_branchless_tasks_are_rejected() {
     no_branch.branch = None;
     assert!(subs.open(&no_branch, "s1-a1").await.is_err());
 }
+
+const PREAMBLE: &str =
+    "shared header line one\nshared header line two\nshared header line three\nshared four\n";
+
+/// Answers every resolution request with both edits merged.
+struct ResolvingProvider;
+
+#[async_trait::async_trait]
+impl vibe_core::ModelProvider for ResolvingProvider {
+    fn info(&self) -> vibe_core::ProviderInfo {
+        vibe_core::ProviderInfo {
+            name: "resolver".into(),
+            supports_tools: false,
+            supports_thinking: false,
+            default_model: "m".into(),
+        }
+    }
+
+    async fn complete(
+        &self,
+        _request: vibe_core::CompletionRequest,
+    ) -> vibe_core::Result<vibe_core::CompletionResponse> {
+        Ok(vibe_core::CompletionResponse {
+            message: vibe_core::Message::assistant(format!(
+                "{PREAMBLE}line 1\nONE and TWO\nline 3\n"
+            )),
+            stop_reason: vibe_core::StopReason::EndTurn,
+            usage: vibe_core::Usage::default(),
+            model: "m".into(),
+        })
+    }
+}
+
+#[tokio::test]
+async fn assisted_strategy_resolves_integration_conflicts() {
+    let f = Fixture::new().await;
+    std::fs::write(
+        f.task_ws.root.join("a.txt"),
+        format!("{PREAMBLE}line 1\nline 2\nline 3\n"),
+    )
+    .unwrap();
+    git(&f.task_ws.root, &["add", "-A"]);
+    git(&f.task_ws.root, &["commit", "-qm", "preamble"]);
+    let subs =
+        GitSubtaskWorkspaces::new().with_merge_strategy(vibe_workspace::MergeStrategy::Assisted {
+            provider: std::sync::Arc::new(ResolvingProvider),
+            model: "m".into(),
+        });
+    let one = subs.open(&f.task_ws, "s1-a1").await.unwrap();
+    let two = subs.open(&f.task_ws, "s2-a1").await.unwrap();
+    std::fs::write(
+        one.root.join("a.txt"),
+        format!("{PREAMBLE}line 1\nONE\nline 3\n"),
+    )
+    .unwrap();
+    std::fs::write(
+        two.root.join("a.txt"),
+        format!("{PREAMBLE}line 1\nTWO\nline 3\n"),
+    )
+    .unwrap();
+    subs.integrate(&f.task_ws, &one, "subtask 1").await.unwrap();
+    let second = subs.integrate(&f.task_ws, &two, "subtask 2").await.unwrap();
+    assert!(
+        matches!(second, SubtaskIntegration::Integrated { commit: Some(_) }),
+        "{second:?}"
+    );
+    assert_eq!(
+        f.read("a.txt"),
+        format!("{PREAMBLE}line 1\nONE and TWO\nline 3\n")
+    );
+    assert_eq!(f.task_status(), "");
+    let parents = git(&f.task_ws.root, &["rev-list", "--parents", "-1", "HEAD"]);
+    assert_eq!(parents.split(' ').count(), 3, "a merge commit");
+}

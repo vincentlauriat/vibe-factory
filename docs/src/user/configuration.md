@@ -190,8 +190,8 @@ interrupted; it is bounded by its own timeout. Resuming without raising the limi
 again immediately and spends nothing. Raise the limit in the configuration, or for one
 invocation with `vibe run <REF> --resume --max-tokens N --max-duration 2h`, to continue.
 
-The token limit counts the agents' model calls. The calls made by `merge_strategy =
-"assisted"` to resolve conflict markers are not counted.
+The token limit counts every model call of the run: the agents' calls and the ones made by
+`merge_strategy = "assisted"` to resolve conflict markers.
 
 ## Human approvals
 

@@ -75,7 +75,9 @@ at a time; sessions that finish together are integrated in plan order, and a sub
 only once the work of its `depends_on` subtasks is integrated. If the merge conflicts with
 work integrated since the attempt started, the merge is aborted (the task branch is left
 exactly as it was), the attempt counts as failed with the conflicting files in its notes,
-and the next attempt starts from the updated task branch.
+and the next attempt starts from the updated task branch. With `merge_strategy =
+"assisted"`, the model of the merge phase first tries to resolve the conflict markers, as for
+the final merge; the attempt only fails when a file stays unresolved.
 
 Attempt worktrees and branches are removed after each attempt and, to clean up after a
 crash, when the build starts and ends. `vibe task discard` removes any that remain. Before

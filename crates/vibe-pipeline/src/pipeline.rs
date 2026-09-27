@@ -622,15 +622,21 @@ impl Pipeline {
                 .publish(Event::PhaseStarted { run: run_id, phase })
                 .await;
             let before = ctx.usage;
-            let result = match phase {
-                Phase::Assess => phases::run_assess(&mut ctx).await,
-                Phase::Spec => phases::run_spec(&mut ctx).await,
-                Phase::Plan => phases::run_plan(&mut ctx).await,
-                Phase::Build => phases::run_build(&mut ctx).await,
-                Phase::Qa => phases::run_qa(&mut ctx).await,
-                Phase::Fix => phases::run_fix(&mut ctx).await,
-                Phase::Merge => phases::run_merge(&mut ctx).await,
-            };
+            // Model calls made outside agents (assisted conflict resolution)
+            // count against the run budget too.
+            let budget = Arc::clone(&ctx.budget);
+            let result = vibe_core::budget::scope(budget, async {
+                match phase {
+                    Phase::Assess => phases::run_assess(&mut ctx).await,
+                    Phase::Spec => phases::run_spec(&mut ctx).await,
+                    Phase::Plan => phases::run_plan(&mut ctx).await,
+                    Phase::Build => phases::run_build(&mut ctx).await,
+                    Phase::Qa => phases::run_qa(&mut ctx).await,
+                    Phase::Fix => phases::run_fix(&mut ctx).await,
+                    Phase::Merge => phases::run_merge(&mut ctx).await,
+                }
+            })
+            .await;
             let usage = usage_delta(ctx.usage, before);
             ctx.budget_updated().await;
 

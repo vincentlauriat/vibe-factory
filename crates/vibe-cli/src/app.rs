@@ -279,7 +279,13 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
     let resetter = is_git.then(git_resetter);
     let subtask_workspaces: Option<Arc<dyn vibe_core::SubtaskWorkspaces>> = (is_git
         && uses_worktrees(workspace.name()))
-    .then(|| Arc::new(vibe_workspace::GitSubtaskWorkspaces::new()) as _);
+    .then(|| -> Result<Arc<dyn vibe_core::SubtaskWorkspaces>> {
+        Ok(Arc::new(
+            vibe_workspace::GitSubtaskWorkspaces::new()
+                .with_merge_strategy(merge_strategy(&config, &resolver)?),
+        ))
+    })
+    .transpose()?;
 
     Ok(AppContext {
         root: root.to_path_buf(),
@@ -324,6 +330,22 @@ pub fn container_settings(root: &Path, config: &VibeConfig) -> Result<Option<Con
         .context("invalid [workspace.container] configuration")
 }
 
+/// How merge and subtask integration conflicts are handled: assisted
+/// resolutions use the model of the merge phase, metered against the run
+/// budget.
+fn merge_strategy(config: &VibeConfig, resolver: &CliResolver) -> Result<WorkspaceMergeStrategy> {
+    if config.pipeline.merge_strategy != ConfigMergeStrategy::Assisted {
+        return Ok(WorkspaceMergeStrategy::Manual);
+    }
+    let (model, _) = config.model_for(Phase::Merge);
+    let (llm, model) = vibe_pipeline::ProviderResolver::resolve(resolver, &model)
+        .context("cannot resolve the model of assisted merges")?;
+    Ok(WorkspaceMergeStrategy::Assisted {
+        provider: Arc::new(vibe_core::MeteredProvider::new(llm)),
+        model,
+    })
+}
+
 fn workspace_provider(
     config: &VibeConfig,
     registry: &Registry,
@@ -332,16 +354,9 @@ fn workspace_provider(
 ) -> Result<SharedWorkspaceProvider> {
     let name = config.pipeline.workspace.as_str();
     if uses_worktrees(name) {
-        let mut provider = GitWorktreeProvider::new().with_base_branch(config.base_branch.clone());
-        if config.pipeline.merge_strategy == ConfigMergeStrategy::Assisted {
-            let (model, _) = config.model_for(Phase::Merge);
-            let (llm, model) = vibe_pipeline::ProviderResolver::resolve(resolver, &model)
-                .context("cannot resolve the model of assisted merges")?;
-            provider = provider.with_merge_strategy(WorkspaceMergeStrategy::Assisted {
-                provider: llm,
-                model,
-            });
-        }
+        let provider = GitWorktreeProvider::new()
+            .with_base_branch(config.base_branch.clone())
+            .with_merge_strategy(merge_strategy(config, resolver)?);
         return Ok(match container {
             Some(settings) => Arc::new(ContainerWorkspace::new(provider, settings)),
             None => Arc::new(provider),

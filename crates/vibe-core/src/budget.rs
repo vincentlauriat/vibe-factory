@@ -5,11 +5,90 @@
 //! every model call as it happens; once a limit is reached no new model call
 //! starts and the pipeline pauses the run.
 
-use std::sync::Mutex;
+use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::provider::Usage;
+use crate::error::Result;
+use crate::provider::{
+    CompletionRequest, CompletionResponse, DeltaSink, ModelProvider, ProviderInfo, SharedProvider,
+    Usage,
+};
+
+tokio::task_local! {
+    static CURRENT: Arc<RunBudget>;
+}
+
+/// Run `future` with `budget` as the current budget, so that
+/// [`MeteredProvider`]s called from it count their usage against it.
+pub async fn scope<F: Future>(budget: Arc<RunBudget>, future: F) -> F::Output {
+    CURRENT.scope(budget, future).await
+}
+
+/// The budget set by the enclosing [`scope`], if any.
+#[must_use]
+pub fn current() -> Option<Arc<RunBudget>> {
+    CURRENT.try_with(Arc::clone).ok()
+}
+
+/// A provider whose usage is added to the [`current`] run budget.
+///
+/// For model calls made outside agent runs (which count their own usage),
+/// such as assisted conflict resolution.
+#[derive(Clone)]
+pub struct MeteredProvider {
+    inner: SharedProvider,
+}
+
+impl std::fmt::Debug for MeteredProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MeteredProvider")
+            .field("inner", &self.inner.info().name)
+            .finish()
+    }
+}
+
+impl MeteredProvider {
+    /// Meter `inner`.
+    #[must_use]
+    pub fn new(inner: SharedProvider) -> Self {
+        Self { inner }
+    }
+
+    fn count(response: &Result<CompletionResponse>) {
+        if let (Ok(r), Some(budget)) = (response, current()) {
+            budget.add(r.usage);
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ModelProvider for MeteredProvider {
+    fn info(&self) -> ProviderInfo {
+        self.inner.info()
+    }
+
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        let response = self.inner.complete(request).await;
+        Self::count(&response);
+        response
+    }
+
+    async fn complete_streaming(
+        &self,
+        request: CompletionRequest,
+        on_delta: DeltaSink<'_>,
+    ) -> Result<CompletionResponse> {
+        let response = self.inner.complete_streaming(request, on_delta).await;
+        Self::count(&response);
+        response
+    }
+
+    async fn health_check(&self) -> Result<()> {
+        self.inner.health_check().await
+    }
+}
 
 /// Limits of a run. `None` means unlimited.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -210,5 +289,45 @@ mod tests {
             Some(BudgetExceeded::Duration { limit, .. }) if limit == Duration::from_secs(60)
         ));
         assert!(b.elapsed() >= Duration::from_secs(61));
+    }
+
+    struct Fixed;
+
+    #[async_trait::async_trait]
+    impl ModelProvider for Fixed {
+        fn info(&self) -> ProviderInfo {
+            ProviderInfo {
+                name: "fixed".into(),
+                supports_tools: false,
+                supports_thinking: false,
+                default_model: "m".into(),
+            }
+        }
+
+        async fn complete(&self, _request: CompletionRequest) -> Result<CompletionResponse> {
+            Ok(CompletionResponse {
+                message: crate::Message::assistant("ok"),
+                stop_reason: crate::StopReason::EndTurn,
+                usage: usage(7, 3),
+                model: "m".into(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn metered_calls_count_against_the_scoped_budget() {
+        let provider = MeteredProvider::new(Arc::new(Fixed));
+        let request = || CompletionRequest::new("m", vec![]);
+        // Outside a scope nothing is counted, and nothing fails.
+        provider.complete(request()).await.unwrap();
+        assert!(current().is_none());
+        let budget = Arc::new(RunBudget::unlimited());
+        scope(Arc::clone(&budget), async {
+            provider.complete(request()).await.unwrap();
+            let sink = |_d: crate::StreamDelta| {};
+            provider.complete_streaming(request(), &sink).await.unwrap();
+        })
+        .await;
+        assert_eq!(budget.used_tokens(), 20);
     }
 }

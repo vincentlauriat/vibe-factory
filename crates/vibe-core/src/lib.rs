@@ -49,7 +49,7 @@ pub mod workspace;
 pub use agent::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, ModelSelection, ThinkingLevel, ToolSelection,
 };
-pub use budget::{BudgetExceeded, BudgetLimits, RunBudget};
+pub use budget::{BudgetExceeded, BudgetLimits, MeteredProvider, RunBudget};
 pub use config::{
     ApprovalGate, MergeStrategy, PhaseModels, PipelineConfig, PluginConfig, ProviderConfig,
     SecurityConfig, VibeConfig,

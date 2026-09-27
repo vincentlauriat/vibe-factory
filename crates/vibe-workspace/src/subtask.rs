@@ -13,6 +13,9 @@
 //! branch from the task worktree: fast-forward when the task branch did not
 //! move, else a merge commit. A conflict aborts the merge, so the task
 //! worktree is left exactly as it was, and reports the conflicting files.
+//! With [`MergeStrategy::Assisted`], a model first tries to resolve the
+//! conflicts (as for the task merge); the attempt only conflicts when a file
+//! stays unresolved.
 //! `discard` removes the worktree and deletes its branch.
 
 use std::path::{Path, PathBuf};
@@ -21,20 +24,55 @@ use vibe_core::{Error, Result, SubtaskIntegration, SubtaskWorkspaces, Workspace,
 
 use crate::commit::commit_all;
 use crate::git::Git;
+use crate::merge_ai::{MergeStrategy, resolve_conflicts};
 
 /// Separator between a task's worktree or branch name and a subtask label.
 pub const SUBTASK_SEPARATOR: &str = "--";
 
-/// [`SubtaskWorkspaces`] backed by git worktrees. Stateless; see the
+/// [`SubtaskWorkspaces`] backed by git worktrees; see the
 /// [module documentation](self).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct GitSubtaskWorkspaces;
+#[derive(Debug, Clone, Default)]
+pub struct GitSubtaskWorkspaces {
+    merge_strategy: MergeStrategy,
+}
 
 impl GitSubtaskWorkspaces {
-    /// Provider with default settings.
+    /// Provider with default settings (conflicts are reported, not resolved).
     #[must_use]
     pub fn new() -> Self {
-        Self
+        Self::default()
+    }
+
+    /// Choose how integration conflicts are handled.
+    #[must_use]
+    pub fn with_merge_strategy(mut self, strategy: MergeStrategy) -> Self {
+        self.merge_strategy = strategy;
+        self
+    }
+
+    /// Let the model resolve the conflicts of the merge in progress in
+    /// `task_git`; the resulting commit, or `None` when a file stays
+    /// unresolved (the merge is then still in progress).
+    async fn try_resolve(
+        &self,
+        task_git: &Git,
+        root: &Path,
+        files: &[String],
+    ) -> Result<Option<String>> {
+        let MergeStrategy::Assisted { provider, model } = &self.merge_strategy else {
+            return Ok(None);
+        };
+        let resolved = resolve_conflicts(provider.as_ref(), model, root, files).await?;
+        if !resolved.iter().all(|r| r.resolved) {
+            return Ok(None);
+        }
+        let mut add = vec!["add", "--"];
+        add.extend(files.iter().map(String::as_str));
+        task_git.run(&add).await?;
+        task_git
+            .run_as_framework(&["commit", "--no-edit", "--quiet"])
+            .await?;
+        Ok(Some(task_git.head_sha().await?))
     }
 
     /// Directory of the attempt `label` of the task worktree at `task_root`.
@@ -160,6 +198,20 @@ impl SubtaskWorkspaces for GitSubtaskWorkspaces {
             });
         }
         let files = task_git.conflicted_files().await?;
+        if !files.is_empty() {
+            match self.try_resolve(&task_git, &task.root, &files).await {
+                Ok(Some(commit)) => {
+                    tracing::debug!(%branch, ?files, "subtask conflicts resolved by model");
+                    return Ok(SubtaskIntegration::Integrated {
+                        commit: Some(commit),
+                    });
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::debug!(%branch, error = %e, "assisted resolution failed");
+                }
+            }
+        }
         let aborted = task_git.output(&["merge", "--abort"]).await?;
         if files.is_empty() {
             let detail = if merge.stderr.trim().is_empty() {
