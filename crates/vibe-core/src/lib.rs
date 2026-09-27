@@ -39,6 +39,7 @@ pub mod plugin;
 pub mod prompt;
 pub mod provider;
 pub mod qa;
+pub mod sandbox;
 pub mod spec;
 pub mod store;
 pub mod task;
@@ -67,6 +68,7 @@ pub use provider::{
     StopReason, ToolSpec, Usage,
 };
 pub use qa::{QaIssue, QaReport, QaVerdict, Severity};
+pub use sandbox::{CommandRequest, CommandRunner, PreparedCommand, SharedCommandRunner};
 pub use spec::{Requirement, RequirementKind, Spec, SpecContext};
 pub use store::{SharedTaskStore, TaskStore};
 pub use task::{Complexity, Task, TaskSource, TaskStatus};

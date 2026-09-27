@@ -7,6 +7,7 @@ use crate::agent::ThinkingLevel;
 use crate::error::Result;
 use crate::phase::Phase;
 use crate::provider::ModelRef;
+pub use crate::sandbox::{ContainerConfig, ContainerMount, WorkspaceConfig};
 
 /// Name of the directory holding framework data inside a project.
 pub const VIBE_DIR: &str = ".vibe";
@@ -96,7 +97,8 @@ pub struct PipelineConfig {
     /// Retries per phase when the agent produced no usable output.
     #[serde(default = "default_phase_retries")]
     pub max_phase_retries: u32,
-    /// Workspace provider name (`git_worktree`, `in_place`, or a plugin).
+    /// Workspace provider name (`git_worktree`, `in_place`, `container`, or
+    /// a plugin).
     #[serde(default = "default_workspace")]
     pub workspace: String,
     /// Whether to merge automatically after QA approval.
@@ -285,6 +287,9 @@ pub struct VibeConfig {
     /// Base branch for worktrees (default: current branch).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_branch: Option<String>,
+    /// Workspace provider settings (`[workspace.container]`).
+    #[serde(default, skip_serializing_if = "WorkspaceConfig::is_empty")]
+    pub workspace: WorkspaceConfig,
 }
 
 fn default_provider() -> String {
@@ -338,6 +343,7 @@ impl Default for VibeConfig {
             security: SecurityConfig::default(),
             plugins: Vec::new(),
             base_branch: None,
+            workspace: WorkspaceConfig::default(),
         }
     }
 }

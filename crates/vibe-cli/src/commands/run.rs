@@ -117,7 +117,7 @@ async fn execute(ctx: &crate::app::AppContext, args: &RunArgs, ui: Ui) -> Result
         task_dir: ctx.store.task_dir(task.id).await.ok(),
         ..SummaryInfo::default()
     };
-    if ctx.workspace.name() == "git_worktree" {
+    if crate::app::uses_worktrees(ctx.workspace.name()) {
         let loc = worktree_location(&ctx.root, &report.task);
         if loc.path.is_dir() {
             info.branch = Some(loc.branch);

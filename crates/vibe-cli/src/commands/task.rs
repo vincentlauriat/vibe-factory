@@ -149,7 +149,7 @@ async fn show(root: &Path, store: &Arc<FileTaskStore>, reference: &str, ui: Ui) 
     let qa = store.load_qa_reports(task.id).await?;
     let run = store.load_run_state(task.id).await?;
     let config = load_config(root)?;
-    let worktree = if config.pipeline.workspace == "git_worktree" && is_git_repo(root).await {
+    let worktree = if app::uses_worktrees(&config.pipeline.workspace) && is_git_repo(root).await {
         let loc = worktree_location(root, &task);
         let git = vibe_workspace::Git::new(root);
         let branch_exists = git.branch_exists(&loc.branch).await.unwrap_or(false);
@@ -331,7 +331,7 @@ async fn discard(
     let workspace_name = config.pipeline.workspace.clone();
     let mut discarded_workspace = false;
     match workspace_name.as_str() {
-        "git_worktree" => {
+        name if app::uses_worktrees(name) => {
             if is_git_repo(root).await {
                 let ws = app::worktree_workspace(root, &task);
                 vibe_workspace::GitSubtaskWorkspaces::new()

@@ -82,6 +82,7 @@
 
 pub mod commit;
 pub mod config_guard;
+pub mod container;
 pub mod git;
 pub mod in_place;
 pub mod merge_ai;
@@ -92,6 +93,7 @@ use std::sync::Arc;
 
 pub use commit::{commit_all, has_uncommitted};
 pub use config_guard::{ChangeKind, ConfigChange, ConfigSnapshot};
+pub use container::{ContainerRunner, ContainerSettings, ContainerWorkspace};
 pub use git::{Git, GitOutput, WorktreeInfo};
 pub use in_place::InPlaceWorkspace;
 pub use merge_ai::{MergeStrategy, Resolution, resolve_conflicts};

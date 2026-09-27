@@ -114,6 +114,9 @@ as a plugin in any language; see [Plugins](plugins.md) and
 
 It is a **denylist and a set of validators, not a sandbox**. An agent that can run
 `python -c` or `node -e` can, in principle, do anything the interpreter can. For untrusted
-code or strict environments, combine the policy with an isolated workspace (a container or
-a VM through a `WorkspaceProvider` plugin), keep `allow_network = false`, and use the
-allowlist.
+code or strict environments, combine the policy with an isolated workspace, keep
+`allow_network = false`, and use the allowlist. The built-in
+[container workspace](workspaces.md#container-workspace) runs every shell command in a
+hardened, throw-away container with no network by default; a VM or remote sandbox can be
+plugged in as a `WorkspaceProvider` plugin. The file tools still act on the host worktree,
+inside the path containment described above.

@@ -1021,3 +1021,130 @@ fn parallel_subtasks_run_in_their_own_worktrees_and_are_integrated() {
     // The project checkout was not touched.
     assert!(!p.root().join("one.txt").exists());
 }
+
+/// Image of the live container test, when the runtime has it locally.
+#[cfg(unix)]
+fn local_container_image() -> Option<String> {
+    let image =
+        std::env::var("VIBE_TEST_CONTAINER_IMAGE").unwrap_or_else(|_| "alpine:3.20".to_string());
+    let ok = |args: &[&str]| {
+        StdCommand::new("docker")
+            .args(args)
+            .output()
+            .is_ok_and(|o| o.status.success())
+    };
+    if !ok(&["info"]) || !ok(&["image", "inspect", &image]) {
+        eprintln!("skipping: docker or the image {image} is not available locally");
+        return None;
+    }
+    Some(image)
+}
+
+#[cfg(unix)]
+#[test]
+fn container_workspace_runs_commands_in_a_container() {
+    let Some(image) = local_container_image() else {
+        return;
+    };
+    let p = Project::new();
+    p.init();
+    for (key, value) in [
+        ("pipeline.workspace", "container".to_string()),
+        ("workspace.container.image", image.clone()),
+        (
+            "pipeline.validation_commands",
+            "[\"grep -q container-ok out.txt\"]".to_string(),
+        ),
+    ] {
+        p.vibe()
+            .args(["config", "set", key, &value])
+            .assert()
+            .success();
+    }
+    p.add_task(
+        "Record the environment",
+        "Write out.txt from inside the sandbox.",
+    );
+    let script = p.write_script(
+        "container-script.json",
+        &json!({"routes": {
+            "planner": [fenced(json!({"approach": "one command", "phases": [
+                {"name": "Only", "subtasks": [{"title": "Write out.txt", "description": "run it"}]}
+            ]}))],
+            "coder": [
+                {"tool": "bash", "input": {"command":
+                    "test -f /.dockerenv && echo container-ok > out.txt; touch /etc/escaped 2>/dev/null || echo read-only >> out.txt"}},
+                fenced(json!({"status": "done", "summary": "written"}))
+            ],
+            "qa_reviewer": [fenced(json!({"verdict": "approved", "summary": "ok", "issues": []}))]
+        }}),
+    );
+    let out = p
+        .vibe()
+        .args(["run", "1", "--complexity", "trivial", "--script"])
+        .arg(&script)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(p.task_json(1)["status"], "ready");
+    let worktrees = p.root().join(".vibe").join("worktrees");
+    let task_root = std::fs::read_dir(&worktrees)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.is_dir() && !p.file_name().unwrap().to_string_lossy().starts_with('.'))
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(task_root.join("out.txt")).unwrap(),
+        "container-ok\nread-only\n"
+    );
+    let state: Value =
+        serde_json::from_slice(&std::fs::read(p.task_dir(1).join("run.json")).unwrap()).unwrap();
+    assert_eq!(state["validations"][0]["passed"], true);
+    assert_eq!(state["validations"][0]["metadata"]["runner"], "container");
+    // No container is left behind.
+    let left = StdCommand::new("docker")
+        .args([
+            "ps",
+            "-aq",
+            "--filter",
+            "label=io.vibe-factory.managed=true",
+        ])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&left.stdout).trim().is_empty());
+}
+
+#[test]
+fn container_workspace_requires_a_valid_configuration() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Anything", "x");
+    p.vibe()
+        .args(["config", "set", "pipeline.workspace", "container"])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--dry-run"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("[workspace.container]"));
+    p.vibe()
+        .args(["config", "set", "workspace.container.image", "alpine"])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["config", "set", "workspace.container.network", "host"])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--dry-run"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("namespace"));
+}

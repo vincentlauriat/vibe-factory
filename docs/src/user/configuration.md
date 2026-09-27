@@ -110,7 +110,7 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in [Providers and models](pro
 What these limits do at run time is described in [The pipeline](../design/pipeline.md);
 workspaces and merging in [Workspaces and merging](workspaces.md).
 
-## Required validation commands (unreleased)
+## Required validation commands
 
 ```toml
 [pipeline]
@@ -191,6 +191,27 @@ invocation with `vibe run <REF> --resume --max-tokens N --max-duration 2h`, to c
 
 The token limit counts the agents' model calls. The calls made by `merge_strategy =
 "assisted"` to resolve conflict markers are not counted.
+
+## `[workspace.container]`
+
+Settings of the `container` workspace (`pipeline.workspace = "container"`). Only `image` is
+required; unknown keys are refused.
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `image` | string | required | image the commands run in |
+| `runtime` | string | `"docker"` | `docker` or `podman`, or a path to one of them |
+| `network` | string | `"none"` | `none`, `bridge` or a named network; attached only when `security.allow_network` is true |
+| `mounts` | list of tables | `[]` | extra bind mounts: `source`, `target`, `read_only` (default true) |
+| `cpus` | number | none | `--cpus` |
+| `memory` | string | none | `--memory` and `--memory-swap`, such as `4g` |
+| `pids_limit` | integer | `1024` | maximum number of processes |
+| `tmp_size` | string | runtime default | size of the `/tmp` tmpfs |
+| `user` | string | owner of the worktree (Unix) | `uid[:gid]` or `name[:group]` |
+| `env` | list of names | `[]` | host environment variables passed through |
+| `mount_git_metadata` | bool | `false` | mount the repository's git directory read-only (Unix only) |
+
+See [Container workspace](workspaces.md#container-workspace) for what each setting allows.
 
 ## `[security]`
 
