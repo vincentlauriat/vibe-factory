@@ -72,6 +72,6 @@ pub use store::{SharedTaskStore, TaskStore};
 pub use task::{Complexity, Task, TaskSource, TaskStatus};
 pub use tool::{Permissions, SharedTool, Tool, ToolContext, ToolOutput, ToolRegistry};
 pub use workspace::{
-    InPlaceWorkspace, MergeOutcome, MergeValidator, SharedWorkspaceProvider, Workspace,
-    WorkspaceKind, WorkspaceProvider,
+    InPlaceWorkspace, MergeOutcome, MergeValidator, SharedWorkspaceProvider, SubtaskIntegration,
+    SubtaskWorkspaces, Workspace, WorkspaceKind, WorkspaceProvider,
 };

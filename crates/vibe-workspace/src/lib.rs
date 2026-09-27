@@ -82,6 +82,7 @@ pub mod config_guard;
 pub mod git;
 pub mod in_place;
 pub mod merge_ai;
+pub mod subtask;
 pub mod worktree;
 
 use std::sync::Arc;
@@ -91,6 +92,7 @@ pub use config_guard::{ChangeKind, ConfigChange, ConfigSnapshot};
 pub use git::{Git, GitOutput, WorktreeInfo};
 pub use in_place::InPlaceWorkspace;
 pub use merge_ai::{MergeStrategy, Resolution, resolve_conflicts};
+pub use subtask::GitSubtaskWorkspaces;
 pub use vibe_core::workspace::{MergeOutcome, SharedWorkspaceProvider};
 pub use worktree::GitWorktreeProvider;
 
