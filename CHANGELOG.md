@@ -46,7 +46,7 @@ All notable changes to this project are documented here. The format follows
 - Evaluations: each report records the pipeline error, `summary.md` lists the errors of
   failed runs, and `run_suite.py` stops after the first run rejected for credentials, the
   model name or the configuration instead of failing every run the same way.
-- First real-model baseline, partial: Claude Sonnet 5 passed 16/16 runs over six cases
+- First real-model baseline: Claude Sonnet 5 passed 30/30 runs over the ten cases
   (`evals/baselines/`).
 
 ## [0.2.0] — 2026-09-27

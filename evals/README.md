@@ -95,8 +95,8 @@ whether the refactoring cases really share code are not checked by the oracles.
 
 Published baselines are in [`baselines/`](baselines/):
 
-* [Claude Sonnet 5, 2026-09-27](baselines/2026-09-27-claude-sonnet-5.md) (partial: 16 runs
-  over six cases): 16/16 successful, about four minutes and 150 000 tokens per run.
+* [Claude Sonnet 5, 2026-09-27](baselines/2026-09-27-claude-sonnet-5.md) (ten cases, three
+  repetitions): 30/30 successful, about four minutes and 130 000 tokens per run.
 
 ## One run
 
