@@ -1,0 +1,527 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The pipeline - Vibe Factory</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="An open, extensible framework for autonomous multi-agent software development">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-2dd03f19.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Vibe Factory</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/design/pipeline.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="the-pipeline"><a class="header" href="#the-pipeline">The pipeline</a></h1>
+<p><code>vibe-pipeline</code> turns a task into a sequence of agent sessions. It owns no provider, tool or
+workspace: everything concrete is injected, so the same driver runs under the CLI, in tests
+with a scripted provider, or inside another host. This page describes the driver as
+implemented in <code>crates/vibe-pipeline/src/</code>; the on-disk artefacts it reads and writes are
+described in <a href="persistence.html">Persistence layout</a>.</p>
+<h2 id="entry-points"><a class="header" href="#entry-points">Entry points</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let pipeline = Pipeline::new(PipelineDeps { registry, providers, store, workspace,
+                                            tools, events, config, project_root, committer });
+let report: RunReport = pipeline.run(task_id, RunOptions::default()).await?;
+let report = pipeline.resume(task_id).await?;            // continue the last run
+let report = pipeline.resume_with(task_id, options).await?;
+<span class="boring">}</span></code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>PipelineDeps</code> field</th><th>Role</th></tr>
+</thead>
+<tbody>
+<tr><td><code>registry: Arc&lt;Registry&gt;</code></td><td>plugins, agent overrides, hooks, memory stores, plugin tools</td></tr>
+<tr><td><code>providers: Arc&lt;dyn ProviderResolver&gt;</code></td><td>turns a <code>ModelRef</code> into a provider and a model id</td></tr>
+<tr><td><code>store: Arc&lt;dyn PipelineStore&gt;</code></td><td>tasks, artefacts, run state, memory, event log</td></tr>
+<tr><td><code>workspace: Arc&lt;dyn WorkspaceProvider&gt;</code></td><td>opens the task workspace, lists changes, merges</td></tr>
+<tr><td><code>tools: ToolRegistry</code></td><td>built-in tools, merged with the registry’s tools (the registry is cloned first, so a tool in <code>tools</code> wins on a name clash)</td></tr>
+<tr><td><code>events: EventBus</code></td><td>where every event is published</td></tr>
+<tr><td><code>config: VibeConfig</code></td><td>the parsed <code>.vibe/config.toml</code></td></tr>
+<tr><td><code>project_root: PathBuf</code></td><td>the project directory</td></tr>
+<tr><td><code>committer: Option&lt;Committer&gt;</code></td><td>commits the workspace after subtasks and fixes</td></tr>
+</tbody>
+</table>
+</div>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>RunOptions</code> field</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>complexity_override</code></td><td>forces a complexity; the heuristic and the assessor are skipped</td></tr>
+<tr><td><code>from_phase</code></td><td>starts at this phase instead of <code>assess</code>, reusing persisted spec and plan</td></tr>
+<tr><td><code>until_phase</code></td><td>pauses the run once this phase is done</td></tr>
+<tr><td><code>dry_run</code></td><td>same as <code>until_phase = plan</code> (or an earlier <code>until_phase</code> if one is given)</td></tr>
+<tr><td><code>cancel</code></td><td>a <code>watch::Receiver&lt;bool&gt;</code>; the run stops when it becomes <code>true</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>RunReport</code> carries <code>run_id</code>, the saved <code>task</code>, <code>final_status</code> (a <code>TaskStatus</code>), every
+<code>PhaseResult</code> in execution order (<code>phase</code>, <code>success</code>, <code>summary</code>, <code>usage</code>, <code>next</code>), the token
+<code>usage</code> and wall-clock <code>duration</code> of this invocation, and the final <code>RunState</code>.
+<code>is_success()</code> is true for <code>ready</code> and <code>done</code>.</p>
+<p>A phase error does not make <code>run</code> return <code>Err</code>: the run ends as <strong>failed</strong>, <code>last_error</code> is
+recorded in <code>run.json</code>, and a report is returned. Only infrastructure errors come back as
+<code>Err</code>: the task cannot be loaded, the store cannot write, or the workspace cannot be opened
+(in that last case <code>run_finished</code> is still published with <code>success: false</code>).</p>
+<h2 id="profiles"><a class="header" href="#profiles">Profiles</a></h2>
+<p>The complexity picks a <code>Profile</code> (<code>complexity.rs</code>): the phases run after <code>assess</code>, and which
+spec steps run.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Complexity</th><th>Phases after <code>assess</code></th><th>Spec steps</th></tr>
+</thead>
+<tbody>
+<tr><td><code>trivial</code></td><td>plan, build, qa, merge</td><td>none: the planner works from the task description</td></tr>
+<tr><td><code>simple</code></td><td>spec, plan, build, qa, fix, merge</td><td>gatherer only (light spec)</td></tr>
+<tr><td><code>standard</code></td><td>spec, plan, build, qa, fix, merge</td><td>gatherer, writer</td></tr>
+<tr><td><code>complex</code></td><td>spec, plan, build, qa, fix, merge</td><td>gatherer, researcher, writer, critic</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>fix</code> is never reached by walking the profile forward; only a QA verdict jumps to it.</p>
+<p>The complexity is settled in this order:</p>
+<ol>
+<li><code>RunOptions::complexity_override</code> (<code>vibe run --complexity</code>);</li>
+<li>the complexity already stored on the task (a task assessed once keeps its class);</li>
+<li><code>heuristic_complexity</code>: at most 30 words across title and description <strong>and</strong> a known
+small-change pattern. Typos, version or dependency bumps, colour, text, label, wording,
+title or copy changes and copyright-year updates are <code>trivial</code>; renames, removal of
+unused code, lint or compiler warning fixes and “add a comment” are <code>simple</code>;</li>
+<li>the <code>complexity_assessor</code> agent. Aliases are accepted (<code>low</code>, <code>easy</code> → simple,
+<code>medium</code> → standard, <code>hard</code>, <code>high</code> → complex, …). Its <code>needs_research</code> and
+<code>needs_critique</code> flags switch on the researcher and critic, but only for profiles that
+write a full spec (standard and complex);</li>
+<li><code>standard</code>, when the assessor fails or answers an unknown class.</li>
+</ol>
+<p>A run that starts after <code>assess</code> (<code>from_phase</code>) reuses the profile of the previous run when
+there is one and no override is given; otherwise it applies steps 1–3 and 5 without calling
+the assessor. <code>default_profile(task, override)</code> exposes the same computation for displays.</p>
+<h2 id="flow"><a class="header" href="#flow">Flow</a></h2>
+<pre><code class="language-text">            ┌────────┐   ┌──────┐   ┌──────┐   ┌───────┐   ┌────┐  approved  ┌───────┐
+ task ────▶ │ assess │──▶│ spec │──▶│ plan │──▶│ build │──▶│ qa │──────────▶│ merge │──▶ ready / done
+            └────────┘   └──────┘   └──────┘   └───────┘   └────┘            └───────┘
+                         (trivial                   │        │ ▲
+                          skips it)                 │        │ │ changes requested
+                                                    │        ▼ │
+                                          no subtask done  ┌─────┐
+                                                    │      │ fix │
+                                                    ▼      └─────┘
+                                                  failed      qa: round limit, inconclusive,
+                                                              no fix phase; fix: same issue 3×
+                                                              ──▶ paused, task in review
+</code></pre>
+<p>For every phase the driver:</p>
+<ol>
+<li>checks the cancel token (cancelled → run <strong>cancelled</strong>);</li>
+<li>sets the task status for the phase and saves <code>task.json</code> and <code>run.json</code>;</li>
+<li>runs the <code>before_phase</code> hooks; an <code>Abort</code> ends the run as <strong>cancelled</strong> with the reason
+in <code>last_error</code> and in the progress notes;</li>
+<li>publishes <code>phase_started</code>, runs the phase, publishes <code>phase_finished</code>;</li>
+<li>runs the <code>after_phase</code> hooks and appends the phase to <code>completed_phases</code>;</li>
+<li>follows the phase’s <code>Transition</code>: <code>Continue</code> (next phase of the profile), <code>Goto</code> (QA ⇄
+fix) or <code>Stop { status, reason, pause }</code>;</li>
+<li>applies <code>until_phase</code>, then saves <code>run.json</code> with the next phase as <code>current_phase</code>.</li>
+</ol>
+<p>Each agent is resolved with <code>RunContext::agent_spec</code>: the registry’s agent for the role
+(plugins and <code>.vibe/agents/*.toml</code> overrides) or the built-in one. When
+<code>[phases.&lt;current phase&gt;]</code> exists in the configuration, its <code>thinking</code> replaces the agent’s
+thinking level. The model is the agent’s fixed model, else <code>config.model_for(phase)</code>. Tools
+run with <code>ToolContext</code> rooted at the workspace and the permissions read, write and execute,
+plus network when <code>security.allow_network</code> is set.</p>
+<h2 id="kickoff-messages"><a class="header" href="#kickoff-messages">Kickoff messages</a></h2>
+<p>The first user message of each session is built by <code>kickoff_for</code> from delimited sections.
+When the agent’s system prompt already consumes a section’s placeholder (<code>{{spec}}</code>,
+<code>{{plan}}</code>, …), the section is replaced by a one-line pointer, so the text is not sent twice;
+custom prompts without placeholders still receive everything.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Role</th><th style="text-align: center">TASK</th><th style="text-align: center">SUBTASK</th><th style="text-align: center">SPEC</th><th style="text-align: center">PLAN, PROGRESS NOTES</th><th style="text-align: center">CHANGES</th><th style="text-align: center">QA REPORT</th><th style="text-align: center">MEMORY</th><th style="text-align: center">PRIOR CONTEXT</th></tr>
+</thead>
+<tbody>
+<tr><td><code>complexity_assessor</code></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center">yes (empty)</td></tr>
+<tr><td><code>spec_gatherer</code>, <code>spec_researcher</code>, <code>spec_writer</code></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center">yes</td></tr>
+<tr><td><code>spec_critic</code></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center">yes</td></tr>
+<tr><td><code>planner</code></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center">yes</td></tr>
+<tr><td><code>coder</code>, <code>coder_recovery</code></td><td style="text-align: center">yes</td><td style="text-align: center">yes</td><td style="text-align: center">yes</td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center">yes</td></tr>
+<tr><td><code>qa_reviewer</code></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center">yes</td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center">yes</td></tr>
+<tr><td><code>qa_fixer</code></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center"></td><td style="text-align: center"></td><td style="text-align: center">yes</td><td style="text-align: center">yes</td><td style="text-align: center">yes</td></tr>
+</tbody>
+</table>
+</div>
+<p>A final <code>INSTRUCTIONS</code> section restates the JSON document the role must end with.
+<code>PRIOR CONTEXT</code> carries: the gatherer JSON and research report for later spec steps; the
+rejection reason for a planner retry; the subtask’s failure history for a coder; a summary
+of earlier rounds for QA and the fixer. Sizes are capped: prior context 12 000 characters,
+progress notes 8 000 (most recent kept), memory 6 000, workspace changes 20 000 (beginning
+and end kept), spec and plan 24 000. The memory section is the task’s <code>memory/*.md</code> plus up
+to 10 entries recalled from each registered <code>MemoryStore</code>.</p>
+<h2 id="the-phases"><a class="header" href="#the-phases">The phases</a></h2>
+<p><strong>assess</strong> records the complexity on the task, the profile in <code>run.json</code>, and a progress
+note naming the source (<code>override</code>, <code>stored on the task</code>, <code>heuristic</code>, <code>assessor …</code>,
+<code>fallback …</code>).</p>
+<p><strong>spec</strong> runs the gatherer (mandatory: its failure fails the phase), then the researcher,
+writer and critic as the profile says. Their failures are logged as warnings and the best
+spec so far is kept. The writer also writes a markdown copy inside the workspace at
+<code>.vibe/specs/&lt;task short id&gt;-spec.md</code>. A critic verdict <code>revised</code> with a non-empty spec
+replaces the spec. An empty spec (no summary, no requirement) fails the phase. The spec’s
+<code>context.findings</code> are appended to <code>memory/patterns.md</code>.</p>
+<p><strong>plan</strong> runs the planner and converts its output with <code>plan_from_output</code>: subtask ids are
+generated, <code>depends_on</code> entries are resolved by title (case-insensitive) or 1-based position,
+and the plan is validated (no empty or duplicate title, no self or unknown dependency, no
+cycle, at least one subtask). A flat <code>subtasks</code> list becomes one sequential phase called
+<code>Implementation</code>. An invalid plan is retried with the error as feedback, up to
+<code>max_phase_retries</code> more attempts, each announced by a <code>retrying</code> event.</p>
+<p><strong>build</strong> is the scheduler below. <strong>qa</strong> and <strong>fix</strong> are the loop below.</p>
+<p><strong>merge</strong> stops the run in all cases:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Situation</th><th>Final task status</th></tr>
+</thead>
+<tbody>
+<tr><td><code>auto_merge = false</code></td><td><code>ready</code></td></tr>
+<tr><td>merged (fast-forward or merge commit), or nothing to merge</td><td><code>done</code></td></tr>
+<tr><td><code>MergeOutcome::NeedsHumanReview { files }</code></td><td><code>ready</code>, conflicting files in <code>progress.md</code></td></tr>
+<tr><td>merge error (for example a dirty project checkout)</td><td><code>ready</code>, error in <code>progress.md</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The conflict strategy is a property of the workspace provider the host builds; the pipeline
+only records <code>pipeline.merge_strategy</code> in the progress notes.</p>
+<h2 id="build-scheduler"><a class="header" href="#build-scheduler">Build scheduler</a></h2>
+<p>A pending subtask is <strong>ready</strong> when every subtask in its <code>depends_on</code> is <code>done</code>, every
+subtask of earlier plan phases is finished (<code>done</code>, <code>failed</code> or <code>skipped</code>), and, in a phase
+whose <code>parallel</code> is false, the previous subtask of the same phase is finished. Up to
+<code>max_parallel_subtasks</code> ready subtasks run at once, each in a fresh session spawned on its
+own tokio task (sessions are aborted if the build ends early or its future is dropped).
+Coder sessions use <code>run_with_continuation</code>, so a session that fills its context window is
+summarised and continued.</p>
+<p>A session succeeds when it ends with a JSON report whose <code>status</code> is <code>done</code> (or <code>success</code>,
+<code>completed</code>, <code>ok</code>). Anything else is a failed attempt: the reason is appended to the
+subtask’s <code>notes</code>, which the next attempt receives as prior context. The attempt numbered
+<code>max_subtask_attempts</code> uses <code>coder_recovery</code> instead of <code>coder</code> (when more than one attempt
+is allowed). After the last attempt the subtask is <strong>failed</strong>, a line is added to
+<code>memory/gotchas.md</code>, and every pending subtask depending on it through <code>depends_on</code>,
+transitively, becomes <strong>skipped</strong>. Failures do not skip later phases by ordering alone.
+Pending subtasks that can never become ready are skipped as “blocked by the plan ordering”.</p>
+<p>Commits are <strong>deferred</strong>: the committer stages the whole workspace, so completed subtasks
+are committed only when no other session is running, possibly several in one commit
+(<code>vibe: complete subtask 2 - Routes</code>, <code>vibe: complete subtasks 2, 3 - Routes; Login page</code>).
+A failed commit is logged and noted, never fatal.</p>
+<p>The build continues to QA when at least one subtask is done and none is pending; its
+<code>success</code> flag is false if any subtask failed or was skipped. Otherwise the run fails with
+<code>build failed: 0 done, 2 failed, 1 skipped</code>. Subtasks found <code>in_progress</code> when the build
+starts (a crash) go back to pending.</p>
+<h2 id="qa-loop"><a class="header" href="#qa-loop">QA loop</a></h2>
+<p>Each QA invocation increments <code>qa_round</code> in <code>run.json</code>, gives the reviewer the workspace
+change summary and the titles of earlier rounds, and saves <code>qa_report_&lt;round&gt;.json/.md</code>. A
+reviewer that fails to produce valid JSON after repair and resume yields an <code>inconclusive</code>
+report.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Verdict</th><th>Next</th></tr>
+</thead>
+<tbody>
+<tr><td><code>approved</code></td><td>merge</td></tr>
+<tr><td><code>changes_requested</code>, profile without <code>fix</code> (trivial)</td><td>pause, task <code>review</code></td></tr>
+<tr><td><code>changes_requested</code>, <code>max_qa_rounds</code> reviews already done in this invocation</td><td>pause, task <code>review</code></td></tr>
+<tr><td><code>changes_requested</code> otherwise</td><td>fix</td></tr>
+<tr><td><code>inconclusive</code> (including unknown verdict words)</td><td>pause, task <code>review</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The fixer first checks for <strong>escalation</strong>: if one issue title (lowercased, whitespace
+collapsed) appears in each of the last 3 reports, it records the issue in
+<code>memory/gotchas.md</code> and pauses the run with the task in <code>review</code>. Otherwise the fixer runs,
+the workspace is committed as <code>vibe: address QA round &lt;n&gt;</code>, and QA runs again. A pause
+during <code>fix</code> leaves <code>current_phase = qa</code> so a resumed run reviews before fixing again. The
+round limit counts reviews of the current invocation only, so each resume gets a fresh
+budget, while <code>qa_round</code> keeps numbering reports across invocations.</p>
+<h2 id="statuses"><a class="header" href="#statuses">Statuses</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Phase running</th><th><code>Task.status</code></th></tr>
+</thead>
+<tbody>
+<tr><td>assess, spec, plan</td><td><code>planning</code></td></tr>
+<tr><td>build</td><td><code>building</code></td></tr>
+<tr><td>qa, fix, merge</td><td><code>review</code></td></tr>
+</tbody>
+</table>
+</div>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>End of run</th><th><code>Task.status</code></th><th><code>RunStatus</code></th></tr>
+</thead>
+<tbody>
+<tr><td>merge, <code>auto_merge</code> off, conflicts or merge error</td><td><code>ready</code></td><td><code>finished</code></td></tr>
+<tr><td>merge succeeded or nothing to merge</td><td><code>done</code></td><td><code>finished</code></td></tr>
+<tr><td>QA pause or escalation</td><td><code>review</code></td><td><code>paused</code></td></tr>
+<tr><td><code>until_phase</code> or dry run reached</td><td><code>backlog</code></td><td><code>paused</code></td></tr>
+<tr><td>phase error, build with nothing done</td><td><code>failed</code></td><td><code>failed</code></td></tr>
+<tr><td>cancel token, hook abort</td><td><code>cancelled</code></td><td><code>cancelled</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A <code>RunStatus</code> of <code>running</code> in <code>run.json</code> after the process ended means it died mid-phase.</p>
+<h2 id="resume"><a class="header" href="#resume">Resume</a></h2>
+<p><code>resume</code> loads <code>run.json</code> and refuses when there is none or its status is <code>finished</code>
+(<code>start a new run</code>). <code>running</code>, <code>paused</code>, <code>failed</code> and <code>cancelled</code> are resumable. The run
+keeps its <code>run_id</code> and profile, restarts at <code>current_phase</code> (or <code>from_phase</code> if given),
+clears <code>last_error</code>, and reuses the persisted spec and plan. Subtasks already <code>done</code> are
+never redone; interrupted ones are retried. When a <strong>failed</strong> run resumes at <code>build</code>, failed
+and skipped subtasks go back to pending with their attempt counters reset, and a progress
+note says how many.</p>
+<p><code>run</code> with <code>from_phase</code> is different: it starts a new run id at that phase, keeping only the
+previous profile. It is how you re-run QA after fixing things by hand (<code>--from qa</code>).</p>
+<h2 id="events"><a class="header" href="#events">Events</a></h2>
+<p>The driver publishes <code>run_started</code>, <code>phase_started</code>, <code>phase_finished</code>, <code>subtask_updated</code>
+(<code>in_progress</code>, <code>done</code>, <code>pending</code> after a failed attempt, <code>failed</code>, <code>skipped</code>), <code>retrying</code>
+(plan retries with <code>delay_ms: 0</code>, subtask retries), <code>paused</code> and <code>run_finished</code>
+(<code>success</code> true for <code>ready</code> and <code>done</code>); agent sessions add their own events (see
+<a href="agent-runtime.html#events">Agent runtime</a>). An internal router forwards each event carrying a
+run id to that run’s sink from the store, which appends it to <code>events.jsonl</code>.</p>
+<h2 id="seams"><a class="header" href="#seams">Seams</a></h2>
+<p><code>ProviderResolver</code> maps a <code>ModelRef</code> to <code>(Arc&lt;dyn ModelProvider&gt;, model id)</code>. An empty
+model (<code>ollama/</code>) means the provider’s default. <code>RegistryResolver</code> looks providers up by
+name in a <code>Registry</code>; the CLI adapts its provider registry, tests plug a scripted provider.</p>
+<p><code>Committer</code> is <code>Arc&lt;dyn Fn(PathBuf, String) -&gt; BoxFuture&lt;'static, Result&lt;Option&lt;String&gt;&gt;&gt;&gt;</code>:
+workspace root and message in, commit id (or <code>None</code> when there was nothing to commit) out.
+Without a committer, nothing is committed during the run and the worktree provider commits
+leftovers as <code>vibe: checkpoint</code> at merge time (see
+<a href="../user/workspaces.html#merge-behaviour">Workspaces and merging</a>).</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../design/domain-model.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../design/agent-runtime.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../design/domain-model.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../design/agent-runtime.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

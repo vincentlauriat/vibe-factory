@@ -1,0 +1,572 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Plugin protocol - Vibe Factory</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="An open, extensible framework for autonomous multi-agent software development">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-2dd03f19.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Vibe Factory</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/design/plugin-protocol.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="plugin-protocol"><a class="header" href="#plugin-protocol">Plugin protocol</a></h1>
+<p>The <strong>Vibe Plugin Protocol</strong> (VPP) lets a program written in any language contribute tools,
+agent specs and a <code>before_tool</code> hook to a run. It is JSON-RPC 2.0 over the plugin’s stdin and
+stdout, shaped like the Model Context Protocol (MCP) so that an MCP stdio server works
+unchanged as a tool plugin (<a href="adr/005-plugin-protocol.html">ADR-005</a>). The reference
+implementation is <code>crates/vibe-plugins</code>: <code>protocol.rs</code> (wire types), <code>client.rs</code> (host side),
+<code>server.rs</code> (plugin side), <code>remote.rs</code> (adapters), <code>host.rs</code>, <code>manifest.rs</code> and
+<code>discovery.rs</code>.</p>
+<h2 id="framing"><a class="header" href="#framing">Framing</a></h2>
+<ul>
+<li>One JSON object per line, UTF-8, terminated by <code>\n</code> (newline-delimited JSON). A message
+must not contain a raw newline.</li>
+<li>The host writes requests and notifications to the plugin’s <strong>stdin</strong> and reads responses
+and notifications from its <strong>stdout</strong>.</li>
+<li><strong>stderr</strong> is free-form diagnostics; the host logs each line at debug level as
+<code>[&lt;plugin name&gt;] &lt;line&gt;</code>. Never write diagnostics to stdout.</li>
+<li>Blank lines are ignored. An unparsable line from a plugin is logged and skipped.</li>
+</ul>
+<h2 id="envelope"><a class="header" href="#envelope">Envelope</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kind</th><th>Shape</th><th>Rule</th></tr>
+</thead>
+<tbody>
+<tr><td>Request</td><td><code>{"jsonrpc":"2.0","id":N,"method":"…","params":{…}}</code></td><td>has <code>method</code> and a non-null <code>id</code>; expects exactly one response</td></tr>
+<tr><td>Notification</td><td><code>{"jsonrpc":"2.0","method":"…","params":{…}}</code></td><td>has <code>method</code>, no <code>id</code>; never answered</td></tr>
+<tr><td>Response</td><td><code>{"jsonrpc":"2.0","id":N,"result":…}</code> or <code>{…,"error":{"code","message","data?"}}</code></td><td>exactly one of <code>result</code> and <code>error</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>id</code> may be a number or a string; the host generates increasing integers starting at 1 and
+only matches numeric ids. Responses may arrive in any order; the plugin may handle requests
+concurrently. <code>params</code> is omitted when there are none (<code>shutdown</code>).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Error code</th><th>Constant</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>-32700</td><td><code>PARSE_ERROR</code></td><td>invalid JSON received</td></tr>
+<tr><td>-32600</td><td><code>INVALID_REQUEST</code></td><td>not a valid request</td></tr>
+<tr><td>-32601</td><td><code>METHOD_NOT_FOUND</code></td><td>unknown method (mandatory answer for methods you do not implement)</td></tr>
+<tr><td>-32602</td><td><code>INVALID_PARAMS</code></td><td>bad parameters (also used by <code>PluginServer</code> for an unknown tool)</td></tr>
+<tr><td>-32603</td><td><code>INTERNAL_ERROR</code></td><td>internal failure</td></tr>
+</tbody>
+</table>
+</div>
+<p>An error response is reported by the host as
+<code>plugin `&lt;name&gt;` returned an error: &lt;message&gt; (code &lt;code&gt;)</code>.</p>
+<h2 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h2>
+<pre><code class="language-text">host                                          plugin
+ │  spawn command in cwd, env, piped stdio      │
+ │── initialize ───────────────────────────────▶│   60 s
+ │◀──────────── {name, version, capabilities} ──│
+ │── notifications/initialized ────────────────▶│   (ignore it)
+ │── tools/list  (if tools)   ─────────────────▶│   60 s, follows nextCursor
+ │── agents/list (if agents)  ─────────────────▶│   60 s
+ │        … run: tools/call (600 s), hooks/before_tool (60 s) …
+ │── shutdown ─────────────────────────────────▶│   2 s
+ │   close stdin, wait 2 s for exit, then kill  │
+</code></pre>
+<p>If the handshake or a listing fails, the process is shut down and the plugin counts as not
+started. The host only calls <code>tools/*</code>, <code>agents/list</code> and <code>hooks/before_tool</code> when the
+matching capability was advertised. When a request times out before it was fully written,
+the host closes the stream and fails every later call fast.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Constant</th><th>Value</th><th>Applies to</th></tr>
+</thead>
+<tbody>
+<tr><td><code>DEFAULT_TIMEOUT</code></td><td>60 s</td><td>every request except <code>tools/call</code></td></tr>
+<tr><td><code>TOOL_CALL_TIMEOUT</code></td><td>600 s</td><td><code>tools/call</code></td></tr>
+<tr><td><code>SHUTDOWN_GRACE</code></td><td>2 s</td><td>answer to <code>shutdown</code>, then again for process exit</td></tr>
+</tbody>
+</table>
+</div>
+<p>A timeout surfaces as <code>plugin `&lt;name&gt;` did not answer `&lt;method&gt;` within &lt;n&gt;s</code>.</p>
+<h2 id="methods"><a class="header" href="#methods">Methods</a></h2>
+<h3 id="initialize"><a class="header" href="#initialize">initialize</a></h3>
+<p>The host sends the VPP fields and, for MCP servers, the MCP fields:</p>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+  "protocol_version":"1",
+  "host":{"name":"vibe-factory","version":"0.1.0"},
+  "protocolVersion":"2025-06-18",
+  "clientInfo":{"name":"vibe-factory","version":"0.1.0"},
+  "capabilities":{}}}
+</code></pre>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":1,"result":{"name":"echo","version":"0.1.0",
+  "capabilities":{"tools":true,"agents":true,"hooks":true}}}
+</code></pre>
+<p><code>protocol_version</code> is <code>PROTOCOL_VERSION</code> (<code>"1"</code>), <code>protocolVersion</code> is
+<code>MCP_PROTOCOL_VERSION</code> (<code>"2025-06-18"</code>). Each capability flag is a boolean; when reading, an
+object (<code>{"tools": {}}</code>) counts as <code>true</code> and <code>null</code> or absence as <code>false</code>. If <code>name</code> or
+<code>version</code> is absent, the MCP <code>serverInfo</code> object is used.</p>
+<h3 id="toolslist"><a class="header" href="#toolslist">tools/list</a></h3>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+</code></pre>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":2,"result":{"tools":[
+  {"name":"echo","description":"Return the given text unchanged.",
+   "input_schema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]},
+   "mutating":false}]}}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Descriptor field</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>name</code></td><td>required; registered under this name, overriding a same-named tool</td></tr>
+<tr><td><code>description</code></td><td>default <code>""</code></td></tr>
+<tr><td><code>input_schema</code></td><td><code>inputSchema</code> accepted; default <code>{"type":"object"}</code></td></tr>
+<tr><td><code>mutating</code></td><td>optional; when absent, <code>!annotations.readOnlyHint</code>; when that is absent too, <code>true</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>If the result carries <code>nextCursor</code>, the host requests <code>{"cursor": "&lt;value&gt;"}</code> again, up to
+100 pages.</p>
+<h3 id="toolscall"><a class="header" href="#toolscall">tools/call</a></h3>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+  "name":"echo","arguments":{"text":"hi"},
+  "_meta":{"vibe":{"workspace_root":"/repo/.vibe/worktrees/add-oauth-6f1c3e0a",
+                   "task_id":"6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19","agent":"coder",
+                   "permissions":{"read":true,"write":true,"execute":true,"network":false}}}}}
+</code></pre>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"hi"}],"is_error":false}}
+</code></pre>
+<p><code>_meta.vibe</code> is the <code>ToolCallContext</code> built from the agent’s <code>ToolContext</code>: the workspace
+root the tool must stay inside, the task id (omitted when there is none), the calling
+agent’s role name and its permission flags. A plugin tool that touches files must resolve
+paths against <code>workspace_root</code> and refuse to leave it; the host cannot enforce containment
+inside another process. MCP servers ignore <code>_meta</code>.</p>
+<p>The result’s text blocks are joined with newlines; any non-text block becomes
+<code>[&lt;type&gt; content omitted]</code>. <code>is_error</code> (or <code>isError</code>) turns the result into an error the
+model sees. A tool failure should be a result with <code>is_error: true</code>, not a JSON-RPC error;
+<code>PluginServer</code> does this for handlers that return <code>Err</code>.</p>
+<h3 id="agentslist"><a class="header" href="#agentslist">agents/list</a></h3>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":4,"method":"agents/list","params":{}}
+</code></pre>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":4,"result":{"agents":[
+  {"role":"echo_agent","system_prompt":"You repeat what you are told using the `echo` tool.",
+   "description":"Echoes its instructions","tools":{"named":["echo"]},"thinking":"low","max_steps":20}]}}
+</code></pre>
+<p>Each entry is the JSON form of <code>AgentSpec</code>. Only <code>role</code> and <code>system_prompt</code> are required;
+<code>tools</code>, <code>model</code>, <code>thinking</code>, <code>max_steps</code>, <code>structured_output</code> and <code>max_tokens</code> take the
+<code>AgentSpec</code> defaults. A built-in role name replaces the built-in agent.</p>
+<h3 id="hooksbefore_tool"><a class="header" href="#hooksbefore_tool">hooks/before_tool</a></h3>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":5,"method":"hooks/before_tool","params":{"tool":"forbidden","input":{}}}
+</code></pre>
+<pre><code class="language-json">{"jsonrpc":"2.0","id":5,"result":{"decision":"abort","reason":"the echo plugin forbids this tool"}}
+</code></pre>
+<p><code>decision</code> is <code>continue</code> (default) or <code>abort</code>; <code>reason</code> defaults to <code>"vetoed by plugin"</code>.
+The hook sees every tool call of every agent. Remote hooks <strong>fail closed</strong>: if the plugin
+times out, has exited or answers with an error, the call is aborted with <code>hook plugin unavailable: …</code>. <code>before_phase</code>, <code>after_phase</code>, <code>after_tool</code> and <code>augment_prompt</code> have no
+protocol method; they are available to in-process plugins only.</p>
+<h3 id="shutdown-and-ping"><a class="header" href="#shutdown-and-ping">shutdown and ping</a></h3>
+<p><code>shutdown</code> has no params and is answered with <code>{}</code>; the plugin then exits. An MCP server
+that does not know <code>shutdown</code> is tolerated: the host closes stdin and kills the process
+after the grace period. <code>ping</code> is answered with <code>{}</code> by either side; it is the only request a
+plugin may send to the host (any other gets <code>-32601</code>).</p>
+<h3 id="notifications"><a class="header" href="#notifications">Notifications</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Direction</th><th>Method</th><th>Params</th></tr>
+</thead>
+<tbody>
+<tr><td>host → plugin</td><td><code>notifications/initialized</code></td><td>none; sent once after <code>initialize</code>, may be ignored</td></tr>
+<tr><td>plugin → host</td><td><code>log</code></td><td><code>{"level": "error"|"warn"|"info"|"debug"|"trace", "message": "…"}</code></td></tr>
+<tr><td>plugin → host</td><td><code>notifications/message</code> (MCP)</td><td><code>{"level": "…", "data": …}</code>; <code>data</code> is used when <code>message</code> is absent</td></tr>
+</tbody>
+</table>
+</div>
+<p>Log levels map onto <code>tracing</code> levels (<code>warning</code> is accepted, <code>critical</code>, <code>alert</code> and
+<code>emergency</code> map to error, anything else to info).</p>
+<h2 id="mcp-compatibility"><a class="header" href="#mcp-compatibility">MCP compatibility</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>MCP field</th><th>Accepted as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>serverInfo</code></td><td>fallback for <code>name</code> and <code>version</code></td></tr>
+<tr><td>capability objects <code>{"tools": {}}</code></td><td><code>true</code></td></tr>
+<tr><td><code>inputSchema</code></td><td><code>input_schema</code></td></tr>
+<tr><td><code>annotations.readOnlyHint</code></td><td>inverse of <code>mutating</code></td></tr>
+<tr><td><code>nextCursor</code></td><td>pagination of <code>tools/list</code></td></tr>
+<tr><td><code>isError</code></td><td><code>is_error</code></td></tr>
+<tr><td><code>notifications/message</code></td><td><code>log</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>MCP servers expose neither agents nor VPP hooks, so only their tools are registered.</p>
+<h2 id="manifests-and-declarations"><a class="header" href="#manifests-and-declarations">Manifests and declarations</a></h2>
+<p>A plugin is declared inline in <code>.vibe/config.toml</code> (<code>[[plugins]]</code>, see
+<a href="../user/plugins.html">Plugins</a>) or by a manifest <code>vibe-plugin.toml</code>:</p>
+<pre><code class="language-toml">name = "echo"                            # required, unique
+version = "0.1.0"
+description = "Echoes its input"
+command = ["./bin/vibe-echo-plugin"]     # required; program then arguments
+required = false                         # true: a failure to start aborts loading
+capabilities = ["tools", "agents", "hooks"]   # or [capabilities] tools = true …; informational
+
+[env]
+ECHO_PREFIX = "&gt;"
+</code></pre>
+<p>The process runs in the manifest’s directory. A program written as a relative path
+(containing a separator, such as <code>./bin/p</code>) is resolved against that directory; a bare name
+(<code>python3</code>) is looked up on <code>PATH</code>. Declared capabilities are informational: the
+<code>initialize</code> answer is authoritative.</p>
+<h3 id="discovery-precedence"><a class="header" href="#discovery-precedence">Discovery precedence</a></h3>
+<ol>
+<li>Inline <code>[[plugins]]</code> entries of <code>.vibe/config.toml</code>.</li>
+<li><code>&lt;project&gt;/.vibe/plugins/*/vibe-plugin.toml</code>, sorted by directory name.</li>
+<li><code>&lt;user config dir&gt;/vibe/plugins/*/vibe-plugin.toml</code> (<code>dirs::config_dir()</code>, for example
+<code>~/.config/vibe/plugins</code> on Linux, <code>~/Library/Application Support/vibe/plugins</code> on macOS).</li>
+</ol>
+<p>The first declaration of a name wins; later ones are skipped with a debug log. Invalid
+manifests are logged and skipped. <code>discovery::plugin_configs(project, &amp;config)</code> returns the
+merged list.</p>
+<h2 id="host-failure-policy"><a class="header" href="#host-failure-policy">Host failure policy</a></h2>
+<p><code>PluginHost::load</code> starts every plugin concurrently.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Situation</th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td>optional plugin fails to spawn or handshake</td><td>warning <code>skipping plugin …</code>, run continues</td></tr>
+<tr><td><code>required = true</code> plugin fails</td><td>every started plugin is shut down; <code>ErrorKind::Plugin</code> error <code>required plugin `x` failed to start: …</code></td></tr>
+<tr><td>same name declared twice</td><td>the duplicate is ignored with a warning</td></tr>
+<tr><td>tool call times out or errors</td><td>error result to the model; the run continues</td></tr>
+<tr><td>hook plugin unavailable</td><td>the guarded tool call is aborted (fail closed)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="writing-a-plugin-in-rust"><a class="header" href="#writing-a-plugin-in-rust">Writing a plugin in Rust</a></h2>
+<p>Add <code>vibe-plugins</code>, <code>vibe-core</code>, <code>tokio</code> and <code>serde_json</code> as dependencies and build a
+<code>PluginServer</code>:</p>
+<pre><code class="language-rust ignore">use serde_json::{Value, json};
+use vibe_core::{AgentRole, AgentSpec, HookDecision, ToolOutput, ToolSelection};
+use vibe_plugins::{PluginServer, ToolCallContext};
+
+#[tokio::main]
+async fn main() {
+    let server = PluginServer::new("todo-scan", "0.1.0");
+    let log = server.logger();
+    let server = server
+        .tool_with_context(
+            "count_todos",
+            "Count TODO markers in a file of the workspace.",
+            json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
+            move |args: Value, ctx: Option&lt;ToolCallContext&gt;| {
+                let log = log.clone();
+                async move {
+                    let root = ctx.map(|c| c.workspace_root).unwrap_or_else(|| ".".into());
+                    let path = root.join(args["path"].as_str().unwrap_or_default());
+                    let text = tokio::fs::read_to_string(&amp;path).await?;
+                    log.log("debug", format!("scanned {}", path.display()));
+                    Ok(ToolOutput::ok(text.matches("TODO").count().to_string()))
+                }
+            },
+        )
+        .agent(
+            AgentSpec::new(AgentRole::Custom("todo_auditor".into()), "List the TODOs of {{task_title}}.")
+                .with_tools(ToolSelection::Named(vec!["count_todos".into()])),
+        )
+        .before_tool(|tool, _input| async move {
+            if tool == "bash" { HookDecision::Abort("todo-scan forbids the shell".into()) } else { HookDecision::Continue }
+        });
+    let code = if server.run_stdio().await.is_ok() { 0 } else { 1 };
+    std::process::exit(code);
+}</code></pre>
+<p>The example joins paths without a containment check for brevity; a real tool must reject
+<code>..</code> and absolute paths. Notes:</p>
+<ul>
+<li><code>tool</code> / <code>tool_with</code> / <code>tool_with_context</code> register a handler; an <code>Err</code> becomes a result
+with <code>is_error: true</code>. Use <code>tool_with(ToolDescriptor { mutating: Some(false), .. })</code> to let
+the host run the tool concurrently.</li>
+<li>Capabilities are derived from what you registered.</li>
+<li>Requests run concurrently; <code>shutdown</code> or end of input stops the server.</li>
+<li>Call <code>std::process::exit</code> after <code>run_stdio</code> returns: Tokio reads stdin on a blocking
+thread that would otherwise keep the runtime alive. <code>vibe-echo-plugin</code> does this.</li>
+<li><code>PluginServer::serve(reader, writer)</code> and <code>PluginServer::handle(method, params)</code> let you
+test the plugin without a process.</li>
+</ul>
+<p>Build it, then add <code>.vibe/plugins/todo-scan/vibe-plugin.toml</code> with
+<code>command = ["/path/to/target/release/todo-scan"]</code>.</p>
+<h2 id="writing-a-plugin-in-python"><a class="header" href="#writing-a-plugin-in-python">Writing a plugin in Python</a></h2>
+<p>Any language that can read lines and write JSON works. This sketch implements the contract
+with one read-only tool and a hook:</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import json, sys
+
+TOOLS = [{"name": "upper", "description": "Uppercase a text.", "mutating": False,
+          "input_schema": {"type": "object", "properties": {"text": {"type": "string"}},
+                           "required": ["text"]}}]
+
+def handle(method, params):
+    if method == "initialize":
+        return {"name": "upper", "version": "0.1.0",
+                "capabilities": {"tools": True, "agents": False, "hooks": True}}
+    if method == "tools/list":
+        return {"tools": TOOLS}
+    if method == "tools/call":
+        text = params.get("arguments", {}).get("text", "")
+        return {"content": [{"type": "text", "text": text.upper()}], "is_error": False}
+    if method == "hooks/before_tool":
+        if params.get("tool") == "bash" and "rm -rf" in json.dumps(params.get("input")):
+            return {"decision": "abort", "reason": "no recursive deletes"}
+        return {"decision": "continue"}
+    if method in ("ping", "shutdown"):
+        return {}
+    raise KeyError(method)
+
+for line in sys.stdin:
+    if not line.strip():
+        continue
+    msg = json.loads(line)
+    if "id" not in msg or "method" not in msg:
+        continue                                   # notification or stray response
+    try:
+        reply = {"jsonrpc": "2.0", "id": msg["id"], "result": handle(msg["method"], msg.get("params") or {})}
+    except KeyError:
+        reply = {"jsonrpc": "2.0", "id": msg["id"],
+                 "error": {"code": -32601, "message": "method not found: " + msg["method"]}}
+    print(json.dumps(reply), flush=True)
+    if msg["method"] == "shutdown":
+        break
+</code></pre>
+<p>Declare it with <code>command = ["python3", "upper.py"]</code> in its manifest directory.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../design/extension-points.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../design/security.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../design/extension-points.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../design/security.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

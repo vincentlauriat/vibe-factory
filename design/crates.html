@@ -1,0 +1,420 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Crates - Vibe Factory</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="An open, extensible framework for autonomous multi-agent software development">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-2dd03f19.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Vibe Factory</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/design/crates.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="crates"><a class="header" href="#crates">Crates</a></h1>
+<p>Vibe Factory is a cargo workspace of eight crates. This page describes what each one owns,
+the public types you will meet first, what it is allowed to depend on, and how it is tested.
+The <a href="overview.html">Architecture overview</a> explains why the layering exists; this page is the
+map.</p>
+<h2 id="dependency-graph"><a class="header" href="#dependency-graph">Dependency graph</a></h2>
+<p>The graph below is the one declared in the <code>Cargo.toml</code> files today. Every implementation
+crate depends on <code>vibe-core</code> and on nothing else from the workspace: <code>vibe-agents</code> reaches
+models, tools and hooks only through the core traits, so it does not link any concrete
+provider, tool set, workspace or plugin transport. Wiring concrete implementations together
+is the job of the layers above it.</p>
+<pre><code class="language-text">                 vibe-cli            (binary `vibe`)
+                    │
+                 vibe-pipeline       (orchestration, task store)
+                    │
+   ┌────────────┬───┴────────┬──────────────┬──────────────┬─────────────┐
+   │            │            │              │              │             │
+vibe-agents  vibe-providers vibe-tools  vibe-workspace  vibe-plugins     │
+   │            │            │              │              │             │
+   └────────────┴────────────┴──────┬───────┴──────────────┴─────────────┘
+                                    │
+                                vibe-core      (types + traits, no I/O)
+</code></pre>
+<p><code>vibe-pipeline</code> and <code>vibe-cli</code> currently declare only <code>vibe-core</code> (both are placeholders);
+the edges from the pipeline to the five middle crates are the intended wiring described in
+<code>ARCHITECTURE_EN.md</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Workspace dependencies</th><th>Notable external dependencies</th></tr>
+</thead>
+<tbody>
+<tr><td><code>vibe-core</code></td><td>none</td><td><code>serde</code>, <code>serde_json</code>, <code>toml</code>, <code>tokio</code> (sync only), <code>chrono</code>, <code>uuid</code>, <code>indexmap</code>, <code>thiserror</code>, <code>async-trait</code></td></tr>
+<tr><td><code>vibe-providers</code></td><td><code>vibe-core</code></td><td><code>reqwest</code> (rustls), <code>regex</code>, <code>tokio</code>; <code>wiremock</code> in tests</td></tr>
+<tr><td><code>vibe-tools</code></td><td><code>vibe-core</code></td><td><code>globset</code>, <code>ignore</code>, <code>regex</code>, <code>similar</code></td></tr>
+<tr><td><code>vibe-workspace</code></td><td><code>vibe-core</code></td><td><code>tokio</code> (process); shells out to <code>git</code></td></tr>
+<tr><td><code>vibe-plugins</code></td><td><code>vibe-core</code></td><td><code>tokio</code> (process, io), <code>futures</code>, <code>dirs</code>, <code>indexmap</code></td></tr>
+<tr><td><code>vibe-agents</code></td><td><code>vibe-core</code></td><td><code>futures</code>, <code>tokio</code>, <code>chrono</code>, <code>uuid</code>, <code>toml</code></td></tr>
+<tr><td><code>vibe-pipeline</code></td><td><code>vibe-core</code></td><td>none yet</td></tr>
+<tr><td><code>vibe-cli</code></td><td><code>vibe-core</code></td><td>none yet</td></tr>
+</tbody>
+</table>
+</div>
+<p>Workspace-wide rules apply to every crate: <code>unsafe_code = "forbid"</code>, <code>missing_docs = "warn"</code>
+(promoted to an error in CI), <code>clippy::all = "warn"</code>, edition 2024. See
+<a href="adr/001-rust-workspace.html">ADR-001</a>.</p>
+<h2 id="vibe-core"><a class="header" href="#vibe-core">vibe-core</a></h2>
+<p><strong>Responsibility.</strong> The vocabulary of the framework: domain types, the extension traits, the
+<code>Registry</code> that collects implementations, the <code>EventBus</code>, the configuration model and the
+prompt template engine. The crate documentation states the rule bluntly: no I/O and no
+network code. The only filesystem access is <code>VibeConfig::load</code>/<code>save</code> and the lenient
+canonicalisation used by <code>ToolContext::resolve_path</code>.</p>
+<p><strong>Key public types.</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Module</th><th>Types</th></tr>
+</thead>
+<tbody>
+<tr><td><code>task</code>, <code>spec</code>, <code>plan</code>, <code>qa</code></td><td><code>Task</code>, <code>TaskStatus</code>, <code>Complexity</code>, <code>TaskSource</code>, <code>Spec</code>, <code>Requirement</code>, <code>SpecContext</code>, <code>Plan</code>, <code>PlanPhase</code>, <code>Subtask</code>, <code>SubtaskStatus</code>, <code>QaReport</code>, <code>QaIssue</code>, <code>QaVerdict</code>, <code>Severity</code></td></tr>
+<tr><td><code>message</code>, <code>provider</code></td><td><code>Message</code>, <code>ContentBlock</code>, <code>Role</code>, <code>CompletionRequest</code>, <code>CompletionResponse</code>, <code>StopReason</code>, <code>Usage</code>, <code>ModelRef</code>, <code>ToolSpec</code>, <code>ModelProvider</code></td></tr>
+<tr><td><code>tool</code></td><td><code>Tool</code>, <code>ToolContext</code>, <code>ToolOutput</code>, <code>Permissions</code>, <code>ToolRegistry</code></td></tr>
+<tr><td><code>agent</code></td><td><code>AgentSpec</code>, <code>AgentRole</code>, <code>ToolSelection</code>, <code>ModelSelection</code>, <code>ThinkingLevel</code>, <code>AgentStop</code>, <code>AgentOutcome</code></td></tr>
+<tr><td><code>workspace</code>, <code>memory</code>, <code>store</code></td><td><code>WorkspaceProvider</code>, <code>Workspace</code>, <code>MergeOutcome</code>, <code>InPlaceWorkspace</code>, <code>MemoryStore</code>, <code>InMemoryStore</code>, <code>TaskStore</code></td></tr>
+<tr><td><code>plugin</code>, <code>event</code></td><td><code>Plugin</code>, <code>Hook</code>, <code>HookDecision</code>, <code>Registry</code>, <code>Event</code>, <code>Envelope</code>, <code>EventBus</code>, <code>EventSink</code></td></tr>
+<tr><td><code>config</code>, <code>prompt</code>, <code>error</code></td><td><code>VibeConfig</code>, <code>ProviderConfig</code>, <code>PipelineConfig</code>, <code>SecurityConfig</code>, <code>PluginConfig</code>, <code>PromptTemplate</code>, <code>Error</code>, <code>ErrorKind</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Must never depend on</strong> any other workspace crate, an HTTP client, <code>git</code>, or a process API.
+Adding such a dependency would force every plugin author to compile it.</p>
+<p><strong>Tests.</strong> Unit tests next to each module: serde round trips (<code>Task</code>, ids, <code>ContentBlock</code>
+tags), <code>Plan::validate</code> on cycles and unknown dependencies, <code>ToolSelection::resolve</code>, path
+containment in <code>ToolContext::resolve_path</code> (including <code>..</code> and absolute paths), the
+<code>EventBus</code> reaching both subscribers and sinks, <code>VibeConfig</code> TOML round trip and per-phase
+overrides.</p>
+<h2 id="vibe-providers"><a class="header" href="#vibe-providers">vibe-providers</a></h2>
+<p><strong>Responsibility.</strong> Every <code>ModelProvider</code> shipped with the framework and the plumbing they
+share: one pooled HTTP client, error classification, secret scrubbing, retry with
+exponential backoff, and a registry that builds named providers from <code>[providers.&lt;name&gt;]</code>.</p>
+<p><strong>Key public types.</strong> <code>AnthropicProvider</code> (Messages API, extended thinking, prompt caching,
+<code>AnthropicAuth::ApiKey</code> or <code>AnthropicAuth::Bearer</code>), <code>OpenAiCompatibleProvider</code> (Chat
+Completions for OpenAI, Groq, Mistral, xAI, OpenRouter, Ollama and gateways), <code>MockProvider</code>
+and <code>MockStep</code>, <code>ProviderRegistry</code> and <code>ProviderRegistryBuilder</code> (with <code>register_kind</code> for
+new kinds), <code>RetryPolicy</code> and <code>with_retry</code>, <code>classify_http_error</code>, <code>scrub_secrets</code>,
+<code>expand_model_shorthand</code>.</p>
+<p><strong>Must never depend on</strong> <code>vibe-agents</code> or anything above it. A provider sees a
+<code>CompletionRequest</code> and nothing about agents, tasks or phases.</p>
+<p><strong>Tests.</strong> Unit tests for classification rules (billing wording wins over a 429, context
+length on 400/413), backoff arithmetic and jitter bounds, header parsing and scrubbing.
+Integration tests in <code>tests/anthropic_http.rs</code> and <code>tests/openai_http.rs</code> run each provider
+against a <code>wiremock</code> server: tool use round trip, 429 then success, retries exhausted with
+<code>retry_after</code> preserved, 401 and billing errors not retried, malformed JSON, bearer mode and
+custom headers, and replay of signed thinking blocks on the next tool turn.</p>
+<h2 id="vibe-tools"><a class="header" href="#vibe-tools">vibe-tools</a></h2>
+<p><strong>Responsibility</strong> (from <code>ARCHITECTURE_EN.md</code>; the crate is still being written). The built-in
+tools <code>read_file</code>, <code>write_file</code>, <code>edit_file</code>, <code>list_dir</code>, <code>glob</code>, <code>grep</code> and <code>bash</code>, the shell
+command parser and security policy, and output truncation. The policy is described in
+<a href="adr/004-shell-policy.html">ADR-004</a>.</p>
+<p><strong>Must never depend on</strong> <code>vibe-agents</code> or above. Tools implement <code>vibe_core::Tool</code> and are
+confined through <code>ToolContext</code>.</p>
+<h2 id="vibe-workspace"><a class="header" href="#vibe-workspace">vibe-workspace</a></h2>
+<p><strong>Responsibility.</strong> Where a task’s agents work and how their work reaches the main line.
+Implements <code>WorkspaceProvider</code> with git worktrees, re-exports <code>InPlaceWorkspace</code>, and offers
+commit helpers and an optional model-assisted conflict resolver.</p>
+<p><strong>Key public types.</strong> <code>GitWorktreeProvider</code> (fields <code>base_branch</code>, <code>worktrees_dir</code>,
+<code>merge_strategy</code>), <code>MergeStrategy</code> (<code>Manual</code> or <code>Assisted { provider, model }</code>),
+<code>resolve_conflicts</code> and <code>Resolution</code>, <code>commit_all</code>, <code>has_uncommitted</code>, the <code>Git</code> wrapper,
+and <code>provider_by_name("git_worktree" | "in_place", base_branch)</code>.</p>
+<p><strong>Must never depend on</strong> <code>vibe-providers</code> concretely: the assisted merge takes any
+<code>SharedProvider</code>. It must not depend on <code>vibe-agents</code> either; its merge prompt is a
+constant (<code>MERGE_SYSTEM_PROMPT</code>) rather than an agent spec.</p>
+<p><strong>Tests.</strong> <code>tests/worktree.rs</code> creates real repositories in temporary directories and
+exercises: creation and reuse of a worktree, recreation of a stale directory, refusal on a
+non-repository, <code>changes</code> output, fast-forward with checkpoint commit, merge commit when the
+base moved, conflicts reported for human review with the project left clean and on its
+original branch, <code>NoChanges</code>, refusal on a dirty project, idempotent <code>discard</code>, and an
+assisted merge driven by a <code>MockProvider</code>-style provider.</p>
+<h2 id="vibe-plugins"><a class="header" href="#vibe-plugins">vibe-plugins</a></h2>
+<p><strong>Responsibility.</strong> The Vibe Plugin Protocol (VPP): wire types, a client that drives a plugin
+process, adapters turning a connection into <code>Tool</code>, <code>Hook</code> and <code>AgentSpec</code> contributions,
+manifest parsing and discovery, the <code>PluginHost</code> failure policy, and a <code>PluginServer</code> helper
+for writing plugins in Rust. Ships the <code>vibe-echo-plugin</code> example binary. See
+<a href="plugin-protocol.html">Plugin protocol</a>.</p>
+<p><strong>Key public types.</strong> <code>PluginHost</code>, <code>LoadedPlugin</code>, <code>RemotePlugin</code>, <code>RemoteTool</code>,
+<code>RemoteHook</code>, <code>PluginProcess</code>, <code>PluginManifest</code>, <code>PluginServer</code>, <code>PluginLogger</code>,
+<code>ToolCallContext</code>, <code>Capabilities</code>, constants <code>PROTOCOL_VERSION</code>, <code>MCP_PROTOCOL_VERSION</code>,
+<code>DEFAULT_TIMEOUT</code>, <code>TOOL_CALL_TIMEOUT</code>, <code>SHUTDOWN_GRACE</code>.</p>
+<p><strong>Must never depend on</strong> <code>vibe-agents</code>, <code>vibe-tools</code> or <code>vibe-providers</code>. A plugin is a source
+of extensions, not a consumer of the built-in ones.</p>
+<p><strong>Tests.</strong> Unit tests in <code>client.rs</code> use <code>tokio::io::duplex</code> to script a fake peer
+(timeouts, errors, pagination, notifications). <code>tests/echo_process.rs</code> spawns the real
+<code>vibe-echo-plugin</code> binary: tools, agents and hooks are contributed, manifest discovery finds
+it, a broken optional plugin does not block the others, and a relative program resolves
+against <code>cwd</code>.</p>
+<h2 id="vibe-agents"><a class="header" href="#vibe-agents">vibe-agents</a></h2>
+<p><strong>Responsibility.</strong> The runtime that turns an <code>AgentSpec</code> into a conversation: the
+<code>AgentRunner</code> loop, structured-output extraction and repair, continuation after context
+exhaustion, the twelve built-in agents and their prompts, and TOML overrides. See
+<a href="agent-runtime.html">Agent runtime</a>.</p>
+<p><strong>Key public types.</strong> <code>AgentRunner</code>, <code>run_structured</code>, <code>run_structured_with_hint</code>,
+<code>extract_json</code>, <code>repair_json</code>, <code>run_with_continuation</code>, <code>ContinuationPolicy</code>,
+<code>builtin_agents</code>, <code>register_builtin_agents</code>, <code>load_agent_overrides</code>,
+<code>apply_agent_overrides</code>, <code>project_agents_dir</code>, <code>documented_variables</code>, and the
+<code>test_support</code> module (<code>ScriptedProvider</code>, <code>EchoTool</code>, <code>FailingTool</code>, <code>ConcurrencyProbe</code>).</p>
+<p><strong>Must never depend on</strong> a concrete provider, tool, workspace or plugin crate. The lib
+documentation calls this out: models come through <code>ModelProvider</code>, capabilities through
+<code>Tool</code>, policies through the hooks of a <code>Registry</code>.</p>
+<p><strong>Tests.</strong> <code>tests/agent_loop.rs</code> drives the loop with <code>ScriptedProvider</code> and mock tools, no
+network: parallel read-only calls, sequential mutating calls, <code>MaxSteps</code>, hook vetoes seen by
+the model, the 85 % warning and 90 % stop, every structured-output path (fenced, unfenced,
+repair, retry, give up), continuation and its limit, unknown, failing and panicking tools,
+truncation to <code>.vibe/tool-output/</code>, cancellation, provider error handling and retries, the
+max-tokens nudge, convergence at 75 %, prompt variables and hook augmentation, published
+events, and a smoke run of every built-in agent.</p>
+<h2 id="vibe-pipeline"><a class="header" href="#vibe-pipeline">vibe-pipeline</a></h2>
+<p><strong>Responsibility</strong> (from <code>ARCHITECTURE_EN.md</code>; not written yet). File-backed <code>TaskStore</code>
+under <code>.vibe/tasks/NNN-slug/</code>, complexity profiles, phase orchestration, parallel subtask
+execution honouring <code>depends_on</code>, the QA/fix loop with escalation, run state and resume, and
+the event log. See <a href="pipeline.html">The pipeline</a>.</p>
+<h2 id="vibe-cli"><a class="header" href="#vibe-cli">vibe-cli</a></h2>
+<p><strong>Responsibility</strong> (from <code>ARCHITECTURE_EN.md</code>; not written yet). The <code>vibe</code> binary with
+<code>init</code>, <code>task add|list|show|discard</code>, <code>run</code>, <code>status</code>, <code>config</code>, <code>agents</code>, <code>plugins</code> and
+<code>doctor</code>, and live rendering of events. See <a href="../user/cli.html">Command line reference</a>.</p>
+<h2 id="where-to-add-code"><a class="header" href="#where-to-add-code">Where to add code</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>You want to…</th><th>Put it in</th></tr>
+</thead>
+<tbody>
+<tr><td>add a field to a persisted artefact</td><td><code>vibe-core</code> (with <code>#[serde(default)]</code> so old files still load)</td></tr>
+<tr><td>support a new model API</td><td><code>vibe-providers</code>, or out of tree via <code>ProviderRegistryBuilder::register_kind</code></td></tr>
+<tr><td>change how the loop reacts to a stop reason</td><td><code>vibe-agents::runtime</code></td></tr>
+<tr><td>change a built-in prompt</td><td><code>crates/vibe-agents/src/prompts/&lt;role&gt;.md</code></td></tr>
+<tr><td>add a protocol method</td><td><code>vibe-plugins::protocol</code>, then client, server and remote adapters</td></tr>
+<tr><td>isolate work somewhere other than a worktree</td><td>a new <code>WorkspaceProvider</code>, in any crate</td></tr>
+</tbody>
+</table>
+</div>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../design/overview.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../design/domain-model.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../design/overview.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../design/domain-model.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,547 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Domain model - Vibe Factory</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="An open, extensible framework for autonomous multi-agent software development">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-2dd03f19.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Vibe Factory</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/design/domain-model.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="domain-model"><a class="header" href="#domain-model">Domain model</a></h1>
+<p>Every artefact the framework produces or exchanges is a plain Rust type in <code>vibe-core</code>,
+serialisable with <code>serde</code>. This page describes those types and shows how they look on disk.
+All types derive <code>Serialize</code>, <code>Deserialize</code>, <code>Clone</code>, <code>Debug</code> and <code>PartialEq</code>; most enums use
+<code>#[serde(rename_all = "snake_case")]</code>, so <code>TaskStatus::InProgress</code> is written <code>"in_progress"</code>.</p>
+<pre><code class="language-text">Task ──1:1── Spec ──1:1── Plan ──1:n── PlanPhase ──1:n── Subtask
+  │                                                        │
+  └──1:n── QaReport (one per round) ──1:n── QaIssue        └── depends_on: [SubtaskId]
+
+Run: RunId ──publishes──▶ Event (wrapped in Envelope) ──▶ EventBus
+Agent session: SessionId, Message[] of ContentBlock, Usage
+</code></pre>
+<h2 id="identifiers"><a class="header" href="#identifiers">Identifiers</a></h2>
+<p><code>TaskId</code>, <code>SubtaskId</code>, <code>SessionId</code> and <code>RunId</code> are generated by one macro in <code>ids.rs</code>: a
+newtype over a v4 <code>uuid::Uuid</code>, <code>#[serde(transparent)]</code>, so each serialises as a bare string.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>new()</code> / <code>default()</code></td><td>fresh random id</td></tr>
+<tr><td><code>parse(&amp;str)</code> / <code>FromStr</code></td><td>parse the canonical UUID form</td></tr>
+<tr><td><code>short()</code></td><td>first 8 characters, used in branch and directory names</td></tr>
+<tr><td><code>Display</code></td><td>full UUID</td></tr>
+</tbody>
+</table>
+</div>
+<p>The ids are distinct types, so passing a <code>TaskId</code> where a <code>SubtaskId</code> is expected does not
+compile.</p>
+<h2 id="task"><a class="header" href="#task">Task</a></h2>
+<p>A <code>Task</code> is the unit of work handed to the pipeline.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Serde</th></tr>
+</thead>
+<tbody>
+<tr><td><code>id</code></td><td><code>TaskId</code></td><td>required</td></tr>
+<tr><td><code>title</code></td><td><code>String</code></td><td>required</td></tr>
+<tr><td><code>description</code></td><td><code>String</code></td><td>required</td></tr>
+<tr><td><code>status</code></td><td><code>TaskStatus</code></td><td>required</td></tr>
+<tr><td><code>complexity</code></td><td><code>Option&lt;Complexity&gt;</code></td><td>required key, <code>null</code> until assessed</td></tr>
+<tr><td><code>labels</code></td><td><code>Vec&lt;String&gt;</code></td><td><code>default</code></td></tr>
+<tr><td><code>source</code></td><td><code>TaskSource</code></td><td><code>default</code> (<code>manual</code>)</td></tr>
+<tr><td><code>created_at</code>, <code>updated_at</code></td><td><code>DateTime&lt;Utc&gt;</code></td><td>RFC 3339 strings</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>Task::new</code> creates a backlog task; <code>set_status</code> and <code>touch</code> bump <code>updated_at</code>; <code>slug()</code>
+applies <code>slugify</code> (lowercase ASCII alphanumerics separated by <code>-</code>, at most 48 characters,
+<code>"task"</code> when empty).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>TaskStatus</code></th><th>Meaning</th><th><code>is_terminal()</code></th></tr>
+</thead>
+<tbody>
+<tr><td><code>backlog</code> (default)</td><td>created, not started</td><td>no</td></tr>
+<tr><td><code>planning</code></td><td>spec and plan being produced</td><td>no</td></tr>
+<tr><td><code>building</code></td><td>subtasks being implemented</td><td>no</td></tr>
+<tr><td><code>review</code></td><td>QA reviewing or fixing</td><td>no</td></tr>
+<tr><td><code>ready</code></td><td>waiting for a human to review and merge</td><td>no</td></tr>
+<tr><td><code>done</code></td><td>merged or accepted</td><td>yes</td></tr>
+<tr><td><code>failed</code></td><td>the pipeline gave up</td><td>yes</td></tr>
+<tr><td><code>cancelled</code></td><td>cancelled by the user</td><td>yes</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>Complexity</code> is ordered (<code>trivial &lt; simple &lt; standard &lt; complex</code>) and exposes two thresholds:
+<code>needs_spec()</code> is true from <code>simple</code> upwards, <code>needs_research()</code> from <code>standard</code> upwards.</p>
+<p><code>TaskSource</code> is internally tagged with <code>kind</code>: <code>{"kind": "manual"}</code>,
+<code>{"kind": "issue", "provider": "github", "reference": "412"}</code> or
+<code>{"kind": "derived", "parent": "&lt;task id&gt;"}</code>.</p>
+<p>A task as serialised by <code>serde_json</code>:</p>
+<pre><code class="language-json">{
+  "id": "6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19",
+  "title": "Add OAuth login with GitHub",
+  "description": "Users should be able to sign in with their GitHub account.",
+  "status": "planning",
+  "complexity": "standard",
+  "labels": ["auth"],
+  "source": { "kind": "issue", "provider": "github", "reference": "412" },
+  "created_at": "2026-09-27T08:12:44.120Z",
+  "updated_at": "2026-09-27T08:15:02.871Z"
+}
+</code></pre>
+<h2 id="spec"><a class="header" href="#spec">Spec</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Fields</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Spec</code></td><td><code>task_id</code>, <code>summary</code>, <code>requirements</code> (default <code>[]</code>), <code>context</code> (default), <code>body</code> (default <code>""</code>, free markdown)</td></tr>
+<tr><td><code>Requirement</code></td><td><code>id</code> (<code>"R1"</code>…), <code>description</code>, <code>kind</code> (default <code>functional</code>), <code>priority</code> (default <code>1</code>, 1 = must have), <code>acceptance</code> (default <code>[]</code>)</td></tr>
+<tr><td><code>RequirementKind</code></td><td><code>functional</code>, <code>non_functional</code>, <code>constraint</code></td></tr>
+<tr><td><code>SpecContext</code></td><td><code>relevant_files</code>, <code>findings</code>, <code>assumptions</code>, all default <code>[]</code></td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-json">{
+  "task_id": "6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19",
+  "summary": "Add a GitHub OAuth sign-in flow next to the existing password login.",
+  "requirements": [
+    {
+      "id": "R1",
+      "description": "A 'Sign in with GitHub' button starts the OAuth flow.",
+      "kind": "functional",
+      "priority": 1,
+      "acceptance": ["GET /auth/github redirects to github.com/login/oauth/authorize"]
+    },
+    {
+      "id": "R2",
+      "description": "Password login keeps working unchanged.",
+      "kind": "constraint",
+      "priority": 1,
+      "acceptance": ["existing tests in tests/auth pass"]
+    }
+  ],
+  "context": {
+    "relevant_files": ["src/auth/mod.rs", "src/routes.rs"],
+    "findings": ["sessions are stored with tower-sessions"],
+    "assumptions": ["client id and secret come from environment variables"]
+  },
+  "body": ""
+}
+</code></pre>
+<p>Because every field but <code>task_id</code> and <code>summary</code> has a default, a minimal spec is two keys.</p>
+<h2 id="plan"><a class="header" href="#plan">Plan</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Fields</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Plan</code></td><td><code>task_id</code>, <code>approach</code> (default <code>""</code>), <code>phases</code> (default <code>[]</code>)</td></tr>
+<tr><td><code>PlanPhase</code></td><td><code>name</code>, <code>parallel</code> (default <code>false</code>), <code>subtasks</code> (default <code>[]</code>)</td></tr>
+<tr><td><code>Subtask</code></td><td><code>id</code>, <code>title</code>, <code>description</code>, <code>files</code>, <code>depends_on: Vec&lt;SubtaskId&gt;</code>, <code>verification</code>, <code>status</code> (default <code>pending</code>), <code>attempts</code> (default <code>0</code>), <code>notes</code> (default <code>""</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>SubtaskStatus</code></th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pending</code> (default)</td><td>not started</td></tr>
+<tr><td><code>in_progress</code></td><td>an agent is working on it</td></tr>
+<tr><td><code>done</code></td><td>implemented</td></tr>
+<tr><td><code>failed</code></td><td>gave up after retries</td></tr>
+<tr><td><code>skipped</code></td><td>dependency failed or no longer needed</td></tr>
+</tbody>
+</table>
+</div>
+<p>Phases always run in order; the subtasks of a phase may run concurrently when <code>parallel</code> is
+true. <code>Plan</code> offers <code>subtasks()</code> / <code>subtasks_mut()</code> (plan order), <code>subtask(id)</code>, <code>len()</code>,
+<code>is_empty()</code> and <code>is_complete()</code> (every subtask <code>done</code> or <code>skipped</code>).</p>
+<p><code>Plan::validate()</code> rejects two kinds of broken plans with an <code>ErrorKind::Config</code> error:</p>
+<ol>
+<li>a <code>depends_on</code> entry naming a subtask that is not in the plan
+(<code>"subtask &lt;id&gt; depends on unknown subtask &lt;id&gt;"</code>);</li>
+<li>a dependency cycle, found with Kahn’s algorithm: every subtask starts with an in-degree
+equal to its number of dependencies, subtasks at zero are dequeued, and each dequeue
+decrements the subtasks that depend on it. If fewer subtasks are dequeued than exist, the
+remainder forms a cycle (<code>"plan contains a dependency cycle"</code>).</li>
+</ol>
+<p>Dependencies may cross phase boundaries; validation looks at the whole plan.</p>
+<pre><code class="language-json">{
+  "task_id": "6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19",
+  "approach": "Add an OAuth client module, then wire routes and the login page.",
+  "phases": [
+    {
+      "name": "Foundations",
+      "parallel": false,
+      "subtasks": [
+        {
+          "id": "0b7e2f4c-1d3a-4e8b-9c6f-5a2d8e1f3b70",
+          "title": "OAuth client",
+          "description": "Create src/auth/github.rs exposing authorize_url() and exchange_code() (R1).",
+          "files": ["src/auth/github.rs", "src/auth/mod.rs"],
+          "depends_on": [],
+          "verification": ["cargo test auth::github"],
+          "status": "done",
+          "attempts": 1,
+          "notes": "Uses reqwest already present in Cargo.toml."
+        }
+      ]
+    },
+    {
+      "name": "Wiring",
+      "parallel": true,
+      "subtasks": [
+        {
+          "id": "c41a9e07-6b52-4f1d-a3e8-2d9f0b7c6e15",
+          "title": "Routes",
+          "description": "Add GET /auth/github and GET /auth/github/callback (R1, R2).",
+          "files": ["src/routes.rs"],
+          "depends_on": ["0b7e2f4c-1d3a-4e8b-9c6f-5a2d8e1f3b70"],
+          "verification": ["cargo test --test auth"],
+          "status": "pending",
+          "attempts": 0,
+          "notes": ""
+        }
+      ]
+    }
+  ]
+}
+</code></pre>
+<h2 id="qa-report"><a class="header" href="#qa-report">QA report</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Fields</th></tr>
+</thead>
+<tbody>
+<tr><td><code>QaReport</code></td><td><code>task_id</code>, <code>round</code> (1-based), <code>verdict</code>, <code>summary</code> (default), <code>issues</code> (default)</td></tr>
+<tr><td><code>QaIssue</code></td><td><code>severity</code>, <code>title</code>, <code>detail</code>, and optional <code>requirement</code>, <code>file</code>, <code>line</code>, <code>suggested_fix</code></td></tr>
+<tr><td><code>QaVerdict</code></td><td><code>approved</code>, <code>changes_requested</code>, <code>inconclusive</code></td></tr>
+<tr><td><code>Severity</code></td><td><code>low &lt; medium &lt; high &lt; critical</code> (ordered)</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>issues_at_least(Severity::High)</code> filters by severity; <code>is_blocking()</code> is true for any
+verdict other than <code>approved</code>; <code>to_markdown()</code> renders the human-readable report.</p>
+<h2 id="messages"><a class="header" href="#messages">Messages</a></h2>
+<p>A conversation is a <code>Vec&lt;Message&gt;</code>; each <code>Message</code> has a <code>role</code> (<code>user</code> or <code>assistant</code>) and
+a list of <code>ContentBlock</code>s. There is no system role: the system prompt travels separately in
+<code>CompletionRequest::system</code>. Tool results are sent back in a <code>user</code> message.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>ContentBlock</code> (tag <code>type</code>)</th><th>Fields</th></tr>
+</thead>
+<tbody>
+<tr><td><code>text</code></td><td><code>text</code></td></tr>
+<tr><td><code>thinking</code></td><td><code>text</code> (only when the provider exposes reasoning)</td></tr>
+<tr><td><code>tool_use</code></td><td><code>id</code>, <code>name</code>, <code>input</code> (JSON matching the tool schema)</td></tr>
+<tr><td><code>tool_result</code></td><td><code>tool_use_id</code>, <code>content</code> (text), <code>is_error</code> (default <code>false</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-json">{"role": "assistant", "content": [
+  {"type": "text", "text": "Reading the router first."},
+  {"type": "tool_use", "id": "toolu_01", "name": "read_file", "input": {"path": "src/routes.rs"}}
+]}
+</code></pre>
+<p>Helpers: <code>Message::user</code>, <code>Message::assistant</code>, <code>Message::tool_results</code>, <code>text()</code> (joins text
+blocks), <code>tool_uses()</code>, <code>has_tool_use()</code>, and <code>estimate_tokens()</code>, a deliberately rough
+4-characters-per-token estimate used for context budgeting without a tokenizer.</p>
+<p><code>Usage</code> counts <code>input_tokens</code>, <code>output_tokens</code>, <code>cache_read_tokens</code> and <code>cache_write_tokens</code>
+(the last two default to 0). It supports <code>combined</code>, <code>+=</code> and <code>total()</code> (input plus output).</p>
+<h2 id="phase"><a class="header" href="#phase">Phase</a></h2>
+<p><code>Phase</code> lists the pipeline stages in canonical order: <code>assess</code>, <code>spec</code>, <code>plan</code>, <code>build</code>,
+<code>qa</code>, <code>fix</code>, <code>merge</code> (<code>Phase::ALL</code>). <code>as_str()</code> gives the stable lowercase name used in
+<code>[phases.&lt;name&gt;]</code> configuration and CLI flags; <code>FromStr</code> accepts it case-insensitively and
+returns a <code>Config</code> error otherwise. The enum does not impose an order at run time: a
+pipeline may skip <code>spec</code> or loop <code>fix → qa</code>.</p>
+<h2 id="events"><a class="header" href="#events">Events</a></h2>
+<p><code>Event</code> is internally tagged with <code>type</code>. Every variant except <code>log</code> carries the <code>run</code> id.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Extra fields</th></tr>
+</thead>
+<tbody>
+<tr><td><code>run_started</code></td><td><code>task</code></td></tr>
+<tr><td><code>phase_started</code></td><td><code>phase</code></td></tr>
+<tr><td><code>phase_finished</code></td><td><code>phase</code>, <code>success</code>, <code>summary</code></td></tr>
+<tr><td><code>agent_started</code></td><td><code>role</code>, <code>subtask</code> (nullable)</td></tr>
+<tr><td><code>agent_text</code></td><td><code>role</code>, <code>text</code></td></tr>
+<tr><td><code>tool_called</code></td><td><code>role</code>, <code>tool</code>, <code>input</code></td></tr>
+<tr><td><code>tool_returned</code></td><td><code>role</code>, <code>tool</code>, <code>is_error</code>, <code>duration_ms</code>, <code>preview</code></td></tr>
+<tr><td><code>agent_finished</code></td><td><code>role</code>, <code>steps</code>, <code>usage</code>, <code>stop</code> (the <code>AgentStop</code> serialised as a JSON string)</td></tr>
+<tr><td><code>subtask_updated</code></td><td><code>subtask</code>, <code>status</code></td></tr>
+<tr><td><code>retrying</code></td><td><code>what</code>, <code>attempt</code>, <code>delay_ms</code></td></tr>
+<tr><td><code>paused</code></td><td><code>reason</code></td></tr>
+<tr><td><code>run_finished</code></td><td><code>success</code>, <code>status</code> (a <code>TaskStatus</code>)</td></tr>
+<tr><td><code>log</code></td><td><code>run</code> (nullable), <code>level</code> (<code>info</code>, <code>warn</code>, <code>error</code>), <code>message</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>EventBus::publish</code> wraps the event in an <code>Envelope</code> stamped with the current time; that is
+the shape appended to <code>events.jsonl</code>:</p>
+<pre><code class="language-json">{"at":"2026-09-27T08:16:10.002Z","event":{"type":"tool_returned","run":"a3f0…","role":"coder","tool":"read_file","is_error":false,"duration_ms":3,"preview":"use axum::Router;…"}}
+</code></pre>
+<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<p>Every crate returns <code>vibe_core::Result&lt;T&gt;</code> with a single <code>Error { kind, message, retry_after, source }</code>. <code>ErrorKind</code> drives behaviour rather than display: <code>RateLimited</code>,
+<code>ServerError</code> and <code>Network</code> are the only kinds for which <code>is_retryable()</code> is true;
+<code>ContextTooLong</code> ends an agent run with <code>AgentStop::ContextWindow</code>; <code>Denied</code> is what policy
+checks return. <code>io::Error</code> converts to <code>Storage</code>, <code>serde_json::Error</code> to <code>InvalidRequest</code>,
+<code>toml::de::Error</code> to <code>Config</code>.</p>
+<h2 id="json-is-the-source-of-truth"><a class="header" href="#json-is-the-source-of-truth">JSON is the source of truth</a></h2>
+<p>Complexity assessments, specs, plans and QA reports are produced by agents as JSON, parsed
+into these types, and saved as JSON. Markdown (<code>Spec::to_markdown</code>, <code>QaReport::to_markdown</code>)
+is rendered <em>from</em> the typed value for humans and is never parsed back. There is therefore
+one source of truth per artefact, and a malformed model answer is caught at the boundary by
+<code>serde</code> instead of deep in the pipeline. The rationale is in
+<a href="adr/006-structured-qa.html">ADR-006</a>; the extraction and repair strategy is in
+<a href="agent-runtime.html#structured-output">Agent runtime</a>.</p>
+<p>The JSON documents the built-in prompts ask for are the <em>agent-facing</em> shapes, not the
+persisted ones: they omit fields only the framework knows. The planner, for example, returns
+subtasks without <code>id</code>, <code>status</code> or <code>attempts</code> and names dependencies by subtask title, and
+the QA reviewer returns a report without <code>task_id</code> or <code>round</code>. Assigning ids, resolving
+titles to <code>SubtaskId</code>s and filling <code>task_id</code> and <code>round</code> is the caller’s job before a value
+becomes a <code>Plan</code> or a <code>QaReport</code> and before <code>Plan::validate()</code> runs.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../design/crates.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../design/pipeline.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../design/crates.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../design/pipeline.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,485 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Quick start - Vibe Factory</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="An open, extensible framework for autonomous multi-agent software development">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-bb94a620.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-2dd03f19.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Vibe Factory</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/user/quickstart.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="quick-start"><a class="header" href="#quick-start">Quick start</a></h1>
+<p>This walkthrough takes about ten minutes. It runs one small task on an existing repository,
+from <code>vibe init</code> to a merged branch. It assumes <code>vibe</code> is installed (<a href="installation.html">Installation</a>)
+and uses a small Rust command-line project as the example; any language works the same way.</p>
+<h2 id="1-choose-a-model"><a class="header" href="#1-choose-a-model">1. Choose a model</a></h2>
+<p>With an Anthropic key:</p>
+<pre><code class="language-sh">export ANTHROPIC_API_KEY=sk-ant-…
+</code></pre>
+<p>Or, with no key at all, a local model through Ollama:</p>
+<pre><code class="language-sh">ollama pull qwen2.5-coder
+</code></pre>
+<p>You will point the project at Ollama in step 2. To try the pipeline without any model, jump
+to <a href="#try-it-with-no-api-key">Try it with no API key</a>.</p>
+<h2 id="2-initialise-the-project"><a class="header" href="#2-initialise-the-project">2. Initialise the project</a></h2>
+<pre><code class="language-sh">cd ~/src/export-tool
+git status                  # a clean git repository is the easiest start
+vibe init
+</code></pre>
+<p><code>vibe init</code> writes <code>.vibe/config.toml</code> with every key at its default value and a commented
+<code>[[plugins]]</code> example, and adds <code>worktrees/</code> and <code>tool-output/</code> to <code>.vibe/.gitignore</code>
+(<code>tasks/</code> stays committed on purpose). Inspect the effective configuration:</p>
+<pre><code class="language-sh">vibe config show
+</code></pre>
+<pre><code class="language-toml">default_provider = "anthropic"
+default_model = "anthropic/claude-sonnet-5"
+plugins = []
+
+[phases]
+
+[providers.anthropic]
+kind = "anthropic"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[providers.ollama]
+kind = "openai"
+base_url = "http://localhost:11434/v1"
+default_model = "qwen2.5-coder"
+
+[providers.openai]
+kind = "openai"
+api_key_env = "OPENAI_API_KEY"
+
+[pipeline]
+max_qa_rounds = 3
+max_subtask_attempts = 3
+max_parallel_subtasks = 3
+max_phase_retries = 2
+workspace = "git_worktree"
+auto_merge = false
+merge_strategy = "manual"
+
+[security]
+blocked_commands = []
+allowed_commands = []
+command_timeout_secs = 120
+allow_network = false
+extra_read_paths = []
+</code></pre>
+<p>Every phase uses <code>default_model</code>; <code>[phases]</code> is empty until you give a phase its own model.</p>
+<p>With Ollama, switch the default model:</p>
+<pre><code class="language-sh">vibe config set default_model ollama/qwen2.5-coder
+</code></pre>
+<p>Then check everything is in place:</p>
+<pre><code class="language-sh">vibe doctor
+</code></pre>
+<p>Every key is explained in <a href="configuration.html">Configuration</a>.</p>
+<h2 id="3-add-a-task"><a class="header" href="#3-add-a-task">3. Add a task</a></h2>
+<pre><code class="language-sh">vibe task add "Add a --json flag to the export command" \
+  -d "When --json is given, print the exported records as a JSON array on stdout instead of the table. Keep the table as the default. Add a test."
+</code></pre>
+<pre><code class="language-text">✓ created task #1 Add a --json flag to the export command
+  id   6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19
+  dir  /home/me/src/export-tool/.vibe/tasks/001-add-a-json-flag-to-the-export-command
+
+Run it with: vibe run 1
+</code></pre>
+<p>The task is stored in <code>.vibe/tasks/001-add-a-json-flag-to-the-export-command/task.json</code>, in
+the <code>backlog</code> status. <code>vibe task list</code> shows it.</p>
+<h2 id="4-plan-without-building"><a class="header" href="#4-plan-without-building">4. Plan without building</a></h2>
+<p>A dry run stops after planning, so you can read what the agents intend before they touch any
+code:</p>
+<pre><code class="language-sh">vibe run 1 --dry-run
+</code></pre>
+<p>It runs three phases:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Phase</th><th>Agent(s)</th><th>Produces</th></tr>
+</thead>
+<tbody>
+<tr><td>assess</td><td><code>complexity_assessor</code> (unless the heuristic already knows)</td><td>the complexity and profile, in <code>task.json</code> and <code>run.json</code></td></tr>
+<tr><td>spec</td><td><code>spec_gatherer</code>, then <code>spec_writer</code> for a standard task</td><td><code>spec.json</code> and <code>spec.md</code>: summary, requirements with acceptance criteria, relevant files</td></tr>
+<tr><td>plan</td><td><code>planner</code></td><td><code>plan.json</code> and <code>plan.md</code>: phases of subtasks with files, dependencies and verification</td></tr>
+</tbody>
+</table>
+</div>
+<p>The files are in the task directory:</p>
+<pre><code class="language-sh">cd .vibe/tasks/001-add-a-json-flag-to-the-export-command
+cat spec.md plan.md progress.md
+cd -
+</code></pre>
+<p><code>progress.md</code> has one timestamped note per step: the assessment and its source, the spec
+summary, the plan. The dry run leaves the run <strong>paused</strong> and the task back in <code>backlog</code>, ready to continue;
+the exit code is 0 because it stopped where you asked.
+If the spec or plan misses the point, edit <code>spec.json</code> and run <code>vibe run 1 --from plan --dry-run</code>, or discard the task and add it again with a better description.</p>
+<h2 id="5-run-it"><a class="header" href="#5-run-it">5. Run it</a></h2>
+<pre><code class="language-sh">vibe run 1 --resume
+</code></pre>
+<p><code>--resume</code> continues the paused run at the build phase, reusing the spec and plan you just
+read. (<code>vibe run 1</code> would start over from the assessment.) The output looks like this:</p>
+<pre><code class="language-text">Resuming #1 Add a --json flag to the export command (model anthropic/claude-sonnet-5, workspace git_worktree)
+▶ run 3b1f09c2
+
+── build ──────────
+  ▸ subtask 1/3 Add the --json option to the CLI definition: in_progress
+  ● coder · subtask 1/3 Add the --json option to the CLI definition
+  ⟶ read_file(path: "src/cli.rs")
+  ⟵ ok (2 ms)
+  ⟶ edit_file(new_string: "    /// Print records as JSON.\n    #[arg(long)]\n    pub json: bool,\n…
+  ⟵ ok (4 ms)
+  ⟶ bash(command: "cargo build")
+  ⟵ ok (8412 ms)
+  ● coder finished: 7 step(s), 31.4k in / 1.9k out tokens, completed
+  ▸ subtask 1/3 Add the --json option to the CLI definition: done
+  ▸ subtask 2/3 Serialise records as JSON in export: in_progress
+  ● coder · subtask 2/3 Serialise records as JSON in export
+  ⟶ grep(path: "src", pattern: "fn export")
+  ⟵ ok (12 ms)
+  ⟶ edit_file(new_string: "    if args.json {\n        serde_json::to_writer_pretty(std::io::st…
+  ⟵ ok (3 ms)
+  ⟶ bash(command: "cargo test export")
+  ⟵ error (6120 ms): exit status 101 --- stdout --- running 4 tests test export::tests::json_out…
+  ⟶ edit_file(new_string: "#[derive(Serialize)]\npub struct Record {", old_string: "pub stru…
+  ⟵ ok (2 ms)
+  ⟶ bash(command: "cargo test export")
+  ⟵ ok (5810 ms)
+  ● coder finished: 12 step(s), 58.0k in / 3.4k out tokens, completed
+  ▸ subtask 2/3 Serialise records as JSON in export: done
+  ▸ subtask 3/3 Test the --json output: in_progress
+  …
+  ▸ subtask 3/3 Test the --json output: done
+✓ build: 3 done, 0 failed, 0 skipped (4 min 12 s)
+
+── qa ──────────
+  ● qa_reviewer
+  ⟶ bash(command: "cargo test")
+  ⟵ ok (9204 ms)
+  ● qa_reviewer finished: 15 step(s), 39.8k in / 1.9k out tokens, completed
+✓ qa: round 1: Approved (0 issue(s)) (1 min 03 s)
+
+── merge ──────────
+✓ merge: ready for human review and merge (auto_merge is off) (3 ms)
+■ run finished: ready
+
+phase  result  time          tokens in  tokens out  summary
+build  ✓       4 min 12 s    176.3k     7.9k        3 done, 0 failed, 0 skipped
+qa     ✓       1 min 03 s    39.8k      1.9k        round 1: Approved (0 issue(s))
+merge  ✓       3 ms          0          0           ready for human review and merge (auto_mer…
+status     ready
+duration   5 min 16 s
+tokens     216.1k in / 9.8k out
+branch     vibe/add-a-json-flag-to-the-export-command-6f1c3e0a
+worktree   /home/me/src/export-tool/.vibe/worktrees/add-a-json-flag-to-the-export-command-6f1c3e0a
+task dir   /home/me/src/export-tool/.vibe/tasks/001-add-a-json-flag-to-the-export-command
+
+Review the work, then merge it: git merge vibe/add-a-json-flag-to-the-export-command-6f1c3e0a
+</code></pre>
+<p>A <code>──</code> header opens each phase and a <code>✓</code> (or <code>✗</code>) line closes it with its summary and
+duration. <code>●</code> lines mark agent sessions, <code>▸</code> lines subtask status changes. Each <code>⟶</code> line is a
+tool call with its arguments (cut at 80 characters) and each <code>⟵</code> line its result with the
+time it took. A failed tool call (<code>error</code>) is normal: the agent reads the error and tries
+again. With <code>-v</code>, the agents’ own text and informational logs are shown too. The final table
+sums up the phases of this invocation. <code>Ctrl-C</code> cancels; <code>vibe run 1 --resume</code> continues later.</p>
+<p>Exit code <code>0</code> means the task is <code>ready</code> (or <code>done</code> with auto-merge).</p>
+<h2 id="6-inspect-the-result"><a class="header" href="#6-inspect-the-result">6. Inspect the result</a></h2>
+<pre><code class="language-sh">vibe task show 1
+</code></pre>
+<p>This prints the spec summary, the plan with each subtask’s status, the QA verdict, the
+state of the run and the workspace. The code is on the task branch, in its own worktree:</p>
+<pre><code class="language-sh">git log --oneline main..vibe/add-a-json-flag-to-the-export-command-6f1c3e0a
+git diff main...vibe/add-a-json-flag-to-the-export-command-6f1c3e0a
+cd .vibe/worktrees/add-a-json-flag-to-the-export-command-6f1c3e0a &amp;&amp; cargo test &amp;&amp; cd -
+</code></pre>
+<p>Each completed subtask was committed as <code>vibe: complete subtask &lt;n&gt; - &lt;title&gt;</code>.</p>
+<h2 id="7-merge"><a class="header" href="#7-merge">7. Merge</a></h2>
+<p>The task is <code>ready</code>: nothing reached your branch yet. Merge it as any branch:</p>
+<pre><code class="language-sh">git switch main
+git merge vibe/add-a-json-flag-to-the-export-command-6f1c3e0a
+vibe task discard 1 --yes          # remove the worktree and the branch
+</code></pre>
+<p>To let Vibe Factory merge by itself as soon as QA approves, run with <code>--auto-merge</code>, or
+set it for the project:</p>
+<pre><code class="language-sh">vibe run 2 --auto-merge
+vibe config set pipeline.auto_merge true
+</code></pre>
+<p>Auto-merge fast-forwards when it can, otherwise creates a merge commit. It refuses to run
+while tracked files of your checkout have uncommitted changes, and it leaves the task
+<code>ready</code> with the list of conflicting files when the branches conflict. Details in
+<a href="workspaces.html#merge-behaviour">Workspaces and merging</a>.</p>
+<h2 id="try-it-with-no-api-key"><a class="header" href="#try-it-with-no-api-key">Try it with no API key</a></h2>
+<p>The built-in <code>mock</code> provider answers every agent with canned, valid documents without
+calling any model. It edits no file, so it is only good for seeing the pipeline move:</p>
+<pre><code class="language-sh">vibe task add "Add a --json flag to the export command"
+vibe run 1 --provider mock --dry-run
+vibe task show 1
+</code></pre>
+<p>This is the CLI’s built-in mock, used whenever no <code>[providers.mock]</code> table is declared. A
+provider you declare yourself with <code>kind = "mock"</code> only answers plain text, so its structured
+phases fail. The mock assessor classifies the task as <code>simple</code>, so the spec is written by the gatherer
+alone, and the planner returns a one-subtask plan. Drop <code>--dry-run</code> to go through build, QA
+and merge as well.</p>
+<p>To control what the “model” says, give a script with <code>--script</code>. A script is a JSON array of
+answers replayed in order, or an object with answers per agent role:</p>
+<pre><code class="language-json">{
+  "routes": {
+    "planner": [
+      {"json": {"approach": "Two steps.", "phases": [{"name": "Work", "parallel": false,
+        "subtasks": [{"title": "Add flag", "description": "Add --json."},
+                     {"title": "Test it", "description": "Add a test.", "depends_on": ["Add flag"]}]}]}}
+    ],
+    "qa_reviewer": [
+      {"json": {"verdict": "changes_requested", "summary": "Missing test.",
+                "issues": [{"severity": "high", "title": "No test for --json"}]}}
+    ]
+  },
+  "fallback": true
+}
+</code></pre>
+<pre><code class="language-sh">vibe run 1 --script demo.json      # implies the mock provider on every phase
+</code></pre>
+<p>Each request takes the next answer routed to its role, else the next entry of <code>steps</code>, else,
+with <code>fallback</code> true (the default), the canned answer. An answer is a string (plain text),
+<code>{"text": "…"}</code>, <code>{"json": …}</code> (sent as a fenced JSON document, as structured agents
+answer), or <code>{"tool": "read_file", "input": {"path": "src/main.rs"}}</code> (a tool call, which
+really runs). With <code>"fallback": false</code>, an exhausted script fails the request. Roles are
+recognised from the first line of the agent’s system prompt, so routes work for the built-in
+prompts; an agent whose prompt you replaced is only served by <code>steps</code> and the fallback. The example
+above makes QA request changes once, so you can watch the fix loop: the fixer runs, QA
+reviews again with the canned approval, and the task ends <code>ready</code>.</p>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next steps</a></h2>
+<ul>
+<li><a href="concepts.html">Concepts</a> explains tasks, profiles, specs, plans and workspaces.</li>
+<li><a href="configuration.html">Configuration</a> lists every setting, including models per phase.</li>
+<li><a href="troubleshooting.html">Troubleshooting</a> covers what to do when a run pauses or fails.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user/installation.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../user/concepts.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user/installation.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../user/concepts.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
