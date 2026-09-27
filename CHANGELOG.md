@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-27
+
+Interaction release, covering the work planned for 0.3 and 0.4 (there was no 0.3 release):
+streaming, numbered events, human approvals, a terminal UI, `vibe serve` with a web UI, and
+integrations. Configurations and runs from 0.2 keep working; see
+[Upgrading](docs/src/user/migration.md).
+
 ### Added
 - `evals/run_suite.py --jobs N` runs up to N evaluations in parallel.
 - Streaming: `ModelProvider::complete_streaming`, server-sent events for Anthropic and
@@ -30,7 +37,6 @@ All notable changes to this project are documented here. The format follows
 - `vibe task import` for GitHub and GitLab issues, and `vibe pr` to push a ready task and
   open its pull request or merge request (`[integrations.github|gitlab]`).
 - A VS Code extension in `editors/vscode`, a client of `vibe serve`.
-
 - `ANTHROPIC_WORKSPACE_ID`: sent as the `anthropic-workspace-id` header, required by API keys
   that are not scoped to a workspace.
 
@@ -124,6 +130,7 @@ Initial public release.
 - `vibe-cli`: `vibe init|task|run|status|config|agents|plugins|doctor`.
 - Documentation: user guide, design book with ADRs, API docs; CI on three platforms.
 
-[Unreleased]: https://github.com/vincentlauriat/vibe-factory/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/vincentlauriat/vibe-factory/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/vincentlauriat/vibe-factory/compare/v0.2.0...v0.4.0
 [0.2.0]: https://github.com/vincentlauriat/vibe-factory/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vincentlauriat/vibe-factory/releases/tag/v0.1.0

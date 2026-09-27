@@ -49,14 +49,14 @@ documented trait, and plugins can be written in Rust or in any language.
 | Container workspace: shell commands isolated with explicit network, mounts and limits | ✅ |
 | Reproducible evaluation suite (ten Rust tasks, independent oracles) | ✅ |
 | `vibe` CLI with live event output | ✅ |
-| Streaming answers, numbered events, `vibe events --follow` (unreleased) | ✅ |
-| Human approvals of the spec, plan or merge (unreleased) | ✅ |
-| `vibe tui`: task board and live run view (unreleased) | ✅ |
+| Streaming answers, numbered events, `vibe events --follow` | ✅ |
+| Human approvals of the spec, plan or merge | ✅ |
+| `vibe tui`: task board and live run view | ✅ |
 | User guide, design book, ADRs, API docs | ✅ |
-| `vibe serve`: HTTP API, event stream and web UI, evaluation dashboard (unreleased) | ✅ |
-| Import GitHub/GitLab issues, open pull requests (unreleased) | ✅ |
-| `web_fetch` / `web_search` tools, project memory across tasks (unreleased) | ✅ |
-| VS Code extension on `vibe serve` ([editors/vscode](editors/vscode)) (unreleased) | ✅ |
+| `vibe serve`: HTTP API, event stream and web UI, evaluation dashboard | ✅ |
+| Import GitHub/GitLab issues, open pull requests | ✅ |
+| `web_fetch` / `web_search` tools, project memory across tasks | ✅ |
+| VS Code extension on `vibe serve` ([editors/vscode](editors/vscode)) | ✅ |
 
 ## Install
 
@@ -118,7 +118,7 @@ docs/               mdBook: user guide, design book, ADRs
 
 ## Development
 
-Behaviour is measured with [reproducible evaluations](evals/README.md). Upgrading from 0.1:
+Behaviour is measured with [reproducible evaluations](evals/README.md). Upgrading from an earlier version:
 see [the migration guide](docs/src/user/migration.md).
 
 ```sh

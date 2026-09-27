@@ -6,7 +6,7 @@ user interfaces is [ADR-007](docs/src/design/adr/007-one-seam-many-interfaces.md
 
 Legend: `[x]` done, `[ ]` to do, `[~]` in progress.
 
-## 0.3 — interaction foundations and terminal UI
+## 0.3 — interaction foundations and terminal UI (released in 0.4.0)
 
 A graphical interface needs an engine that can stream, wait for a human, survive the
 terminal that started it and describe itself with stable events. 0.3 builds that engine,
@@ -62,7 +62,7 @@ then a terminal UI on top of it.
 - [x] Try an assisted resolution before retrying a subtask whose integration conflicts
 - [x] Run the live container test in CI (pull a pinned image on Linux; in the pending ci.yml)
 
-## 0.4 — server, web UI and integrations
+## 0.4 — server, web UI and integrations (released in 0.4.0)
 
 ### 7. `vibe serve`
 - [x] HTTP API over the run manager: tasks, runs, artefacts, diff, approvals, cancel

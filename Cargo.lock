@@ -3023,7 +3023,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vibe-agents"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3041,7 +3041,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-cli"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3076,7 +3076,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-core"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3094,7 +3094,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-pipeline"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3114,7 +3114,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-plugins"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "dirs",
@@ -3132,7 +3132,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-providers"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -3150,7 +3150,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-tools"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "globset",
@@ -3170,7 +3170,7 @@ dependencies = [
 
 [[package]]
 name = "vibe-workspace"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "pretty_assertions",
