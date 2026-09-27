@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -278,6 +278,17 @@ array of <code>{"number": …, "task": {…}}</code> objects. <code>done</code> 
 with subtask statuses, the latest QA verdict and issues, the state of the last run
 (<code>run.json</code>) and the workspace branch and directory. The files it reads are listed in
 <a href="../design/persistence.html">Persistence layout</a>.</p>
+<h3 id="vibe-task-import"><a class="header" href="#vibe-task-import"><code>vibe task import</code></a></h3>
+<pre><code class="language-sh">vibe task import octo/app#12
+vibe task import https://gitlab.com/group/project/-/issues/5
+vibe task import gitlab:group/project#5
+</code></pre>
+<p>Creates a task from a GitHub or GitLab issue: its title, its body (followed by a link back)
+and its labels. The task remembers the issue (<code>source</code>), so importing it twice fails with
+<code>already imported as …</code>, and <code>vibe pr</code> closes it. Private repositories need a token in
+<code>GITHUB_TOKEN</code> (or <code>GH_TOKEN</code>) or <code>GITLAB_TOKEN</code>; see <a href="configuration.html#integrations"><code>[integrations]</code></a>
+for GitHub Enterprise and self-managed GitLab. <code>--forge gitlab</code> makes the short form refer to
+GitLab.</p>
 <h3 id="vibe-task-discard"><a class="header" href="#vibe-task-discard"><code>vibe task discard</code></a></h3>
 <pre><code class="language-sh">vibe task discard &lt;REF&gt; [-y | --yes]
 </code></pre>
@@ -305,6 +316,8 @@ is lost.</p>
 <tr><td><code>--auto-merge</code></td><td>merge automatically once QA approves</td></tr>
 <tr><td><code>--script &lt;FILE&gt;</code></td><td>drive the <code>mock</code> provider with scripted responses from a JSON file; implies <code>--provider mock</code> on every phase and cannot be combined with <code>--provider</code> or <code>--model</code></td></tr>
 <tr><td><code>--resume</code></td><td>continue the last run of the task where it stopped</td></tr>
+<tr><td><code>--max-tokens &lt;N&gt;</code></td><td>pause the run once it used N tokens, counted across resumes; overrides <code>pipeline.max_tokens</code></td></tr>
+<tr><td><code>--max-duration &lt;D&gt;</code></td><td>pause the run after D of active work, counted across resumes: seconds, or <code>90s</code>, <code>15m</code>, <code>2h</code>; overrides <code>pipeline.max_duration_secs</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -321,7 +334,7 @@ in the <a href="quickstart.html#try-it-with-no-api-key">Quick start</a>.</p>
 </thead>
 <tbody>
 <tr><td><code>0</code></td><td>the task ended <code>ready</code> or <code>done</code>, or the run stopped where <code>--dry-run</code> or <code>--until</code> asked</td></tr>
-<tr><td><code>2</code></td><td>the run paused for a human: task in <code>review</code> (QA did not approve, escalation, inconclusive review)</td></tr>
+<tr><td><code>2</code></td><td>the run paused for a human: task in <code>review</code> (QA did not approve, escalation, inconclusive review), or a <a href="configuration.html#run-budgets">run budget</a> was reached</td></tr>
 <tr><td><code>1</code></td><td>the run failed, or the command itself failed (unknown task, bad configuration, plugin or workspace error)</td></tr>
 <tr><td><code>130</code></td><td>the run was cancelled (<code>Ctrl-C</code>, or a hook that aborted a phase)</td></tr>
 </tbody>
@@ -359,6 +372,118 @@ with <code>run_id</code>, <code>task_id</code>, <code>final_status</code>, <code
 <code>duration_ms</code>, <code>usage</code>, <code>phases</code>, <code>last_error</code>, <code>branch</code>, <code>worktree</code> and <code>task_dir</code>:</p>
 <pre><code class="language-sh">vibe run 1 --json | jq -r 'select(.event.type == "phase_finished") | "\(.event.phase): \(.event.summary)"'
 </code></pre>
+<h2 id="vibe-approve-and-vibe-reject"><a class="header" href="#vibe-approve-and-vibe-reject"><code>vibe approve</code> and <code>vibe reject</code></a></h2>
+<pre><code class="language-sh">vibe approve &lt;REF&gt; [--comment TEXT]
+vibe reject &lt;REF&gt; --reason TEXT
+</code></pre>
+<p>Answer the approval a paused run is waiting for (see
+<a href="configuration.html#human-approvals">Human approvals</a>). The run is not resumed: continue it
+with <code>vibe run &lt;REF&gt; --resume</code>. Both fail when the run is not waiting for an approval.</p>
+<h2 id="vibe-cancel"><a class="header" href="#vibe-cancel"><code>vibe cancel</code></a></h2>
+<pre><code class="language-sh">vibe cancel &lt;REF&gt; [--wait]
+</code></pre>
+<p>Asks the process that runs the task (a <code>vibe run</code> in another terminal, for example) to stop
+after its current step, as <code>Ctrl-C</code> would. <code>--wait</code> returns once the run has stopped. It
+fails when no process runs the task. Only one process at a time can run a given task: a
+second <code>vibe run</code> fails with <code>already being run by another process</code>.</p>
+<h2 id="vibe-pr"><a class="header" href="#vibe-pr"><code>vibe pr</code></a></h2>
+<pre><code class="language-sh">vibe pr &lt;REF&gt; [--repo OWNER/REPO] [--forge github|gitlab] [--remote origin] [--base BRANCH] [--draft] [--no-push]
+</code></pre>
+<p>For a task in <code>ready</code> with the <code>git_worktree</code> or <code>container</code> workspace: pushes its branch to
+the remote and opens a pull request (a merge request on GitLab) into the branch the task was
+forked from. The description summarises the spec (or the task), lists the subtasks, gives the
+last QA verdict and the required checks, and ends with <code>Closes #N</code> when the task was imported
+from an issue of the same repository. The repository is read from the remote URL unless
+<code>--repo</code> is given; the forge from the remote host (or the imported issue), else GitHub. A
+token is required (<code>GITHUB_TOKEN</code> or <code>GITLAB_TOKEN</code>). The URL is added to <code>progress.md</code>.</p>
+<h2 id="vibe-memory"><a class="header" href="#vibe-memory"><code>vibe memory</code></a></h2>
+<pre><code class="language-sh">vibe memory list [--query TEXT]
+vibe memory clear [--yes]
+</code></pre>
+<p>The project memory holds lessons learnt by earlier tasks: findings of the spec phase
+(conventions), subtasks that failed repeatedly and QA issues that fixes could not solve
+(pitfalls). They are kept in <code>.vibe/memory.jsonl</code>, once each, and the ones sharing words with
+a new task’s title and description are given to its agents as “Recalled from <code>project</code>”.
+<code>list</code> shows them newest first, or the ones relevant to <code>--query</code>; <code>clear</code> forgets them.
+Set <code>pipeline.project_memory = false</code> to turn the memory off; plugins can register other
+memory stores.</p>
+<h2 id="vibe-tui"><a class="header" href="#vibe-tui"><code>vibe tui</code></a></h2>
+<pre><code class="language-sh">vibe tui
+</code></pre>
+<p>A terminal board of the project: tasks on the left (a <code>●</code> marks the ones a process is
+running, whichever terminal started them), the selected task on the right with its run
+state, a budget gauge and three tabs: <strong>Activity</strong> (phases, agents, tools, validations,
+approvals, and the text of the current step as the model writes it), <strong>Plan</strong> (subtasks and
+their status) and <strong>Changes</strong> (the workspace diff summary).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>↑</code> <code>↓</code> (or <code>k</code> <code>j</code>)</td><td>select a task</td></tr>
+<tr><td><code>n</code></td><td>new task (type the title, <code>Enter</code>)</td></tr>
+<tr><td><code>r</code> / <code>R</code></td><td>run / resume the selected task</td></tr>
+<tr><td><code>c</code></td><td>cancel its run (also one started in another terminal)</td></tr>
+<tr><td><code>a</code> / <code>x</code></td><td>approve / reject what the run waits for (a rejection asks for a reason)</td></tr>
+<tr><td><code>Tab</code></td><td>next tab</td></tr>
+<tr><td><code>q</code></td><td>quit; runs started from the UI are cancelled and stay resumable</td></tr>
+</tbody>
+</table>
+</div>
+<p>The UI reads the same files and events as the other commands, so <code>vibe run</code>, <code>vibe approve</code>
+or <code>vibe cancel</code> in another terminal show up in it. Runs use the project configuration
+(there are no <code>--provider</code> or <code>--model</code> flags; set <code>default_model</code> or <code>[phases]</code>). It needs an
+interactive terminal.</p>
+<h2 id="vibe-serve"><a class="header" href="#vibe-serve"><code>vibe serve</code></a></h2>
+<pre><code class="language-sh">vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR]
+</code></pre>
+<p>Serves an HTTP API and a web UI for the project. It prints the address and a link that
+carries the access token (<code>http://127.0.0.1:7777/#token=…</code>); open it in a browser. The web
+UI shows the task board, the selected task with its run, budget, a live activity feed with
+the text as the model writes it, the plan, spec, QA reports and workspace changes, and lets
+you create, run, resume and cancel tasks and approve or reject what a run waits for. With
+<code>--evals DIR</code>, an <strong>Evaluations</strong> view shows every <code>summary.json</code> that
+<code>evals/run_suite.py</code> wrote under <code>DIR</code> (success rate, time, tokens per case and model).</p>
+<p>Security: the server listens on the loopback interface by default and then only accepts its
+own host names (<code>127.0.0.1</code>, <code>localhost</code>, <code>[::1]</code>), which blocks DNS rebinding. Every API
+call needs <code>Authorization: Bearer &lt;token&gt;</code>; the token is random per start, printed once and
+written to <code>.vibe/server.token</code> (owner-only on Unix), and removed on exit. Event streams also
+accept <code>?token=</code>, because browsers cannot set headers on them. The API never returns the
+configuration or keys. <code>--bind</code> with another address prints a warning: anyone who reaches it
+with the token controls the agents. <code>Ctrl-C</code> stops the server and cancels the runs it started
+(they stay resumable).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method and path</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>GET /api/health</code></td><td>name and version</td></tr>
+<tr><td><code>GET /api/tasks</code></td><td>every task with its number, whether it runs, and its last run’s status, phase and pending approval</td></tr>
+<tr><td><code>POST /api/tasks</code> <code>{"title", "description"}</code></td><td>create a task</td></tr>
+<tr><td><code>GET /api/tasks/{ref}</code></td><td>task, run state, spec, plan and QA reports</td></tr>
+<tr><td><code>POST /api/tasks/{ref}/run</code> <code>{"resume": bool}</code></td><td>start or resume a run (202)</td></tr>
+<tr><td><code>POST /api/tasks/{ref}/cancel</code></td><td>stop its run, from this server or another process</td></tr>
+<tr><td><code>POST /api/tasks/{ref}/approve</code> <code>{"comment"}</code></td><td>approve what the run waits for</td></tr>
+<tr><td><code>POST /api/tasks/{ref}/reject</code> <code>{"reason"}</code></td><td>reject it</td></tr>
+<tr><td><code>GET /api/tasks/{ref}/changes</code></td><td>workspace changes summary</td></tr>
+<tr><td><code>GET /api/tasks/{ref}/events?after=SEQ&amp;all=bool</code></td><td>logged events</td></tr>
+<tr><td><code>GET /api/evals</code></td><td>evaluation summaries found under <code>--evals</code></td></tr>
+<tr><td><code>GET /api/tasks/{ref}/stream?after=SEQ</code></td><td>server-sent events: logged events after <code>SEQ</code>, then new ones and streamed text; each SSE event is named by its type and carries the envelope, with the sequence number as id</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>{ref}</code> is a task number, directory name or id prefix, as on the command line. Errors are
+<code>{"error": "…"}</code> with 400, 401, 403, 404 or 409.</p>
+<h2 id="vibe-events"><a class="header" href="#vibe-events"><code>vibe events</code></a></h2>
+<pre><code class="language-sh">vibe events &lt;REF&gt; [--after SEQ] [--follow] [--all]
+</code></pre>
+<p>Replays the logged events of the task’s last run, rendered like <code>vibe run</code> (or as JSON
+envelopes with <code>--json</code>). <code>--after SEQ</code> skips events up to that sequence number,
+<code>--follow</code> keeps printing new events until the run ends (use it from another terminal while
+<code>vibe run</code> works), and <code>--all</code> shows every run of the task. The envelope and every event
+type are described in <a href="../reference/events.html">Events</a>.</p>
 <h2 id="vibe-status"><a class="header" href="#vibe-status"><code>vibe status</code></a></h2>
 <pre><code class="language-sh">vibe status
 </code></pre>

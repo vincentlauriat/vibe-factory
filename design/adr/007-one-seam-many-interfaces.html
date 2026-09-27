@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Troubleshooting - Vibe Factory</title>
+        <title>ADR-007: One seam for every user interface - Vibe Factory</title>
 
 
         <!-- Custom HTML head -->
@@ -12,33 +12,33 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
-        <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-e96d0476.css">
-        <link rel="stylesheet" href="../css/chrome-d279d366.css">
-        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "../";
+            const path_to_root = "../../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9df34313.js";
+            window.path_to_searchindex_js = "../../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4140358a.js"></script>
+        <script src="../../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -105,7 +105,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -140,13 +140,13 @@
                     <h1 class="menu-title">Vibe Factory</h1>
 
                     <div class="right-buttons">
-                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/vincentlauriat/vibe-factory" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/user/troubleshooting.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/design/adr/007-one-seam-many-interfaces.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,230 +180,51 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
-<p>Each section starts from what you see, explains the cause, and gives the fix. Two commands
-answer most questions:</p>
-<pre><code class="language-sh">vibe task show &lt;ref&gt;     # status, last run, QA verdict, workspace
-vibe doctor              # environment, configuration, keys, plugins
-</code></pre>
-<h2 id="where-to-look"><a class="header" href="#where-to-look">Where to look</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Source</th><th>What it tells you</th></tr>
-</thead>
-<tbody>
-<tr><td><code>.vibe/tasks/NNN-slug/progress.md</code></td><td>a timestamped note for every step: assessment, spec, plan, each subtask attempt with its failure reason, each QA round, merge result, pause reasons</td></tr>
-<tr><td><code>.vibe/tasks/NNN-slug/run.json</code></td><td>the last run: <code>status</code>, <code>current_phase</code>, <code>completed_phases</code>, <code>qa_round</code>, <code>last_error</code></td></tr>
-<tr><td><code>.vibe/tasks/NNN-slug/events.jsonl</code></td><td>every event of every run: tool calls with their input, tool results, retries, agent stops</td></tr>
-<tr><td><code>.vibe/tasks/NNN-slug/plan.md</code></td><td>each subtask’s status, attempts and notes</td></tr>
-<tr><td><code>.vibe/tasks/NNN-slug/qa_report_&lt;n&gt;.md</code></td><td>the issues of each QA round</td></tr>
-<tr><td>standard error with <code>-v</code>, <code>-vv</code>, <code>-vvv</code></td><td>logs at info, debug, trace level; <code>RUST_LOG</code> overrides</td></tr>
-</tbody>
-</table>
-</div>
-<pre><code class="language-sh">jq -r 'select(.event.type == "tool_returned" and .event.is_error) | "\(.event.tool): \(.event.preview)"' \
-  .vibe/tasks/003-*/events.jsonl
-RUST_LOG=vibe_agents=debug,vibe_plugins=debug vibe run 3 --resume 2&gt; run.log
-</code></pre>
-<p>The file layout is described in <a href="../design/persistence.html">Persistence layout</a>.</p>
-<h2 id="the-first-model-call-fails-with-authfailed"><a class="header" href="#the-first-model-call-fails-with-authfailed">The first model call fails with <code>AuthFailed</code></a></h2>
-<pre><code class="language-text">AuthFailed: no API key configured for provider `anthropic` (set `api_key` or `api_key_env`)
-AuthFailed: HTTP 401: invalid x-api-key sk-***
-</code></pre>
-<p><strong>Cause.</strong> The provider’s key is missing, empty or wrong. Providers load without a key and
-only fail on their first call, so this appears at the start of <code>assess</code> or <code>spec</code>.</p>
-<p><strong>Fix.</strong> Export the variable named by <code>api_key_env</code> in the shell that runs <code>vibe</code>
-(<code>ANTHROPIC_API_KEY</code> or <code>OPENAI_API_KEY</code> for the built-ins), or switch to a provider you have
-(<code>vibe run 3 --provider ollama</code>). <code>vibe doctor</code> lists every declared provider, whether the configuration uses it, and
-whether their keys are set. Then resume: <code>vibe run 3 --resume</code>.</p>
-<p><code>InvalidRequest: HTTP 429: You exceeded your current quota</code> is a billing problem, not a rate
-limit: it is not retried. Check your account.</p>
-<h2 id="retrying-lines-and-rate-limits"><a class="header" href="#retrying-lines-and-rate-limits"><code>Retrying</code> lines and rate limits</a></h2>
-<pre><code class="language-text">  ↻ retrying model call (claude-sonnet-5): HTTP 429: rate limit reached for requests (attempt 2, in 30.0 s)
-</code></pre>
-<p><strong>Cause.</strong> A transient failure: rate limit (429), overloaded or server error (5xx), network
-error or timeout. Providers first retry silently, four attempts with exponential backoff
-(1 s doubling up to 60 s, honouring <code>Retry-After</code>); if the call still fails, the agent
-runtime retries it twice more, and those retries are the lines you see. Nothing to do unless
-it keeps happening.</p>
-<p><strong>Fix, if it persists.</strong> Lower <code>pipeline.max_parallel_subtasks</code> (each parallel subtask is a
-concurrent session), use a smaller model for high-volume phases (<code>[phases.build]</code>), or run
-fewer tasks at once. If all retries fail, the phase fails; resume the run later.</p>
-<p><code>Retrying</code> also appears for pipeline-level retries: <code>plan: &lt;validation error&gt;</code> when the
-planner produced an invalid plan, and <code>subtask `…` </code> before another attempt of a subtask.</p>
-<h2 id="contexttoolong-and-continuation"><a class="header" href="#contexttoolong-and-continuation"><code>ContextTooLong</code> and continuation</a></h2>
-<p><strong>Cause.</strong> A session grew past the model’s context window (many large files read, long
-command outputs). The provider reports it as <code>ContextTooLong</code> and the session stops with
-<code>context_window</code>.</p>
-<p><strong>What happens.</strong> Coder sessions (build) continue automatically: the transcript is summarised
-into handover notes and a fresh session resumes from them, up to five times. Other agents do
-not continue; their session ends with whatever they produced, which usually leads to the JSON
-problem below.</p>
-<p><strong>Fix.</strong> Use a model with a larger context for the phase, split the task, or make subtasks
-smaller by asking for it in the description. Large tool outputs are already truncated and
-saved under <code>.vibe/tool-output/</code>.</p>
-<h2 id="a-model-returns-invalid-json"><a class="header" href="#a-model-returns-invalid-json">A model returns invalid JSON</a></h2>
-<pre><code class="language-text">agent `planner` did not produce valid structured output after a retry: no JSON object or array found in the output
-agent `qa_reviewer` did not produce valid structured output after a retry: JSON does not match the expected shape: invalid type: string "none", expected a sequence
-</code></pre>
-<p><strong>Cause.</strong> Structured agents must end with a JSON document. When extraction fails, the
-runtime makes one repair call, then resumes the agent once asking for valid JSON. A second
-failure is an error. What follows depends on the role:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Role</th><th>Effect of the error</th></tr>
-</thead>
-<tbody>
-<tr><td><code>complexity_assessor</code></td><td>the task falls back to <code>standard</code></td></tr>
-<tr><td><code>spec_gatherer</code></td><td>the spec phase fails; the run is <code>failed</code></td></tr>
-<tr><td><code>spec_writer</code>, <code>spec_critic</code></td><td>ignored; the spec keeps the gatherer’s requirements (or the writer’s, for the critic)</td></tr>
-<tr><td><code>planner</code></td><td>counts as a failed attempt; retried with the error as feedback, up to <code>max_phase_retries</code> more times</td></tr>
-<tr><td><code>coder</code>, <code>coder_recovery</code></td><td>a failed attempt of the subtask</td></tr>
-<tr><td><code>qa_reviewer</code></td><td>the round is <code>inconclusive</code>: the run pauses with the task in <code>review</code></td></tr>
-</tbody>
-</table>
-</div>
-<p><strong>Fix.</strong> Small local models are the usual cause: use a stronger model for the phase
-(<code>[phases.plan]</code>, <code>[phases.qa]</code>), raise <code>max_tokens</code> of the agent if answers are cut, and see
-<a href="agents.html#writing-prompts-that-return-valid-json">Writing prompts that return valid JSON</a>
-if you replaced a prompt. Then <code>vibe run &lt;ref&gt; --resume</code>.</p>
-<h2 id="a-subtask-fails-three-times"><a class="header" href="#a-subtask-fails-three-times">A subtask fails three times</a></h2>
-<pre><code class="language-text">  [2/4] Wire the export route                              failed
-✓ build  3 done, 1 failed, 0 skipped
-</code></pre>
-<p><strong>Cause.</strong> Each attempt ended without a coder report saying <code>done</code>. The third attempt
-(<code>max_subtask_attempts</code>) used the recovery agent. The reasons are in <code>plan.md</code> (the
-subtask’s notes) and <code>progress.md</code>; <code>memory/gotchas.md</code> records the failure for later runs.
-Subtasks that depend on it are <code>skipped</code>.</p>
-<p><strong>What happens next.</strong> If at least one subtask is done and none is pending, the run goes on
-to QA, which will likely request changes for the missing part. If nothing is done, the run
-fails with <code>build failed: …</code>.</p>
-<p><strong>Fix.</strong> Read why it failed. Often a verification command cannot pass in the worktree
-(missing service, missing tool, command denied). Fix the cause, then:</p>
-<pre><code class="language-sh">vibe run 3 --resume     # a failed build retries failed and skipped subtasks with a fresh budget
-</code></pre>
-<p>To finish the subtask yourself, do it in the worktree, commit, set its <code>status</code> to <code>"done"</code>
-in <code>plan.json</code>, and run <code>vibe run 3 --from qa</code>.</p>
-<h2 id="qa-never-approves"><a class="header" href="#qa-never-approves">QA never approves</a></h2>
-<pre><code class="language-text">⏸ paused: QA did not approve after 3 round(s); human review needed
-⏸ paused: issue `export ignores --limit with --json` was reported in 3 consecutive QA rounds; escalating to a human
-⏸ paused: QA round 2 was inconclusive; human review needed
-</code></pre>
-<p><strong>Cause.</strong> The run pauses with the task in <code>review</code> (exit code 2) when QA still requests
-changes after <code>max_qa_rounds</code> reviews in this invocation, when the same issue title appears
-in three consecutive reports, when a review is inconclusive, or when a <code>trivial</code> task, which
-has no fix phase, gets changes requested.</p>
-<p><strong>Fix.</strong> Read the latest <code>qa_report_&lt;n&gt;.md</code>. Then either:</p>
+                        <h1 id="adr-007-one-seam-for-every-user-interface"><a class="header" href="#adr-007-one-seam-for-every-user-interface">ADR-007: One seam for every user interface</a></h1>
+<p><strong>Status:</strong> Accepted — 2026-09-27</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Up to 0.2 the only interface is the <code>vibe</code> command line: <code>vibe run</code> builds a pipeline in
+its own process, prints events as they come, and the run ends with the process. A terminal
+UI, a local web UI and an editor extension are all wanted. Each needs the same things:
+start, resume and cancel runs; see live progress, including text as the model produces it;
+answer approval requests; reconnect to a run in progress without losing events.</p>
+<p>Building each interface directly on <code>Pipeline</code> would duplicate run management three times,
+and each would have to guess the state of a run from files on disk.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<ol>
+<li>The engine exposes one seam for interfaces: a <strong>run manager</strong> in <code>vibe-pipeline</code> that
+starts, resumes, cancels and lists runs and hands out an event subscription. It never
+renders anything.</li>
+<li><strong>Events are the interface contract.</strong> Every change an interface shows is an event with
+a per-run sequence number and a schema version, persisted in <code>events.jsonl</code>, so a client
+can replay from any sequence number and then follow live events. Interfaces keep no
+private view of engine state that events cannot rebuild.</li>
+<li><strong>Human decisions are part of the pipeline</strong>, not of an interface: an approval request
+is persisted in <code>run.json</code> and resolved by a command (<code>vibe approve</code>, <code>vibe reject</code>)
+that any interface can issue.</li>
+<li>Clients attach in two ways: in process (the CLI and the terminal UI use the run manager
+directly) or through <code>vibe serve</code>, which exposes the same operations over HTTP and the
+event stream over server-sent events (web UI, editor extensions).</li>
+<li><code>.vibe/</code> stays the source of truth and is protected by a cross-process lock, so a CLI
+and a server can work on the same project.</li>
+</ol>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
 <ul>
-<li><strong>let the agents try again</strong>: <code>vibe run 3 --resume</code> resumes at QA with a fresh round budget.
-An escalated issue that is still reported three rounds in a row pauses again, so change
-something first (a hint in <code>progress.md</code>, a stronger model for <code>fix</code>);</li>
-<li><strong>fix it by hand</strong>: edit and commit in the worktree
-(<code>.vibe/worktrees/&lt;slug&gt;-&lt;id&gt;/</code>), then <code>vibe run 3 --from qa</code> for a new review;</li>
-<li><strong>accept it as is</strong>: merge the branch yourself (see <a href="workspaces.html">Workspaces</a>).</li>
+<li>The terminal UI can ship before the server, and the server adds no engine logic.</li>
+<li>Streaming, approvals and new events must land before any interface that relies on them.</li>
+<li>The event schema becomes a public, versioned API; changing an event is a breaking change.</li>
+<li>A crash loses no decision: approvals and sequence numbers are on disk.</li>
 </ul>
-<p>If QA is wrong about a requirement, correct the requirement in <code>spec.json</code> before re-running
-QA; the reviewer checks acceptance criteria literally.</p>
-<h2 id="merge-conflicts"><a class="header" href="#merge-conflicts">Merge conflicts</a></h2>
-<pre><code class="language-text">✓ merge  merge conflicts in 2 file(s)
-Task 3 is ready · branch vibe/add-oauth-login-github-6f1c3e0a
-</code></pre>
-<p><strong>Cause.</strong> With auto-merge, the base branch moved and the task branch conflicts with it. The
-workspace provider returned <code>NeedsHumanReview</code>: the merge was aborted, your checkout was put
-back on its branch and left clean, and the task is <code>ready</code> with the conflicting files listed
-in <code>progress.md</code>. The worktree and branch are left in place.</p>
-<p><strong>Fix.</strong> Merge by hand and resolve as usual:</p>
-<pre><code class="language-sh">git switch main
-git merge vibe/add-oauth-login-github-6f1c3e0a
-</code></pre>
-<h2 id="the-merge-is-refused-because-the-project-is-dirty"><a class="header" href="#the-merge-is-refused-because-the-project-is-dirty">The merge is refused because the project is dirty</a></h2>
-<pre><code class="language-text">Automatic merge failed: cannot merge vibe/… : the project at /repo has uncommitted changes; commit or stash them first
-</code></pre>
-<p><strong>Cause.</strong> Auto-merge works in your project checkout, and tracked files there have
-uncommitted modifications. Untracked files do not block it. The task ends <code>ready</code>.</p>
-<p><strong>Fix.</strong> Commit or stash your changes, then merge the branch by hand, or run
-<code>vibe run 3 --from merge --auto-merge</code>.</p>
-<h2 id="the-worktree-already-exists"><a class="header" href="#the-worktree-already-exists">The worktree already exists</a></h2>
-<p><strong>Cause.</strong> A task keeps its worktree between runs; running it again reuses it. A worktree
-directory that git does not know about (for example restored from a backup) is removed and
-recreated; a branch whose worktree was deleted gets a new worktree with its commits.</p>
-<p><strong>Fix.</strong> Usually nothing. If git itself complains that the branch is checked out elsewhere
-or the worktree is locked, clean up and retry:</p>
-<pre><code class="language-sh">git worktree prune
-git worktree list
-git worktree remove --force .vibe/worktrees/&lt;slug&gt;-&lt;id&gt;   # only if you want to start over
-</code></pre>
-<p>A project that is not a git repository fails before the run starts with
-<code>/path is not a git repository: run `git init`, or use `--workspace in_place` </code>.</p>
-<h2 id="a-plugin-fails-to-start"><a class="header" href="#a-plugin-fails-to-start">A plugin fails to start</a></h2>
-<pre><code class="language-text">skipping plugin `jira`: Plugin: cannot start plugin `jira` (`jira-vibe-plugin` in `/repo`): No such file or directory
-required plugin `policy` failed to start: …
-</code></pre>
-<p><strong>Cause.</strong> The program is not on <code>PATH</code>, not executable, or crashes during the handshake. An
-optional plugin is skipped with a warning and the run continues without its tools; a plugin
-with <code>required = true</code> stops the run. The handshake times out after 60 seconds, a tool call
-after 600.</p>
-<p><strong>Fix.</strong> Run <code>vibe plugins check</code>: it starts each plugin, prints what it offers or the
-error, and stops it. Plugin standard error is logged at debug level, so add <code>-vv</code>. Details in
-<a href="plugins.html#troubleshooting">Plugins</a>.</p>
-<h2 id="a-command-is-denied-by-the-security-policy"><a class="header" href="#a-command-is-denied-by-the-security-policy">A command is denied by the security policy</a></h2>
-<pre><code class="language-text">bash ⟵ error: Command denied by the security policy: `rm` may not target `/`
-</code></pre>
-<p><strong>Cause.</strong> The shell policy blocked a segment of the command. The agent receives the reason
-and usually finds another way, so a single denial is not a problem. Repeated denials of a
-command the task really needs (a network client, <code>docker</code>, a database client) will make
-subtasks or QA fail.</p>
-<p><strong>Fix.</strong> Allow what is needed in <code>[security]</code>: <code>allow_network = true</code> for <code>curl</code> and friends,
-remove the program from <code>blocked_commands</code>, or add it to <code>allowed_commands</code> if you use an
-allowlist. System administration programs (<code>sudo</code>, <code>mount</code>, …) are always blocked. The rules
-are listed in <a href="security.html">Tools and security</a>.</p>
-<h2 id="windows-specifics"><a class="header" href="#windows-specifics">Windows specifics</a></h2>
-<ul>
-<li>Shell commands run through <code>cmd /C</code> but are validated with POSIX shell rules, so <code>cmd</code>
-syntax such as <code>%VAR%</code> or <code>^</code> escapes may be denied as unparseable. Ask for plain commands
-in the task description, or pin the project’s commands in <code>.vibe/agents/coder.toml</code>.</li>
-<li>Deep worktree paths can exceed 260 characters: <code>git config --global core.longpaths true</code>
-and enable long paths in Windows.</li>
-<li>Antivirus scanners can lock files in <code>target/</code> and make renames fail; exclude the project’s
-<code>.vibe/worktrees/</code> directory.</li>
-</ul>
-<h2 id="the-run-was-interrupted"><a class="header" href="#the-run-was-interrupted">The run was interrupted</a></h2>
-<p>A crash or a killed terminal leaves <code>run.json</code> with <code>"status": "running"</code>. <code>Ctrl-C</code> leaves it
-<code>cancelled</code>. Both are resumable:</p>
-<pre><code class="language-sh">vibe run 3 --resume
-</code></pre>
-<p>Subtasks that were in progress go back to pending; completed ones are kept.</p>
-<h2 id="resetting-a-task"><a class="header" href="#resetting-a-task">Resetting a task</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Goal</th><th>Do</th></tr>
-</thead>
-<tbody>
-<tr><td>re-run QA after manual changes</td><td><code>vibe run 3 --from qa</code></td></tr>
-<tr><td>re-plan from the same spec</td><td><code>vibe run 3 --from plan</code></td></tr>
-<tr><td>redo the spec after editing the description</td><td>edit <code>description</code> in <code>task.json</code>, then <code>vibe run 3 --from spec</code></td></tr>
-<tr><td>re-assess the complexity</td><td>set <code>"complexity": null</code> in <code>task.json</code>, or pass <code>--complexity</code>, then <code>vibe run 3</code></td></tr>
-<tr><td>forget the last run</td><td>delete <code>run.json</code>; artefacts stay</td></tr>
-<tr><td>start completely over</td><td><code>vibe task discard 3 --yes</code>, then <code>vibe task add</code> again</td></tr>
-</tbody>
-</table>
-</div>
-<p>A task keeps its complexity once assessed, so a plain <code>vibe run 3</code> never calls the assessor
-again. <code>--from</code> starts a new run that reuses the files already on disk; delete <code>spec.json</code> or
-<code>plan.json</code> if you want them regenerated rather than reused by later phases.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../user/plugins.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../design/adr/006-structured-qa.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../user/migration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../reference/events.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -413,11 +234,11 @@ again. <code>--from</code> starts a new run that reuses the files already on dis
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../user/plugins.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../design/adr/006-structured-qa.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../user/migration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../reference/events.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -437,13 +258,13 @@ again. <code>--from</code> starts a new run that reuses the files already on dis
         </script>
 
 
-        <script src="../elasticlunr-ef4e11c1.min.js"></script>
-        <script src="../mark-09e88c2c.min.js"></script>
-        <script src="../searcher-09f2665d.js"></script>
+        <script src="../../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../../mark-09e88c2c.min.js"></script>
+        <script src="../../searcher-09f2665d.js"></script>
 
-        <script src="../clipboard-1626706a.min.js"></script>
-        <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-609e4cb8.js"></script>
+        <script src="../../clipboard-1626706a.min.js"></script>
+        <script src="../../highlight-abc7f01d.js"></script>
+        <script src="../../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
 

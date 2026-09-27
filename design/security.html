@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -256,8 +256,23 @@ policies the static layer cannot express.</p>
 <h2 id="5-isolation-vibe-workspace-plugins"><a class="header" href="#5-isolation-vibe-workspace-plugins">5. Isolation (<code>vibe-workspace</code>, plugins)</a></h2>
 <p>The default workspace is a git worktree on its own branch
 (<a href="adr/003-git-worktrees.html">ADR-003</a>); the project checkout is never modified until the
-merge step, which refuses to run on a dirty tree. Stronger isolation (containers, VMs,
-remote sandboxes) is a <code>WorkspaceProvider</code> plugin.</p>
+merge step, which refuses to run on a dirty tree. With the git worktree workspace each
+subtask attempt also gets its own worktree, integrated into the task branch one at a time.</p>
+<p>The <code>container</code> workspace (<code>vibe_workspace::ContainerWorkspace</code>) keeps the worktrees and
+changes where commands run. <code>vibe_core::CommandRunner</code> is the seam: the <code>bash</code> tool checks
+the policy and the paths as usual, then asks the runner for the process to spawn
+(<code>PreparedCommand</code>: program, arguments, a cleanup command and the exit status that means
+“the runner failed”). <code>ContainerRunner</code> returns <code>docker run --rm</code> (or <code>podman run --rm</code>)
+with fixed hardening flags (<code>--cap-drop=ALL</code>, <code>--security-opt=no-new-privileges</code>,
+<code>--read-only</code>, a <code>/tmp</code> tmpfs, <code>--pids-limit</code>), the worktree bind-mounted at <code>/workspace</code>,
+its <code>.git</code> pointer mounted read-only over itself so a command cannot redirect the host’s git
+to a crafted directory, and <code>--network=none</code> unless a network is both configured and
+granted. The cleanup (<code>rm --force &lt;name&gt;</code>) runs when the command ends, times out or its
+future is dropped, which kills everything the command started. Settings are validated
+before any container starts (<code>ContainerSettings::from_config</code>): namespace-sharing networks,
+sockets, writable mounts over <code>.git</code> or <code>.vibe</code> and reserved targets are refused, and there
+is no raw flag passthrough. File tools are unaffected: they act on the host worktree under
+path containment. VMs and remote sandboxes remain <code>WorkspaceProvider</code> plugins.</p>
 <p>A worktree shares <code>.git/config</code> with the user’s checkout, so the provider treats the
 repository configuration as untrusted after agents have run:</p>
 <ul>

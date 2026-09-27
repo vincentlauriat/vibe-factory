@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -210,6 +210,8 @@ let report = pipeline.resume_with(task_id, options).await?;
 <tr><td><code>config: VibeConfig</code></td><td>the parsed <code>.vibe/config.toml</code></td></tr>
 <tr><td><code>project_root: PathBuf</code></td><td>the project directory</td></tr>
 <tr><td><code>committer: Option&lt;Committer&gt;</code></td><td>commits the workspace after subtasks and fixes</td></tr>
+<tr><td><code>resetter: Option&lt;Resetter&gt;</code></td><td>discards what a failed attempt left in a shared workspace</td></tr>
+<tr><td><code>subtask_workspaces: Option&lt;Arc&lt;dyn SubtaskWorkspaces&gt;&gt;</code></td><td>one workspace per subtask attempt (the CLI plugs <code>GitSubtaskWorkspaces</code> for <code>git_worktree</code>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -378,10 +380,21 @@ is allowed). After the last attempt the subtask is <strong>failed</strong>, a li
 <code>memory/gotchas.md</code>, and every pending subtask depending on it through <code>depends_on</code>,
 transitively, becomes <strong>skipped</strong>. Failures do not skip later phases by ordering alone.
 Pending subtasks that can never become ready are skipped as “blocked by the plan ordering”.</p>
-<p>Commits are <strong>deferred</strong>: the committer stages the whole workspace, so completed subtasks
-are committed only when no other session is running, possibly several in one commit
-(<code>vibe: complete subtask 2 - Routes</code>, <code>vibe: complete subtasks 2, 3 - Routes; Login page</code>).
-A failed commit is logged and noted, never fatal.</p>
+<p><strong>Isolated subtasks.</strong> When <code>subtask_workspaces</code> is set and <code>pipeline.isolate_subtasks</code> is
+true, <code>launch</code> opens a workspace labelled <code>s&lt;N&gt;-a&lt;attempt&gt;</code> forked from the task workspace
+and the session’s tools are confined to it (<code>RunContext::runner_in</code>). The scheduler awaits
+one finished session, drains every other session that already finished (<code>now_or_never</code>),
+and handles the batch in plan order. A successful attempt is integrated right away with
+<code>SubtaskWorkspaces::integrate</code>; a <code>Conflict</code> or an error turns it into a failed attempt with
+the reason in its notes. Every attempt workspace is discarded after its outcome is known;
+<code>discard_all</code> runs when the build starts (after a <code>vibe: checkpoint before build</code> commit)
+and when it ends or is cancelled. Nothing is deferred: the task workspace only changes
+through integrations, which the scheduler serialises.</p>
+<p><strong>Shared workspace.</strong> Otherwise commits are <strong>deferred</strong>: the committer stages the whole
+workspace, so completed subtasks are committed only when no other session is running,
+possibly several in one commit (<code>vibe: complete subtask 2 - Routes</code>,
+<code>vibe: complete subtasks 2, 3 - Routes; Login page</code>). A failed commit is logged and noted,
+never fatal.</p>
 <p>The build continues to QA when at least one subtask is done and none is pending; its
 <code>success</code> flag is false if any subtask failed or was skipped. Otherwise the run fails with
 <code>build failed: 0 done, 2 failed, 1 skipped</code>. Subtasks found <code>in_progress</code> when the build
@@ -449,6 +462,43 @@ clears <code>last_error</code>, and reuses the persisted spec and plan. Subtasks
 never redone; interrupted ones are retried. When a <strong>failed</strong> run resumes at <code>build</code>, failed
 and skipped subtasks go back to pending with their attempt counters reset, and a progress
 note says how many.</p>
+<h2 id="run-manager-and-locking"><a class="header" href="#run-manager-and-locking">Run manager and locking</a></h2>
+<p><code>RunManager</code> is the seam interfaces use (<a href="adr/007-one-seam-many-interfaces.html">ADR-007</a>):
+<code>start</code> and <code>resume</code> spawn a run on its own tokio task and return a <code>RunHandle</code> to await,
+<code>cancel</code> flips that run’s cancellation token, <code>active</code> lists running tasks and <code>subscribe</code>
+returns the live event stream. <code>vibe run</code> goes through it; the terminal UI runs several
+tasks at once with it.</p>
+<p><code>Pipeline::execute</code> first calls <code>PipelineStore::lock_run</code>: <code>FileTaskStore</code> takes an
+exclusive OS lock on <code>run.lock</code> in the task directory (and writes its pid to <code>run.owner</code>), so
+one process at a time runs a task, and a crashed process leaves no stale lock. The run’s
+cancellation token combines the caller’s token with <code>PipelineStore::take_cancel_request</code>,
+polled every 500 ms: <code>vibe cancel</code> writes <code>cancel.request</code>, which the running process
+consumes. Index updates take <code>.index.lock</code> in the tasks directory as well as the in-process
+mutex, so a CLI and another process never interleave them.</p>
+<h2 id="approval-gates"><a class="header" href="#approval-gates">Approval gates</a></h2>
+<p><code>pipeline.approvals</code> lists <code>ApprovalGate</code>s. Before a phase runs, the driver computes the
+gate it must pass (<code>Plan</code> needs <code>Spec</code> when a spec exists, <code>Build</code> needs <code>Plan</code>, <code>Merge</code>
+needs <code>Merge</code>). A gate without a valid approval sets <code>RunState::pending_approval</code>,
+publishes <code>approval_requested</code> once, then <code>paused</code>, and ends the run as <code>paused</code> (task
+<code>review</code>) at that phase. <code>RunState::resolve_approval</code>, called by <code>vibe approve</code> and
+<code>vibe reject</code>, records the decision. On resume an approved gate lets the phase run; a
+rejected one redirects to the producer: <code>Spec</code> and <code>Plan</code> take the reason through
+<code>RunContext::take_rejection</code> and put it in their prompt, <code>Merge</code> becomes a QA report with
+one high severity “Human review” issue and forces the fix phase (<code>pending_human_fix</code>), even
+in profiles without it. A completed <code>Spec</code> revokes the spec and plan approvals, <code>Plan</code> the
+plan approval, <code>Build</code> and <code>Fix</code> the merge approval.</p>
+<h2 id="budgets"><a class="header" href="#budgets">Budgets</a></h2>
+<p><code>run.json</code> accumulates the tokens (<code>usage</code>) and active milliseconds (<code>active_ms</code>) of every
+invocation of a run. The driver builds a <code>vibe_core::RunBudget</code> from those totals and the
+<code>pipeline.max_tokens</code> / <code>pipeline.max_duration_secs</code> limits, stores it in the <code>RunContext</code>
+and hands it to every <code>AgentRunner</code>. The runner adds each model call’s usage to it and
+treats a reached limit like a cancellation: no new step starts. <code>RunContext::is_cancelled</code>
+is true as well, so the build scheduler stops launching sessions and puts interrupted
+subtasks back to pending. The driver tells the two apart with <code>RunBudget::exceeded</code>: a
+cancelled phase whose budget is exhausted ends the run as <code>paused</code> (task <code>backlog</code>) at the
+same <code>current_phase</code>, and the budget is also checked before every phase. The totals are
+written to <code>run.json</code> before and after each phase and at the end of the run, so a crash
+loses at most the accounting of the phase in progress.</p>
 <p><code>run</code> with <code>from_phase</code> is different: it starts a new run id at that phase, keeping only the
 previous profile. It is how you re-run QA after fixing things by hand (<code>--from qa</code>).</p>
 <h2 id="events"><a class="header" href="#events">Events</a></h2>

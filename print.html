@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-72713264.js";
+            window.path_to_searchindex_js = "searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-2dd03f19.js"></script>
+        <script src="toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -271,7 +271,7 @@ worktree per task. For a directory without git, use the <code>in_place</code> wo
 <code>~/.cargo/bin</code> (<code>%USERPROFILE%\.cargo\bin</code> on Windows), which rustup adds to your <code>PATH</code>.
 The first build downloads and compiles the dependencies and takes a few minutes.</p>
 <p>To install a tagged release or a branch (replace the tag with one that exists):</p>
-<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.1.0 vibe-cli
+<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.2.0 vibe-cli
 cargo install --git https://github.com/vincentlauriat/vibe-factory --branch main vibe-cli
 </code></pre>
 <h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
@@ -294,7 +294,7 @@ mdbook serve docs          # this book, on http://localhost:3000
 <h2 id="verifying-the-installation"><a class="header" href="#verifying-the-installation">Verifying the installation</a></h2>
 <pre><code class="language-sh">vibe --version
 </code></pre>
-<pre><code class="language-text">vibe 0.1.0
+<pre><code class="language-text">vibe 0.2.0
 </code></pre>
 <p>Then, inside a project:</p>
 <pre><code class="language-sh">cd your-project
@@ -794,12 +794,17 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in <a href="#providers-and-mo
 <tr><td><code>validation_commands</code></td><td>list of strings</td><td><code>[]</code></td><td>mandatory shell checks before ready/merge; see below</td></tr>
 <tr><td><code>max_validation_fix_attempts</code></td><td>integer</td><td><code>2</code></td><td>automatic validation fixes over the whole run, including resumes; <code>0</code> disables them</td></tr>
 <tr><td><code>merge_strategy</code></td><td><code>"manual"</code> or <code>"assisted"</code></td><td><code>"manual"</code></td><td><code>manual</code> reports conflicts for a human; <code>assisted</code> lets a model resolve conflict markers first</td></tr>
+<tr><td><code>isolate_subtasks</code></td><td>bool</td><td><code>true</code></td><td>with <code>git_worktree</code>, one worktree per subtask attempt, integrated one at a time; see <a href="#one-worktree-per-subtask-attempt">Workspaces</a></td></tr>
+<tr><td><code>project_memory</code></td><td>bool</td><td><code>true</code></td><td>keep lessons (pitfalls, conventions) in <code>.vibe/memory.jsonl</code> and recall the relevant ones in later tasks; see <code>vibe memory</code></td></tr>
+<tr><td><code>approvals</code></td><td>list of <code>"spec"</code>, <code>"plan"</code>, <code>"merge"</code></td><td><code>[]</code></td><td>where the run waits for a human decision; see <a href="#human-approvals">Human approvals</a></td></tr>
+<tr><td><code>max_tokens</code></td><td>integer</td><td>none</td><td>input plus output tokens of the whole run, including resumes; the run pauses when reached</td></tr>
+<tr><td><code>max_duration_secs</code></td><td>integer</td><td>none</td><td>active time of the whole run in seconds, including resumes; the run pauses when reached</td></tr>
 </tbody>
 </table>
 </div>
 <p>What these limits do at run time is described in <a href="#the-pipeline">The pipeline</a>;
 workspaces and merging in <a href="#workspaces-and-merging">Workspaces and merging</a>.</p>
-<h2 id="required-validation-commands-unreleased"><a class="header" href="#required-validation-commands-unreleased">Required validation commands (unreleased)</a></h2>
+<h2 id="required-validation-commands"><a class="header" href="#required-validation-commands">Required validation commands</a></h2>
 <pre><code class="language-toml">[pipeline]
 validation_commands = ["cargo fmt --all -- --check", "cargo test --offline"]
 max_validation_fix_attempts = 2
@@ -847,6 +852,75 @@ Third-party workspace providers must implement <code>merge_validated</code> to s
 integration; the default refuses it rather than falling back to an unchecked merge.
 External manual <code>git merge</code> commands are outside this gate. Configuration is loaded by the
 host, not accepted from an agent’s QA report.</p>
+<h2 id="run-budgets"><a class="header" href="#run-budgets">Run budgets</a></h2>
+<pre><code class="language-toml">[pipeline]
+max_tokens = 2_000_000      # input + output tokens over the whole run
+max_duration_secs = 3600    # one hour of active work
+</code></pre>
+<p>Both limits are off by default. They apply to a <strong>run</strong>, not to one invocation of
+<code>vibe run</code>: <code>run.json</code> keeps the tokens (<code>usage</code>) and the active time (<code>active_ms</code>) of every
+invocation, and a resumed run starts from those totals. Time spent paused or between
+invocations is not counted.</p>
+<p>Agents add the tokens of every model call to the budget as it happens. Once a limit is
+reached no new model call starts: running sessions stop before their next step,
+interrupted subtasks go back to pending, and the run <strong>pauses</strong> (exit code 2) at the phase
+it was in, with a note in <code>progress.md</code> naming the limit. A running shell command is not
+interrupted; it is bounded by its own timeout. Resuming without raising the limit pauses
+again immediately and spends nothing. Raise the limit in the configuration, or for one
+invocation with <code>vibe run &lt;REF&gt; --resume --max-tokens N --max-duration 2h</code>, to continue.</p>
+<p>The token limit counts every model call of the run: the agents’ calls and the ones made by
+<code>merge_strategy = "assisted"</code> to resolve conflict markers.</p>
+<h2 id="human-approvals"><a class="header" href="#human-approvals">Human approvals</a></h2>
+<pre><code class="language-toml">[pipeline]
+approvals = ["plan", "merge"]
+</code></pre>
+<p>Each listed gate pauses the run (exit code 2, task <code>review</code>) until a human decides:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Gate</th><th>The run stops</th><th>A rejection goes back to</th></tr>
+</thead>
+<tbody>
+<tr><td><code>spec</code></td><td>after the specification, before planning (only when the profile writes a spec)</td><td>the spec phase</td></tr>
+<tr><td><code>plan</code></td><td>after the plan, before building</td><td>the planner</td></tr>
+<tr><td><code>merge</code></td><td>after QA approval, before the merge phase (validation, integration or marking ready)</td><td>the fixer, through a QA report titled “Human review”, then QA again</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-sh">vibe task show 3                       # read the spec, plan or QA report
+vibe approve 3 --comment "ok"          # or:
+vibe reject 3 --reason "Split the migration into its own subtask"
+vibe run 3 --resume
+</code></pre>
+<p>The decision is stored in <code>run.json</code> (<code>approvals</code>, <code>pending_approval</code>, <code>rejection</code>) and
+logged as an <code>approval_resolved</code> event. A rejection needs a reason: it is handed to the
+agents that redo the work. Regenerating an artefact revokes its approval, so a new plan is
+approved again, and a merge is approved again after any new build or fix. Resuming without
+a decision pauses again at the same gate.</p>
+<h2 id="workspacecontainer"><a class="header" href="#workspacecontainer"><code>[workspace.container]</code></a></h2>
+<p>Settings of the <code>container</code> workspace (<code>pipeline.workspace = "container"</code>). Only <code>image</code> is
+required; unknown keys are refused.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Type</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>image</code></td><td>string</td><td>required</td><td>image the commands run in</td></tr>
+<tr><td><code>runtime</code></td><td>string</td><td><code>"docker"</code></td><td><code>docker</code> or <code>podman</code>, or a path to one of them</td></tr>
+<tr><td><code>network</code></td><td>string</td><td><code>"none"</code></td><td><code>none</code>, <code>bridge</code> or a named network; attached only when <code>security.allow_network</code> is true</td></tr>
+<tr><td><code>mounts</code></td><td>list of tables</td><td><code>[]</code></td><td>extra bind mounts: <code>source</code>, <code>target</code>, <code>read_only</code> (default true)</td></tr>
+<tr><td><code>cpus</code></td><td>number</td><td>none</td><td><code>--cpus</code></td></tr>
+<tr><td><code>memory</code></td><td>string</td><td>none</td><td><code>--memory</code> and <code>--memory-swap</code>, such as <code>4g</code></td></tr>
+<tr><td><code>pids_limit</code></td><td>integer</td><td><code>1024</code></td><td>maximum number of processes</td></tr>
+<tr><td><code>tmp_size</code></td><td>string</td><td>runtime default</td><td>size of the <code>/tmp</code> tmpfs</td></tr>
+<tr><td><code>user</code></td><td>string</td><td>owner of the worktree (Unix)</td><td><code>uid[:gid]</code> or <code>name[:group]</code></td></tr>
+<tr><td><code>env</code></td><td>list of names</td><td><code>[]</code></td><td>host environment variables passed through</td></tr>
+<tr><td><code>mount_git_metadata</code></td><td>bool</td><td><code>false</code></td><td>mount the repository’s git directory read-only (Unix only)</td></tr>
+</tbody>
+</table>
+</div>
+<p>See <a href="#container-workspace">Container workspace</a> for what each setting allows.</p>
 <h2 id="security"><a class="header" href="#security"><code>[security]</code></a></h2>
 <div class="table-wrapper">
 <table>
@@ -859,10 +933,23 @@ host, not accepted from an agent’s QA report.</p>
 <tr><td><code>command_timeout_secs</code></td><td>integer</td><td><code>120</code></td><td>default timeout of a shell command; an agent may ask for up to 600</td></tr>
 <tr><td><code>allow_network</code></td><td>bool</td><td><code>false</code></td><td>grant the network permission (<code>curl</code>, <code>wget</code>, <code>ssh</code>, … and network-using tools)</td></tr>
 <tr><td><code>extra_read_paths</code></td><td>list of paths</td><td><code>[]</code></td><td>directories outside the workspace that agents may read, never write</td></tr>
+<tr><td><code>web_allowed_domains</code></td><td>list of strings</td><td><code>[]</code></td><td>domains (and subdomains) <code>web_fetch</code> may reach; empty means any public host</td></tr>
+<tr><td><code>search_url</code></td><td>string</td><td>none</td><td>SearXNG-compatible search URL with <code>{query}</code>, e.g. <code>https://searx.example/search?q={query}&amp;format=json</code>; registers <code>web_search</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>The rules behind these keys are in <a href="#tools-and-security">Tools and security</a>.</p>
+<h2 id="integrations"><a class="header" href="#integrations"><code>[integrations]</code></a></h2>
+<pre><code class="language-toml">[integrations.github]
+api_url = "https://github.example.com/api/v3"   # GitHub Enterprise; default https://api.github.com
+token_env = "GHE_TOKEN"                         # default GITHUB_TOKEN, then GH_TOKEN
+
+[integrations.gitlab]
+api_url = "https://gitlab.example.com/api/v4"   # default https://gitlab.com/api/v4
+token_env = "GITLAB_TOKEN"
+</code></pre>
+<p>Used by <code>vibe task import</code> and <code>vibe pr</code>. Tokens are read from the environment only, never
+from the configuration file.</p>
 <h2 id="plugins"><a class="header" href="#plugins"><code>[[plugins]]</code></a></h2>
 <div class="table-wrapper">
 <table>
@@ -923,6 +1010,8 @@ max_phase_retries = 2       # extra planner attempts on an invalid plan
 workspace = "git_worktree"  # or "in_place"
 auto_merge = false          # stop in `ready` and let me merge
 merge_strategy = "manual"
+max_tokens = 3_000_000      # pause the run beyond this, resumes included
+max_duration_secs = 7200    # and beyond two hours of active work
 
 # Security ----------------------------------------------------------------
 [security]
@@ -961,6 +1050,7 @@ plugins, <code>.vibe/agents/*.toml</code> in file-name order; see <a href="#cust
 </thead>
 <tbody>
 <tr><td><code>ANTHROPIC_API_KEY</code></td><td>key of the built-in <code>anthropic</code> provider (<code>api_key_env</code>)</td></tr>
+<tr><td><code>ANTHROPIC_WORKSPACE_ID</code></td><td>workspace sent as <code>anthropic-workspace-id</code> by every <code>anthropic</code> provider, for an API key that is not scoped to a workspace; an <code>extra.headers</code> entry of the same name wins</td></tr>
 <tr><td><code>OPENAI_API_KEY</code></td><td>key of the built-in <code>openai</code> provider</td></tr>
 <tr><td>any name in an <code>api_key_env</code></td><td>key of that provider</td></tr>
 <tr><td><code>RUST_LOG</code></td><td>log filter, for example <code>RUST_LOG=vibe_pipeline=debug,vibe_plugins=debug</code>; <code>-v</code> and <code>-vv</code> are shortcuts</td></tr>
@@ -1092,6 +1182,17 @@ array of <code>{"number": …, "task": {…}}</code> objects. <code>done</code> 
 with subtask statuses, the latest QA verdict and issues, the state of the last run
 (<code>run.json</code>) and the workspace branch and directory. The files it reads are listed in
 <a href="#persistence-layout">Persistence layout</a>.</p>
+<h3 id="vibe-task-import"><a class="header" href="#vibe-task-import"><code>vibe task import</code></a></h3>
+<pre><code class="language-sh">vibe task import octo/app#12
+vibe task import https://gitlab.com/group/project/-/issues/5
+vibe task import gitlab:group/project#5
+</code></pre>
+<p>Creates a task from a GitHub or GitLab issue: its title, its body (followed by a link back)
+and its labels. The task remembers the issue (<code>source</code>), so importing it twice fails with
+<code>already imported as …</code>, and <code>vibe pr</code> closes it. Private repositories need a token in
+<code>GITHUB_TOKEN</code> (or <code>GH_TOKEN</code>) or <code>GITLAB_TOKEN</code>; see <a href="#integrations"><code>[integrations]</code></a>
+for GitHub Enterprise and self-managed GitLab. <code>--forge gitlab</code> makes the short form refer to
+GitLab.</p>
 <h3 id="vibe-task-discard"><a class="header" href="#vibe-task-discard"><code>vibe task discard</code></a></h3>
 <pre><code class="language-sh">vibe task discard &lt;REF&gt; [-y | --yes]
 </code></pre>
@@ -1119,6 +1220,8 @@ is lost.</p>
 <tr><td><code>--auto-merge</code></td><td>merge automatically once QA approves</td></tr>
 <tr><td><code>--script &lt;FILE&gt;</code></td><td>drive the <code>mock</code> provider with scripted responses from a JSON file; implies <code>--provider mock</code> on every phase and cannot be combined with <code>--provider</code> or <code>--model</code></td></tr>
 <tr><td><code>--resume</code></td><td>continue the last run of the task where it stopped</td></tr>
+<tr><td><code>--max-tokens &lt;N&gt;</code></td><td>pause the run once it used N tokens, counted across resumes; overrides <code>pipeline.max_tokens</code></td></tr>
+<tr><td><code>--max-duration &lt;D&gt;</code></td><td>pause the run after D of active work, counted across resumes: seconds, or <code>90s</code>, <code>15m</code>, <code>2h</code>; overrides <code>pipeline.max_duration_secs</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -1135,7 +1238,7 @@ in the <a href="#try-it-with-no-api-key">Quick start</a>.</p>
 </thead>
 <tbody>
 <tr><td><code>0</code></td><td>the task ended <code>ready</code> or <code>done</code>, or the run stopped where <code>--dry-run</code> or <code>--until</code> asked</td></tr>
-<tr><td><code>2</code></td><td>the run paused for a human: task in <code>review</code> (QA did not approve, escalation, inconclusive review)</td></tr>
+<tr><td><code>2</code></td><td>the run paused for a human: task in <code>review</code> (QA did not approve, escalation, inconclusive review), or a <a href="#run-budgets">run budget</a> was reached</td></tr>
 <tr><td><code>1</code></td><td>the run failed, or the command itself failed (unknown task, bad configuration, plugin or workspace error)</td></tr>
 <tr><td><code>130</code></td><td>the run was cancelled (<code>Ctrl-C</code>, or a hook that aborted a phase)</td></tr>
 </tbody>
@@ -1173,6 +1276,118 @@ with <code>run_id</code>, <code>task_id</code>, <code>final_status</code>, <code
 <code>duration_ms</code>, <code>usage</code>, <code>phases</code>, <code>last_error</code>, <code>branch</code>, <code>worktree</code> and <code>task_dir</code>:</p>
 <pre><code class="language-sh">vibe run 1 --json | jq -r 'select(.event.type == "phase_finished") | "\(.event.phase): \(.event.summary)"'
 </code></pre>
+<h2 id="vibe-approve-and-vibe-reject"><a class="header" href="#vibe-approve-and-vibe-reject"><code>vibe approve</code> and <code>vibe reject</code></a></h2>
+<pre><code class="language-sh">vibe approve &lt;REF&gt; [--comment TEXT]
+vibe reject &lt;REF&gt; --reason TEXT
+</code></pre>
+<p>Answer the approval a paused run is waiting for (see
+<a href="#human-approvals">Human approvals</a>). The run is not resumed: continue it
+with <code>vibe run &lt;REF&gt; --resume</code>. Both fail when the run is not waiting for an approval.</p>
+<h2 id="vibe-cancel"><a class="header" href="#vibe-cancel"><code>vibe cancel</code></a></h2>
+<pre><code class="language-sh">vibe cancel &lt;REF&gt; [--wait]
+</code></pre>
+<p>Asks the process that runs the task (a <code>vibe run</code> in another terminal, for example) to stop
+after its current step, as <code>Ctrl-C</code> would. <code>--wait</code> returns once the run has stopped. It
+fails when no process runs the task. Only one process at a time can run a given task: a
+second <code>vibe run</code> fails with <code>already being run by another process</code>.</p>
+<h2 id="vibe-pr"><a class="header" href="#vibe-pr"><code>vibe pr</code></a></h2>
+<pre><code class="language-sh">vibe pr &lt;REF&gt; [--repo OWNER/REPO] [--forge github|gitlab] [--remote origin] [--base BRANCH] [--draft] [--no-push]
+</code></pre>
+<p>For a task in <code>ready</code> with the <code>git_worktree</code> or <code>container</code> workspace: pushes its branch to
+the remote and opens a pull request (a merge request on GitLab) into the branch the task was
+forked from. The description summarises the spec (or the task), lists the subtasks, gives the
+last QA verdict and the required checks, and ends with <code>Closes #N</code> when the task was imported
+from an issue of the same repository. The repository is read from the remote URL unless
+<code>--repo</code> is given; the forge from the remote host (or the imported issue), else GitHub. A
+token is required (<code>GITHUB_TOKEN</code> or <code>GITLAB_TOKEN</code>). The URL is added to <code>progress.md</code>.</p>
+<h2 id="vibe-memory"><a class="header" href="#vibe-memory"><code>vibe memory</code></a></h2>
+<pre><code class="language-sh">vibe memory list [--query TEXT]
+vibe memory clear [--yes]
+</code></pre>
+<p>The project memory holds lessons learnt by earlier tasks: findings of the spec phase
+(conventions), subtasks that failed repeatedly and QA issues that fixes could not solve
+(pitfalls). They are kept in <code>.vibe/memory.jsonl</code>, once each, and the ones sharing words with
+a new task’s title and description are given to its agents as “Recalled from <code>project</code>”.
+<code>list</code> shows them newest first, or the ones relevant to <code>--query</code>; <code>clear</code> forgets them.
+Set <code>pipeline.project_memory = false</code> to turn the memory off; plugins can register other
+memory stores.</p>
+<h2 id="vibe-tui"><a class="header" href="#vibe-tui"><code>vibe tui</code></a></h2>
+<pre><code class="language-sh">vibe tui
+</code></pre>
+<p>A terminal board of the project: tasks on the left (a <code>●</code> marks the ones a process is
+running, whichever terminal started them), the selected task on the right with its run
+state, a budget gauge and three tabs: <strong>Activity</strong> (phases, agents, tools, validations,
+approvals, and the text of the current step as the model writes it), <strong>Plan</strong> (subtasks and
+their status) and <strong>Changes</strong> (the workspace diff summary).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>↑</code> <code>↓</code> (or <code>k</code> <code>j</code>)</td><td>select a task</td></tr>
+<tr><td><code>n</code></td><td>new task (type the title, <code>Enter</code>)</td></tr>
+<tr><td><code>r</code> / <code>R</code></td><td>run / resume the selected task</td></tr>
+<tr><td><code>c</code></td><td>cancel its run (also one started in another terminal)</td></tr>
+<tr><td><code>a</code> / <code>x</code></td><td>approve / reject what the run waits for (a rejection asks for a reason)</td></tr>
+<tr><td><code>Tab</code></td><td>next tab</td></tr>
+<tr><td><code>q</code></td><td>quit; runs started from the UI are cancelled and stay resumable</td></tr>
+</tbody>
+</table>
+</div>
+<p>The UI reads the same files and events as the other commands, so <code>vibe run</code>, <code>vibe approve</code>
+or <code>vibe cancel</code> in another terminal show up in it. Runs use the project configuration
+(there are no <code>--provider</code> or <code>--model</code> flags; set <code>default_model</code> or <code>[phases]</code>). It needs an
+interactive terminal.</p>
+<h2 id="vibe-serve"><a class="header" href="#vibe-serve"><code>vibe serve</code></a></h2>
+<pre><code class="language-sh">vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR]
+</code></pre>
+<p>Serves an HTTP API and a web UI for the project. It prints the address and a link that
+carries the access token (<code>http://127.0.0.1:7777/#token=…</code>); open it in a browser. The web
+UI shows the task board, the selected task with its run, budget, a live activity feed with
+the text as the model writes it, the plan, spec, QA reports and workspace changes, and lets
+you create, run, resume and cancel tasks and approve or reject what a run waits for. With
+<code>--evals DIR</code>, an <strong>Evaluations</strong> view shows every <code>summary.json</code> that
+<code>evals/run_suite.py</code> wrote under <code>DIR</code> (success rate, time, tokens per case and model).</p>
+<p>Security: the server listens on the loopback interface by default and then only accepts its
+own host names (<code>127.0.0.1</code>, <code>localhost</code>, <code>[::1]</code>), which blocks DNS rebinding. Every API
+call needs <code>Authorization: Bearer &lt;token&gt;</code>; the token is random per start, printed once and
+written to <code>.vibe/server.token</code> (owner-only on Unix), and removed on exit. Event streams also
+accept <code>?token=</code>, because browsers cannot set headers on them. The API never returns the
+configuration or keys. <code>--bind</code> with another address prints a warning: anyone who reaches it
+with the token controls the agents. <code>Ctrl-C</code> stops the server and cancels the runs it started
+(they stay resumable).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method and path</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>GET /api/health</code></td><td>name and version</td></tr>
+<tr><td><code>GET /api/tasks</code></td><td>every task with its number, whether it runs, and its last run’s status, phase and pending approval</td></tr>
+<tr><td><code>POST /api/tasks</code> <code>{"title", "description"}</code></td><td>create a task</td></tr>
+<tr><td><code>GET /api/tasks/{ref}</code></td><td>task, run state, spec, plan and QA reports</td></tr>
+<tr><td><code>POST /api/tasks/{ref}/run</code> <code>{"resume": bool}</code></td><td>start or resume a run (202)</td></tr>
+<tr><td><code>POST /api/tasks/{ref}/cancel</code></td><td>stop its run, from this server or another process</td></tr>
+<tr><td><code>POST /api/tasks/{ref}/approve</code> <code>{"comment"}</code></td><td>approve what the run waits for</td></tr>
+<tr><td><code>POST /api/tasks/{ref}/reject</code> <code>{"reason"}</code></td><td>reject it</td></tr>
+<tr><td><code>GET /api/tasks/{ref}/changes</code></td><td>workspace changes summary</td></tr>
+<tr><td><code>GET /api/tasks/{ref}/events?after=SEQ&amp;all=bool</code></td><td>logged events</td></tr>
+<tr><td><code>GET /api/evals</code></td><td>evaluation summaries found under <code>--evals</code></td></tr>
+<tr><td><code>GET /api/tasks/{ref}/stream?after=SEQ</code></td><td>server-sent events: logged events after <code>SEQ</code>, then new ones and streamed text; each SSE event is named by its type and carries the envelope, with the sequence number as id</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>{ref}</code> is a task number, directory name or id prefix, as on the command line. Errors are
+<code>{"error": "…"}</code> with 400, 401, 403, 404 or 409.</p>
+<h2 id="vibe-events"><a class="header" href="#vibe-events"><code>vibe events</code></a></h2>
+<pre><code class="language-sh">vibe events &lt;REF&gt; [--after SEQ] [--follow] [--all]
+</code></pre>
+<p>Replays the logged events of the task’s last run, rendered like <code>vibe run</code> (or as JSON
+envelopes with <code>--json</code>). <code>--after SEQ</code> skips events up to that sequence number,
+<code>--follow</code> keeps printing new events until the run ends (use it from another terminal while
+<code>vibe run</code> works), and <code>--all</code> shows every run of the task. The envelope and every event
+type are described in <a href="#events-3">Events</a>.</p>
 <h2 id="vibe-status"><a class="header" href="#vibe-status"><code>vibe status</code></a></h2>
 <pre><code class="language-sh">vibe status
 </code></pre>
@@ -1313,6 +1528,7 @@ first call only, so listing providers you do not use is harmless.</p>
 <tr><td><code>api_key_env</code></td><td>string</td><td>environment variable holding the key (an empty value counts as missing)</td></tr>
 <tr><td><code>base_url</code></td><td>string</td><td>endpoint override (gateway, proxy, self-hosted server); trailing <code>/</code> is ignored</td></tr>
 <tr><td><code>default_model</code></td><td>string</td><td>model used when a reference names no model, or names <code>default</code></td></tr>
+<tr><td><code>stream</code></td><td>bool</td><td>stream answers as they are generated (default <code>true</code>); set <code>false</code> for a gateway that mishandles server-sent events</td></tr>
 <tr><td><code>extra</code></td><td>table</td><td>kind-specific settings, below</td></tr>
 </tbody>
 </table>
@@ -1326,6 +1542,7 @@ first call only, so listing providers you do not use is harmless.</p>
 </thead>
 <tbody>
 <tr><td><code>headers</code></td><td>anthropic, openai, ollama</td><td>table of strings</td><td>extra HTTP headers sent with every request</td></tr>
+<tr><td><code>thinking</code></td><td>anthropic</td><td><code>"adaptive"</code> or <code>"budget"</code></td><td>force the thinking form instead of choosing it from the model id (see <a href="#thinking-levels">Thinking levels</a>)</td></tr>
 <tr><td><code>auth</code></td><td>anthropic</td><td><code>"api_key"</code> (default) or <code>"bearer"</code></td><td><code>bearer</code> sends the key as <code>Authorization: Bearer</code> with the OAuth beta header instead of <code>x-api-key</code></td></tr>
 <tr><td><code>require_api_key</code></td><td>openai, ollama</td><td>bool</td><td>default <code>false</code> when <code>base_url</code> is set, <code>true</code> on the official OpenAI endpoint; with <code>false</code>, no <code>Authorization</code> header is sent when the key is missing</td></tr>
 <tr><td><code>max_tokens_param</code></td><td>openai, ollama</td><td>string</td><td>name of the output-budget field; default <code>max_completion_tokens</code> on the official endpoint, <code>max_tokens</code> elsewhere</td></tr>
@@ -1403,20 +1620,27 @@ also pin a model regardless of the phase; see <a href="#customising-agents">Cust
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Level</th><th>Budget</th><th>Anthropic</th><th>OpenAI-compatible</th></tr>
+<tr><th>Level</th><th>Budget</th><th>Anthropic, current models</th><th>Anthropic, older models</th><th>OpenAI-compatible</th></tr>
 </thead>
 <tbody>
-<tr><td><code>off</code></td><td>none</td><td>no extended thinking</td><td>no <code>reasoning_effort</code></td></tr>
-<tr><td><code>low</code></td><td>1 024 tokens</td><td>extended thinking, 1 024</td><td><code>reasoning_effort = "low"</code></td></tr>
-<tr><td><code>medium</code></td><td>4 096</td><td>4 096</td><td><code>"medium"</code></td></tr>
-<tr><td><code>high</code></td><td>16 384</td><td>16 384</td><td><code>"high"</code></td></tr>
-<tr><td><code>max</code></td><td>32 768</td><td>32 768</td><td><code>"high"</code></td></tr>
+<tr><td><code>off</code></td><td>none</td><td>no <code>thinking</code></td><td>no <code>thinking</code></td><td>no <code>reasoning_effort</code></td></tr>
+<tr><td><code>low</code></td><td>1 024 tokens</td><td>adaptive, effort <code>low</code></td><td><code>budget_tokens: 1024</code></td><td><code>reasoning_effort = "low"</code></td></tr>
+<tr><td><code>medium</code></td><td>4 096</td><td>adaptive, effort <code>medium</code></td><td>4 096</td><td><code>"medium"</code></td></tr>
+<tr><td><code>high</code></td><td>16 384</td><td>adaptive, effort <code>high</code></td><td>16 384</td><td><code>"high"</code></td></tr>
+<tr><td><code>max</code></td><td>32 768</td><td>adaptive, effort <code>max</code></td><td>32 768</td><td><code>"high"</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>On OpenAI-compatible servers the level is only sent when <code>reasoning</code> is enabled (see
-above); otherwise it is ignored. With Anthropic, enabling thinking removes the temperature
-from the request, as the API requires.</p>
+above); otherwise it is ignored.</p>
+<p>With Anthropic, current models (Claude 4.6 and later: Sonnet 5, Opus 5 and 5.5, Fable, Opus
+4.6 to 4.8, Sonnet 4.6) take <code>thinking: {type: "adaptive"}</code> with <code>output_config.effort</code> and
+reject <code>budget_tokens</code> and sampling parameters, so vibe never sends a temperature to them.
+Older models (Haiku 4.5, Claude 4.5 and before) and unknown model ids keep
+<code>budget_tokens</code>, and thinking removes the temperature as the API requires. The form is
+chosen from the model id; set <code>extra.thinking = "adaptive"</code> or <code>"budget"</code> on the provider to
+force it, for example behind a gateway that renames models. Model ids are sent as is, so the
+choice follows <code>claude-...</code> names.</p>
 <h2 id="recipes"><a class="header" href="#recipes">Recipes</a></h2>
 <p><strong>Ollama</strong> (local, no key):</p>
 <pre><code class="language-toml">[providers.ollama]
@@ -1468,6 +1692,16 @@ server.</p>
 kind = "mock"
 extra = { reply = "Nothing to do." }
 </code></pre>
+<h2 id="streaming"><a class="header" href="#streaming">Streaming</a></h2>
+<p>Anthropic and OpenAI-compatible providers stream their answers: the text and, when the
+model exposes it, the reasoning arrive as <code>agent_delta</code> events while a step is being
+generated (<code>vibe --json run</code> prints them; the terminal output shows the complete text at
+the end of each step, as before). The final answer is identical to a non-streamed one.</p>
+<p>A request that fails before any text arrived is retried as usual. A stream that breaks after
+text was sent is not retried by the provider (the text would be repeated): the step fails
+and the agent runtime’s own retry policy applies. An OpenAI-compatible server that refuses
+<code>stream</code> or <code>stream_options</code> with a 4xx error gets the same request without streaming.
+<code>agent_delta</code> events are not written to <code>events.jsonl</code>.</p>
 <h2 id="retries-and-errors"><a class="header" href="#retries-and-errors">Retries and errors</a></h2>
 <p>HTTP providers retry transient failures on their own: four attempts in total, starting at
 1 second and doubling up to 60 seconds, with ±25 % jitter. A <code>Retry-After</code> header from the
@@ -1523,9 +1757,13 @@ workspace and governed by a security policy you control from <code>.vibe/config.
 <tr><td><code>glob</code></td><td>Find files by pattern (<code>**/*.rs</code>), newest first, at most 2000 results.</td><td>read</td></tr>
 <tr><td><code>grep</code></td><td>Regex search in text files (<code>content</code>, <code>files</code> or <code>count</code> mode, context lines, case-insensitive).</td><td>read</td></tr>
 <tr><td><code>bash</code></td><td>Run a shell command inside the workspace with a timeout (default 120 s, max 600 s). Background jobs are killed when the command finishes.</td><td>execute</td></tr>
+<tr><td><code>web_fetch</code></td><td>Fetch a public http(s) page and return its text (HTML converted, 2 MB read at most, 30 000 characters returned). Hosts resolving to loopback, private, link-local or other internal addresses are refused, and each redirect is checked again; <code>security.web_allowed_domains</code> narrows it to some domains.</td><td>network</td></tr>
+<tr><td><code>web_search</code></td><td>Search through the SearXNG-compatible endpoint of <code>security.search_url</code> and list the first 10 results. Only registered when that key is set.</td><td>network</td></tr>
 </tbody>
 </table>
 </div>
+<p>The web tools refuse to run unless <code>security.allow_network = true</code>. They are read-only
+tools, so read-only agents such as the researcher and the reviewers get them too.</p>
 <p>Which tools an agent may use is decided per role (see <a href="#customising-agents">Customising agents</a>):
 the planner and the reviewers of the spec phase are read-only, the coder and the QA agents
 have everything.</p>
@@ -1611,9 +1849,12 @@ as a plugin in any language; see <a href="#plugins-1">Plugins</a> and
 <h2 id="what-the-policy-is-not"><a class="header" href="#what-the-policy-is-not">What the policy is not</a></h2>
 <p>It is a <strong>denylist and a set of validators, not a sandbox</strong>. An agent that can run
 <code>python -c</code> or <code>node -e</code> can, in principle, do anything the interpreter can. For untrusted
-code or strict environments, combine the policy with an isolated workspace (a container or
-a VM through a <code>WorkspaceProvider</code> plugin), keep <code>allow_network = false</code>, and use the
-allowlist.</p>
+code or strict environments, combine the policy with an isolated workspace, keep
+<code>allow_network = false</code>, and use the allowlist. The built-in
+<a href="#container-workspace">container workspace</a> runs every shell command in a
+hardened, throw-away container with no network by default; a VM or remote sandbox can be
+plugged in as a <code>WorkspaceProvider</code> plugin. The file tools still act on the host worktree,
+inside the path containment described above.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="workspaces-and-merging"><a class="header" href="#workspaces-and-merging">Workspaces and merging</a></h1>
 <p>Agents never edit your checkout by default. Each task gets its own <strong>workspace</strong>: a git
@@ -1625,6 +1866,7 @@ is merged into the base branch, or left for you to review. The design rationale 
 <pre><code class="language-toml">[pipeline]
 workspace = "git_worktree"   # default
 # workspace = "in_place"     # no isolation
+# workspace = "container"    # git worktrees, shell commands in containers
 # workspace = "&lt;name&gt;"       # a WorkspaceProvider registered by an in-process plugin
 
 base_branch = "main"         # top level; default: the branch currently checked out
@@ -1637,6 +1879,7 @@ base_branch = "main"         # top level; default: the branch currently checked 
 <tbody>
 <tr><td><code>git_worktree</code></td><td>one worktree and branch per task</td><td>yes</td><td>fast-forward, merge commit, or human review</td></tr>
 <tr><td><code>in_place</code></td><td>none: agents work in the project directory</td><td>no</td><td>nothing to merge; changes are already there</td></tr>
+<tr><td><code>container</code></td><td>git worktrees as above, and every shell command in a throw-away container</td><td>yes, and Docker or Podman</td><td>as <code>git_worktree</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -1669,6 +1912,87 @@ it (a leftover), it is removed and recreated. If the branch exists but its workt
 a new worktree is created on the existing branch, keeping its commits.</p>
 <p>The project must be a git repository; otherwise opening fails with
 <code>&lt;path&gt; is not a git repository; use the in_place workspace or run `git init` </code>.</p>
+<h3 id="one-worktree-per-subtask-attempt"><a class="header" href="#one-worktree-per-subtask-attempt">One worktree per subtask attempt</a></h3>
+<p>With <code>git_worktree</code> (and <code>pipeline.isolate_subtasks = true</code>, the default), every attempt at a
+subtask also gets its own worktree, forked from the current commit of the task branch:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>What</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>directory</td><td><code>&lt;task worktree&gt;--s&lt;N&gt;-a&lt;attempt&gt;</code>, for example <code>.vibe/worktrees/add-oauth-login-github-6f1c3e0a--s2-a1</code></td></tr>
+<tr><td>branch</td><td><code>&lt;task branch&gt;--s&lt;N&gt;-a&lt;attempt&gt;</code>, for example <code>vibe/add-oauth-login-github-6f1c3e0a--s2-a1</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Parallel coder sessions therefore never see each other’s unfinished edits, and a failed
+attempt is thrown away with its worktree instead of being reset in a shared directory.</p>
+<p>When a session reports its subtask done, its work is committed on the attempt branch
+(<code>vibe: complete subtask 2 - Routes</code>) and merged into the task branch right away: a
+fast-forward when the task branch did not move, else a merge commit. Integrations happen one
+at a time; sessions that finish together are integrated in plan order, and a subtask starts
+only once the work of its <code>depends_on</code> subtasks is integrated. If the merge conflicts with
+work integrated since the attempt started, the merge is aborted (the task branch is left
+exactly as it was), the attempt counts as failed with the conflicting files in its notes,
+and the next attempt starts from the updated task branch. With <code>merge_strategy = "assisted"</code>, the model of the merge phase first tries to resolve the conflict markers, as for
+the final merge; the attempt only fails when a file stays unresolved.</p>
+<p>Attempt worktrees and branches are removed after each attempt and, to clean up after a
+crash, when the build starts and ends. <code>vibe task discard</code> removes any that remain. Before
+the first attempt the task worktree is committed as <code>vibe: checkpoint before build</code>, so
+attempts fork from everything already in it.</p>
+<p>Set <code>pipeline.isolate_subtasks = false</code> to have parallel subtasks share the task worktree as
+in 0.1 (completed subtasks are then committed when no other session is running, and failed
+attempts are reset). <code>in_place</code> and plugin workspaces always share the task workspace.</p>
+<h2 id="container-workspace"><a class="header" href="#container-workspace">Container workspace</a></h2>
+<p>The shell policy filters commands but is not a sandbox. With <code>workspace = "container"</code>, the
+<code>bash</code> tool, and therefore the required validation commands, runs every command in a fresh
+container instead of on your machine:</p>
+<pre><code class="language-toml">[pipeline]
+workspace = "container"
+
+[workspace.container]
+image = "rust:1.88"          # required
+runtime = "docker"           # or "podman", or a path to either
+network = "none"             # default; "bridge" or a named network
+cpus = 2.0
+memory = "4g"                # also the swap limit
+pids_limit = 1024            # default
+tmp_size = "1g"              # size of the /tmp tmpfs
+# user = "1000:1000"         # default: owner of the worktree on Unix
+env = ["CARGO_TERM_COLOR"]   # host variables passed through, by name only
+mount_git_metadata = false   # mount the git directory read-only (Unix only)
+
+[[workspace.container.mounts]]
+source = "/home/me/.cargo/registry" # absolute, or relative to the project root; no `~`
+target = "/usr/local/cargo/registry"
+read_only = true             # default
+</code></pre>
+<p>Files still live in the task’s git worktree on the host: it is bind-mounted at <code>/workspace</code>
+and the command’s working directory is translated to the matching path inside the
+container. The file tools, the diff shown to reviewers, commits, merges and validated merges
+work exactly as with <code>git_worktree</code>, and so do subtask worktrees.</p>
+<p>Every container is started with <code>--rm</code>, <code>--cap-drop=ALL</code>,
+<code>--security-opt=no-new-privileges</code>, a read-only root file system, a <code>/tmp</code> tmpfs, a process
+limit and a label <code>io.vibe-factory.managed=true</code>. There is no way to pass raw flags to the
+runtime; unknown keys in <code>[workspace.container]</code> are an error. One container runs per command
+and is removed with <code>rm --force</code> when the command ends, times out or is cancelled, which also
+kills its background processes. The start-up costs a few hundred milliseconds per command.</p>
+<p>What the settings allow and refuse:</p>
+<ul>
+<li><strong>Network.</strong> <code>none</code> unless the configured network is <code>bridge</code> or a named network <strong>and</strong>
+<code>security.allow_network = true</code>. <code>host</code> and <code>container:&lt;id&gt;</code> are refused.</li>
+<li><strong>Mounts.</strong> The source must exist; the filesystem root and sockets (such as the Docker
+socket) are refused; a writable mount may not overlap the project’s <code>.git</code> or <code>.vibe</code>;
+targets must be absolute and outside <code>/workspace</code>, <code>/tmp</code>, <code>/proc</code>, <code>/sys</code> and <code>/dev</code>.</li>
+<li><strong>Git.</strong> The worktree’s <code>.git</code> pointer is mounted read-only, and the repository’s git
+directory is not mounted unless <code>mount_git_metadata = true</code> (then read-only), so git
+commands that write do not work inside the container; the framework commits on the host.</li>
+<li><strong>Failures of the runtime.</strong> An exit status of 125 (image missing, daemon down) is reported
+to the agent as a runner failure with <code>sandbox_error: true</code> in the tool metadata.</li>
+</ul>
+<p>The settings are validated before a run starts. <code>vibe doctor</code> also checks that <code>&lt;runtime&gt; info</code> answers. The image must already contain the tools the agents need (compilers, test
+runners); nothing is installed for you.</p>
 <h2 id="in-place-mode"><a class="header" href="#in-place-mode">In-place mode</a></h2>
 <p><code>pipeline.workspace = "in_place"</code> makes the project directory itself the workspace. Use it
 for directories that are not git repositories, throw-away experiments, or when you want to
@@ -1696,7 +2020,7 @@ including assisted conflict resolutions. Only a passing, unchanged candidate is 
 by fast-forwarding the base branch to that exact commit. A failed check, unresolved conflict,
 changed target or unsupported provider pauses in <code>review</code>; the target is not updated by the
 integration. Resume builds and checks a fresh candidate. See
-<a href="#required-validation-commands-unreleased">Required validation commands</a>.</p>
+<a href="#required-validation-commands">Required validation commands</a>.</p>
 <p>Without configured validation commands, merging integrates the task branch into the base
 branch <strong>in your project checkout</strong> using the original algorithm:</p>
 <ol>
@@ -2302,6 +2626,91 @@ and enable long paths in Windows.</li>
 again. <code>--from</code> starts a new run that reuses the files already on disk; delete <code>spec.json</code> or
 <code>plan.json</code> if you want them regenerated rather than reused by later phases.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="upgrading-from-01-to-02"><a class="header" href="#upgrading-from-01-to-02">Upgrading from 0.1 to 0.2</a></h1>
+<p>Version 0.2 is about reliability. Existing <code>.vibe/config.toml</code> files keep working, and runs
+started with 0.1 can be resumed with 0.2. This page lists what changes when you upgrade and
+what you may want to turn on.</p>
+<h2 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h2>
+<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.2.0 vibe-cli --force
+vibe --version    # vibe 0.2.0
+vibe doctor
+</code></pre>
+<p>Nothing on disk needs converting. <code>run.json</code> gains new fields (<code>validations</code>,
+<code>validation_fix_attempts</code>, <code>pending_validation_fix</code>, <code>usage</code>, <code>active_ms</code>); files written by
+0.1 load with empty or zero values, so a resumed 0.1 run starts its budgets from zero.</p>
+<h2 id="behaviour-that-changes-by-default"><a class="header" href="#behaviour-that-changes-by-default">Behaviour that changes by default</a></h2>
+<p><strong>One worktree per subtask attempt.</strong> With the default <code>git_worktree</code> workspace, every
+subtask attempt now runs in its own worktree and branch (<code>&lt;task branch&gt;--s&lt;N&gt;-a&lt;attempt&gt;</code>)
+and is merged into the task branch as soon as it is done. You will see:</p>
+<ul>
+<li>a <code>vibe: checkpoint before build</code> commit when the task worktree had uncommitted work;</li>
+<li>one <code>vibe: complete subtask N - &lt;title&gt;</code> commit per subtask, and merge commits when
+parallel subtasks finished out of order, instead of grouped commits
+(<code>vibe: complete subtasks 2, 3 - …</code>);</li>
+<li>temporary <code>…--s2-a1</code> worktrees under <code>.vibe/worktrees/</code> and branches while a build runs,
+removed after each attempt.</li>
+</ul>
+<p>A subtask whose changes conflict with work integrated while it ran is retried from the
+updated task branch, which can cost one more attempt than in 0.1. To keep the 0.1 behaviour
+(parallel subtasks share the task worktree), set:</p>
+<pre><code class="language-toml">[pipeline]
+isolate_subtasks = false
+</code></pre>
+<p><code>in_place</code> and plugin workspaces are unchanged. See
+<a href="#one-worktree-per-subtask-attempt">One worktree per subtask attempt</a>.</p>
+<p><strong>Exit code 2 has one more meaning.</strong> <code>vibe run</code> also exits with 2 when a run budget is
+exhausted (see below). Scripts that treat 2 as “QA needs a human” should read
+<code>run_status</code> and <code>last_error</code> in the <code>--json</code> summary.</p>
+<p><strong>Plugin timeouts no longer close the plugin.</strong> A request that times out while its line
+is being written used to close the plugin’s input. Writes now go through a single writer
+task that never leaves a partial line, so the plugin stays usable after a timeout. A
+request cancelled before its turn is not sent at all.</p>
+<h2 id="new-settings-off-by-default"><a class="header" href="#new-settings-off-by-default">New settings, off by default</a></h2>
+<p>All of these are optional; leaving them out keeps the 0.1 behaviour.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>What it does</th><th>Page</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pipeline.validation_commands</code></td><td>shell checks that must pass before <code>ready</code> or a merge, run by the pipeline itself</td><td><a href="#required-validation-commands">Required validation commands</a></td></tr>
+<tr><td><code>pipeline.max_validation_fix_attempts</code></td><td>automatic fixes of failed checks over the whole run (default 2)</td><td>same</td></tr>
+<tr><td><code>pipeline.max_tokens</code></td><td>pause a run after this many tokens, resumes included</td><td><a href="#run-budgets">Run budgets</a></td></tr>
+<tr><td><code>pipeline.max_duration_secs</code></td><td>pause a run after this much active time, resumes included</td><td>same</td></tr>
+<tr><td><code>pipeline.workspace = "container"</code></td><td>run the agents’ shell commands in a container</td><td><a href="#container-workspace">Container workspace</a></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>vibe run</code> gains <code>--max-tokens</code> and <code>--max-duration</code> to set the budgets for one invocation.</p>
+<p>A reasonable starting point for a Rust project:</p>
+<pre><code class="language-toml">[pipeline]
+validation_commands = ["cargo fmt --all -- --check", "cargo test --offline"]
+max_tokens = 3_000_000
+max_duration_secs = 7200
+</code></pre>
+<h2 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h2>
+<p>The Rust API is pre-1.0 and 0.2 changes it in a few places. Code that only uses the <code>vibe</code>
+command line is not affected.</p>
+<ul>
+<li><code>vibe_core::PipelineConfig</code> has new public fields (<code>validation_commands</code>,
+<code>max_validation_fix_attempts</code>, <code>isolate_subtasks</code>, <code>max_tokens</code>, <code>max_duration_secs</code>).
+Build it with <code>PipelineConfig { …, ..PipelineConfig::default() }</code> rather than a full
+struct literal.</li>
+<li><code>vibe_pipeline::PipelineDeps</code> has a new <code>subtask_workspaces</code> field. Pass <code>None</code> to share
+the task workspace between subtasks, or <code>Some(Arc::new(GitSubtaskWorkspaces::new()))</code>
+with a git worktree workspace.</li>
+<li><code>vibe_pipeline::RunContext</code> has new <code>budget</code> and <code>subtask_workspaces</code> fields, and
+<code>RunState</code> new <code>validations</code>, <code>validation_fix_attempts</code>, <code>pending_validation_fix</code>,
+<code>usage</code> and <code>active_ms</code> fields.</li>
+<li><code>WorkspaceProvider</code> has a new <code>merge_validated</code> method used when validation commands
+are configured with <code>auto_merge</code>. Its default fails closed: a custom provider must
+implement it to support validated automatic merges.</li>
+<li>New traits and types: <code>vibe_core::SubtaskWorkspaces</code> and <code>SubtaskIntegration</code>
+(implemented by <code>vibe_workspace::GitSubtaskWorkspaces</code>), <code>MergeValidator</code>, and
+<code>RunBudget</code>, <code>BudgetLimits</code>, <code>BudgetExceeded</code>. <code>AgentRunner::budget</code> attaches a budget to
+an agent run; a reached limit stops it like a cancellation.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture overview</a></h1>
 <p>Vibe Factory is a Cargo workspace of eight crates arranged in strict layers. Every arrow
 points downwards; no crate depends on a crate above it.</p>
@@ -2889,6 +3298,8 @@ let report = pipeline.resume_with(task_id, options).await?;
 <tr><td><code>config: VibeConfig</code></td><td>the parsed <code>.vibe/config.toml</code></td></tr>
 <tr><td><code>project_root: PathBuf</code></td><td>the project directory</td></tr>
 <tr><td><code>committer: Option&lt;Committer&gt;</code></td><td>commits the workspace after subtasks and fixes</td></tr>
+<tr><td><code>resetter: Option&lt;Resetter&gt;</code></td><td>discards what a failed attempt left in a shared workspace</td></tr>
+<tr><td><code>subtask_workspaces: Option&lt;Arc&lt;dyn SubtaskWorkspaces&gt;&gt;</code></td><td>one workspace per subtask attempt (the CLI plugs <code>GitSubtaskWorkspaces</code> for <code>git_worktree</code>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -3057,10 +3468,21 @@ is allowed). After the last attempt the subtask is <strong>failed</strong>, a li
 <code>memory/gotchas.md</code>, and every pending subtask depending on it through <code>depends_on</code>,
 transitively, becomes <strong>skipped</strong>. Failures do not skip later phases by ordering alone.
 Pending subtasks that can never become ready are skipped as “blocked by the plan ordering”.</p>
-<p>Commits are <strong>deferred</strong>: the committer stages the whole workspace, so completed subtasks
-are committed only when no other session is running, possibly several in one commit
-(<code>vibe: complete subtask 2 - Routes</code>, <code>vibe: complete subtasks 2, 3 - Routes; Login page</code>).
-A failed commit is logged and noted, never fatal.</p>
+<p><strong>Isolated subtasks.</strong> When <code>subtask_workspaces</code> is set and <code>pipeline.isolate_subtasks</code> is
+true, <code>launch</code> opens a workspace labelled <code>s&lt;N&gt;-a&lt;attempt&gt;</code> forked from the task workspace
+and the session’s tools are confined to it (<code>RunContext::runner_in</code>). The scheduler awaits
+one finished session, drains every other session that already finished (<code>now_or_never</code>),
+and handles the batch in plan order. A successful attempt is integrated right away with
+<code>SubtaskWorkspaces::integrate</code>; a <code>Conflict</code> or an error turns it into a failed attempt with
+the reason in its notes. Every attempt workspace is discarded after its outcome is known;
+<code>discard_all</code> runs when the build starts (after a <code>vibe: checkpoint before build</code> commit)
+and when it ends or is cancelled. Nothing is deferred: the task workspace only changes
+through integrations, which the scheduler serialises.</p>
+<p><strong>Shared workspace.</strong> Otherwise commits are <strong>deferred</strong>: the committer stages the whole
+workspace, so completed subtasks are committed only when no other session is running,
+possibly several in one commit (<code>vibe: complete subtask 2 - Routes</code>,
+<code>vibe: complete subtasks 2, 3 - Routes; Login page</code>). A failed commit is logged and noted,
+never fatal.</p>
 <p>The build continues to QA when at least one subtask is done and none is pending; its
 <code>success</code> flag is false if any subtask failed or was skipped. Otherwise the run fails with
 <code>build failed: 0 done, 2 failed, 1 skipped</code>. Subtasks found <code>in_progress</code> when the build
@@ -3128,6 +3550,43 @@ clears <code>last_error</code>, and reuses the persisted spec and plan. Subtasks
 never redone; interrupted ones are retried. When a <strong>failed</strong> run resumes at <code>build</code>, failed
 and skipped subtasks go back to pending with their attempt counters reset, and a progress
 note says how many.</p>
+<h2 id="run-manager-and-locking"><a class="header" href="#run-manager-and-locking">Run manager and locking</a></h2>
+<p><code>RunManager</code> is the seam interfaces use (<a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a>):
+<code>start</code> and <code>resume</code> spawn a run on its own tokio task and return a <code>RunHandle</code> to await,
+<code>cancel</code> flips that run’s cancellation token, <code>active</code> lists running tasks and <code>subscribe</code>
+returns the live event stream. <code>vibe run</code> goes through it; the terminal UI runs several
+tasks at once with it.</p>
+<p><code>Pipeline::execute</code> first calls <code>PipelineStore::lock_run</code>: <code>FileTaskStore</code> takes an
+exclusive OS lock on <code>run.lock</code> in the task directory (and writes its pid to <code>run.owner</code>), so
+one process at a time runs a task, and a crashed process leaves no stale lock. The run’s
+cancellation token combines the caller’s token with <code>PipelineStore::take_cancel_request</code>,
+polled every 500 ms: <code>vibe cancel</code> writes <code>cancel.request</code>, which the running process
+consumes. Index updates take <code>.index.lock</code> in the tasks directory as well as the in-process
+mutex, so a CLI and another process never interleave them.</p>
+<h2 id="approval-gates"><a class="header" href="#approval-gates">Approval gates</a></h2>
+<p><code>pipeline.approvals</code> lists <code>ApprovalGate</code>s. Before a phase runs, the driver computes the
+gate it must pass (<code>Plan</code> needs <code>Spec</code> when a spec exists, <code>Build</code> needs <code>Plan</code>, <code>Merge</code>
+needs <code>Merge</code>). A gate without a valid approval sets <code>RunState::pending_approval</code>,
+publishes <code>approval_requested</code> once, then <code>paused</code>, and ends the run as <code>paused</code> (task
+<code>review</code>) at that phase. <code>RunState::resolve_approval</code>, called by <code>vibe approve</code> and
+<code>vibe reject</code>, records the decision. On resume an approved gate lets the phase run; a
+rejected one redirects to the producer: <code>Spec</code> and <code>Plan</code> take the reason through
+<code>RunContext::take_rejection</code> and put it in their prompt, <code>Merge</code> becomes a QA report with
+one high severity “Human review” issue and forces the fix phase (<code>pending_human_fix</code>), even
+in profiles without it. A completed <code>Spec</code> revokes the spec and plan approvals, <code>Plan</code> the
+plan approval, <code>Build</code> and <code>Fix</code> the merge approval.</p>
+<h2 id="budgets"><a class="header" href="#budgets">Budgets</a></h2>
+<p><code>run.json</code> accumulates the tokens (<code>usage</code>) and active milliseconds (<code>active_ms</code>) of every
+invocation of a run. The driver builds a <code>vibe_core::RunBudget</code> from those totals and the
+<code>pipeline.max_tokens</code> / <code>pipeline.max_duration_secs</code> limits, stores it in the <code>RunContext</code>
+and hands it to every <code>AgentRunner</code>. The runner adds each model call’s usage to it and
+treats a reached limit like a cancellation: no new step starts. <code>RunContext::is_cancelled</code>
+is true as well, so the build scheduler stops launching sessions and puts interrupted
+subtasks back to pending. The driver tells the two apart with <code>RunBudget::exceeded</code>: a
+cancelled phase whose budget is exhausted ends the run as <code>paused</code> (task <code>backlog</code>) at the
+same <code>current_phase</code>, and the budget is also checked before every phase. The totals are
+written to <code>run.json</code> before and after each phase and at the end of the run, so a crash
+loses at most the accounting of the phase in progress.</p>
 <p><code>run</code> with <code>from_phase</code> is different: it starts a new run id at that phase, keeping only the
 previous profile. It is how you re-run QA after fixing things by hand (<code>--from qa</code>).</p>
 <h2 id="events-1"><a class="header" href="#events-1">Events</a></h2>
@@ -3195,17 +3654,19 @@ intersected with what the runner’s <code>ToolRegistry</code> actually contains
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Level</th><th><code>budget()</code></th><th>Anthropic</th><th>OpenAI-compatible <code>reasoning_effort</code></th></tr>
+<tr><th>Level</th><th><code>budget()</code></th><th>Anthropic (adaptive / budget form)</th><th>OpenAI-compatible <code>reasoning_effort</code></th></tr>
 </thead>
 <tbody>
-<tr><td><code>off</code></td><td><code>None</code></td><td>thinking disabled</td><td>not sent</td></tr>
-<tr><td><code>low</code></td><td>1 024</td><td><code>budget_tokens: 1024</code></td><td><code>low</code></td></tr>
-<tr><td><code>medium</code></td><td>4 096</td><td><code>budget_tokens: 4096</code></td><td><code>medium</code></td></tr>
-<tr><td><code>high</code></td><td>16 384</td><td><code>budget_tokens: 16384</code></td><td><code>high</code></td></tr>
-<tr><td><code>max</code></td><td>32 768</td><td><code>budget_tokens: 32768</code></td><td><code>high</code></td></tr>
+<tr><td><code>off</code></td><td><code>None</code></td><td>thinking not sent</td><td>not sent</td></tr>
+<tr><td><code>low</code></td><td>1 024</td><td>effort <code>low</code> / <code>budget_tokens: 1024</code></td><td><code>low</code></td></tr>
+<tr><td><code>medium</code></td><td>4 096</td><td>effort <code>medium</code> / <code>budget_tokens: 4096</code></td><td><code>medium</code></td></tr>
+<tr><td><code>high</code></td><td>16 384</td><td>effort <code>high</code> / <code>budget_tokens: 16384</code></td><td><code>high</code></td></tr>
+<tr><td><code>max</code></td><td>32 768</td><td>effort <code>max</code> / <code>budget_tokens: 32768</code></td><td><code>high</code></td></tr>
 </tbody>
 </table>
 </div>
+<p>The Anthropic provider picks the form from the model id (<code>ThinkingMode::for_model</code>): adaptive
+thinking for Claude 4.6 and later, a token budget for older models.</p>
 <p>When a level has a budget, the runner raises the step’s output budget to at least
 <code>budget + 4096</code> (<code>effective_max_tokens</code>), because providers with extended thinking require
 the output budget to exceed the thinking budget.</p>
@@ -3347,6 +3808,7 @@ Each retry publishes <code>retrying</code>. The cancel token is checked after ea
 </thead>
 <tbody>
 <tr><td><code>agent_started</code></td><td>before the first step</td></tr>
+<tr><td><code>agent_delta</code></td><td>while a step streams: text or reasoning pieces, merged when several arrive together; ephemeral (not in <code>events.jsonl</code>)</td></tr>
 <tr><td><code>agent_text</code></td><td>after each step whose answer contains text</td></tr>
 <tr><td><code>tool_called</code> / <code>tool_returned</code></td><td>around each tool call</td></tr>
 <tr><td><code>retrying</code></td><td>before each runner-level retry</td></tr>
@@ -3870,8 +4332,11 @@ concurrently. <code>params</code> is omitted when there are none (<code>shutdown
 </code></pre>
 <p>If the handshake or a listing fails, the process is shut down and the plugin counts as not
 started. The host only calls <code>tools/*</code>, <code>agents/list</code> and <code>hooks/before_tool</code> when the
-matching capability was advertised. When a request times out before it was fully written,
-the host closes the stream and fails every later call fast.</p>
+matching capability was advertised. All host writes go through one writer task that owns
+the plugin’s stdin and writes whole queued lines one at a time, so a caller that times out or
+is cancelled never leaves a partial line: its line is written whole, or skipped if its turn had
+not come yet. A failed write marks the connection dead and fails every pending and later
+call fast; after <code>shutdown</code> closed stdin, writes fail with <code>plugin `&lt;name&gt;` is closed</code>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3890,9 +4355,9 @@ the host closes the stream and fails every later call fast.</p>
 <p>The host sends the VPP fields and, for MCP servers, the MCP fields:</p>
 <pre><code class="language-json">{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
   "protocol_version":"1",
-  "host":{"name":"vibe-factory","version":"0.1.0"},
+  "host":{"name":"vibe-factory","version":"0.2.0"},
   "protocolVersion":"2025-06-18",
-  "clientInfo":{"name":"vibe-factory","version":"0.1.0"},
+  "clientInfo":{"name":"vibe-factory","version":"0.2.0"},
   "capabilities":{}}}
 </code></pre>
 <pre><code class="language-json">{"jsonrpc":"2.0","id":1,"result":{"name":"echo","version":"0.1.0",
@@ -4215,8 +4680,23 @@ policies the static layer cannot express.</p>
 <h2 id="5-isolation-vibe-workspace-plugins"><a class="header" href="#5-isolation-vibe-workspace-plugins">5. Isolation (<code>vibe-workspace</code>, plugins)</a></h2>
 <p>The default workspace is a git worktree on its own branch
 (<a href="#adr-003-git-worktrees-for-isolation">ADR-003</a>); the project checkout is never modified until the
-merge step, which refuses to run on a dirty tree. Stronger isolation (containers, VMs,
-remote sandboxes) is a <code>WorkspaceProvider</code> plugin.</p>
+merge step, which refuses to run on a dirty tree. With the git worktree workspace each
+subtask attempt also gets its own worktree, integrated into the task branch one at a time.</p>
+<p>The <code>container</code> workspace (<code>vibe_workspace::ContainerWorkspace</code>) keeps the worktrees and
+changes where commands run. <code>vibe_core::CommandRunner</code> is the seam: the <code>bash</code> tool checks
+the policy and the paths as usual, then asks the runner for the process to spawn
+(<code>PreparedCommand</code>: program, arguments, a cleanup command and the exit status that means
+“the runner failed”). <code>ContainerRunner</code> returns <code>docker run --rm</code> (or <code>podman run --rm</code>)
+with fixed hardening flags (<code>--cap-drop=ALL</code>, <code>--security-opt=no-new-privileges</code>,
+<code>--read-only</code>, a <code>/tmp</code> tmpfs, <code>--pids-limit</code>), the worktree bind-mounted at <code>/workspace</code>,
+its <code>.git</code> pointer mounted read-only over itself so a command cannot redirect the host’s git
+to a crafted directory, and <code>--network=none</code> unless a network is both configured and
+granted. The cleanup (<code>rm --force &lt;name&gt;</code>) runs when the command ends, times out or its
+future is dropped, which kills everything the command started. Settings are validated
+before any container starts (<code>ContainerSettings::from_config</code>): namespace-sharing networks,
+sockets, writable mounts over <code>.git</code> or <code>.vibe</code> and reserved targets are refused, and there
+is no raw flag passthrough. File tools are unaffected: they act on the host worktree under
+path containment. VMs and remote sandboxes remain <code>WorkspaceProvider</code> plugins.</p>
 <p>A worktree shares <code>.git/config</code> with the user’s checkout, so the provider treats the
 repository configuration as untrusted after agents have run:</p>
 <ul>
@@ -4259,6 +4739,8 @@ and which ones you may edit.</p>
 ├── config.toml                     project configuration
 ├── agents/*.toml                   agent overrides and custom agents (+ prompt files)
 ├── plugins/&lt;name&gt;/vibe-plugin.toml plugin manifests
+├── memory.jsonl                    project memory: one lesson per line, shared by tasks
+├── server.token                    token of a running `vibe serve` (owner-only)
 ├── worktrees/                      one git worktree per task (git_worktree workspace)
 │   ├── .gitignore                  "*"
 │   └── &lt;slug&gt;-&lt;id8&gt;/               the task's workspace
@@ -4267,6 +4749,7 @@ and which ones you may edit.</p>
 │           └── tool-output/&lt;uuid&gt;.txt   full text of truncated tool outputs
 └── tasks/
     ├── index.json                  task id → directory and number
+    ├── .index.lock                 OS lock serialising index updates across processes
     └── NNN-&lt;slug&gt;/                 one directory per task
         ├── task.json
         ├── spec.json   spec.md
@@ -4275,7 +4758,9 @@ and which ones you may edit.</p>
         ├── progress.md                           append-only, timestamped
         ├── memory/gotchas.md   memory/patterns.md
         ├── events.jsonl                          every event of every run
-        └── run.json                              state of the last run
+        ├── run.json                              state of the last run
+        ├── run.lock   run.owner                  OS lock and pid of the process running it
+        └── cancel.request                        present while a `vibe cancel` is pending
 </code></pre>
 <div class="table-wrapper">
 <table>
@@ -4330,6 +4815,8 @@ task id; an ambiguous prefix is an error. A corrupt index is reported as
 <tr><td><code>memory/gotchas.md</code></td><td>repeatedly failing subtasks, escalated QA issues</td><td>appended when they happen</td></tr>
 <tr><td><code>events.jsonl</code></td><td>one <code>Envelope</code> per line</td><td>appended by the run’s event sink</td></tr>
 <tr><td><code>run.json</code></td><td>the <code>RunState</code> of the last run</td><td>before and after every phase, and at the end</td></tr>
+<tr><td><code>run.lock</code>, <code>run.owner</code></td><td>empty lock file, pid</td><td>taken by the process running the task, released when it ends or dies</td></tr>
+<tr><td><code>cancel.request</code></td><td>marker</td><td>written by <code>vibe cancel</code>, consumed by the running process</td></tr>
 </tbody>
 </table>
 </div>
@@ -4480,6 +4967,7 @@ existing ADR is never edited after acceptance, it is superseded by a new one.</p
 <tr><td><a href="#adr-004-denylist-shell-policy-with-validators">004</a></td><td>Denylist shell policy with validators</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-005-json-rpc-over-stdio-plugin-protocol">005</a></td><td>JSON-RPC over stdio plugin protocol</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-006-structured-qa-verdicts">006</a></td><td>Structured QA verdicts</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-007-one-seam-for-every-user-interface">007</a></td><td>One seam for every user interface</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -4640,9 +5128,107 @@ one retry; a still-invalid answer counts as <code>Inconclusive</code> and consum
 <li>Prompts must be explicit about the schema; the runtime helps with extraction and repair.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-007-one-seam-for-every-user-interface"><a class="header" href="#adr-007-one-seam-for-every-user-interface">ADR-007: One seam for every user interface</a></h1>
+<p><strong>Status:</strong> Accepted — 2026-09-27</p>
+<h2 id="context-6"><a class="header" href="#context-6">Context</a></h2>
+<p>Up to 0.2 the only interface is the <code>vibe</code> command line: <code>vibe run</code> builds a pipeline in
+its own process, prints events as they come, and the run ends with the process. A terminal
+UI, a local web UI and an editor extension are all wanted. Each needs the same things:
+start, resume and cancel runs; see live progress, including text as the model produces it;
+answer approval requests; reconnect to a run in progress without losing events.</p>
+<p>Building each interface directly on <code>Pipeline</code> would duplicate run management three times,
+and each would have to guess the state of a run from files on disk.</p>
+<h2 id="decision-6"><a class="header" href="#decision-6">Decision</a></h2>
+<ol>
+<li>The engine exposes one seam for interfaces: a <strong>run manager</strong> in <code>vibe-pipeline</code> that
+starts, resumes, cancels and lists runs and hands out an event subscription. It never
+renders anything.</li>
+<li><strong>Events are the interface contract.</strong> Every change an interface shows is an event with
+a per-run sequence number and a schema version, persisted in <code>events.jsonl</code>, so a client
+can replay from any sequence number and then follow live events. Interfaces keep no
+private view of engine state that events cannot rebuild.</li>
+<li><strong>Human decisions are part of the pipeline</strong>, not of an interface: an approval request
+is persisted in <code>run.json</code> and resolved by a command (<code>vibe approve</code>, <code>vibe reject</code>)
+that any interface can issue.</li>
+<li>Clients attach in two ways: in process (the CLI and the terminal UI use the run manager
+directly) or through <code>vibe serve</code>, which exposes the same operations over HTTP and the
+event stream over server-sent events (web UI, editor extensions).</li>
+<li><code>.vibe/</code> stays the source of truth and is protected by a cross-process lock, so a CLI
+and a server can work on the same project.</li>
+</ol>
+<h2 id="consequences-6"><a class="header" href="#consequences-6">Consequences</a></h2>
+<ul>
+<li>The terminal UI can ship before the server, and the server adds no engine logic.</li>
+<li>Streaming, approvals and new events must land before any interface that relies on them.</li>
+<li>The event schema becomes a public, versioned API; changing an event is a breaking change.</li>
+<li>A crash loses no decision: approvals and sequence numbers are on disk.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="events-3"><a class="header" href="#events-3">Events</a></h1>
+<p>Everything the engine does is published as an event. Interfaces (the CLI, <code>vibe events</code>,
+the terminal UI, and later <code>vibe serve</code>) are built on events only, so this page is a
+public, versioned contract (<a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a>).</p>
+<h2 id="envelope-1"><a class="header" href="#envelope-1">Envelope</a></h2>
+<p>Each event travels in an envelope, one JSON object per line in
+<code>.vibe/tasks/&lt;task&gt;/events.jsonl</code> and in <code>vibe --json</code> output:</p>
+<pre><code class="language-json">{"schema":2,"seq":17,"at":"2026-09-27T10:00:00Z","event":{"type":"phase_started","run":"…","phase":"build"}}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>schema</code></td><td>event format version, currently <code>2</code>; logs written before 0.3 have none and read as <code>1</code></td></tr>
+<tr><td><code>seq</code></td><td>position of the event in its run, from 1, without gaps and continued across resumes; absent for ephemeral events and events without a run</td></tr>
+<tr><td><code>at</code></td><td>publication time, UTC</td></tr>
+<tr><td><code>event</code></td><td>the event, tagged by <code>type</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A client replays a run by reading its events in <code>seq</code> order and follows it by asking for the
+events after the last <code>seq</code> it saw: <code>vibe events &lt;task&gt; --after &lt;seq&gt; --follow</code>. Events of
+one run are delivered in <code>seq</code> order to live subscribers and to the log.</p>
+<p><strong>Ephemeral</strong> events are only sent live and never logged: they carry no <code>seq</code> and a client
+that reconnects does not get them back.</p>
+<p>Adding an event type or an optional field is not a breaking change; clients must ignore
+types and fields they do not know. Removing or changing a field increments <code>schema</code>.</p>
+<h2 id="event-types"><a class="header" href="#event-types">Event types</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>type</code></th><th>Fields</th><th>When</th></tr>
+</thead>
+<tbody>
+<tr><td><code>run_started</code></td><td><code>run</code>, <code>task</code></td><td>a run or a resumed run starts</td></tr>
+<tr><td><code>phase_started</code></td><td><code>run</code>, <code>phase</code></td><td>before a phase</td></tr>
+<tr><td><code>phase_finished</code></td><td><code>run</code>, <code>phase</code>, <code>success</code>, <code>summary</code></td><td>after a phase</td></tr>
+<tr><td><code>agent_started</code></td><td><code>run</code>, <code>role</code>, <code>subtask</code></td><td>an agent session starts</td></tr>
+<tr><td><code>agent_delta</code></td><td><code>run</code>, <code>role</code>, <code>subtask</code>, <code>delta</code> (<code>{"kind":"text"|"thinking","text":…}</code>)</td><td><strong>ephemeral</strong>: text arriving while a step streams</td></tr>
+<tr><td><code>agent_text</code></td><td><code>run</code>, <code>role</code>, <code>text</code></td><td>the complete text of a step</td></tr>
+<tr><td><code>tool_called</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>input</code></td><td>before a tool runs</td></tr>
+<tr><td><code>tool_returned</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>is_error</code>, <code>duration_ms</code>, <code>preview</code></td><td>after a tool ran</td></tr>
+<tr><td><code>agent_finished</code></td><td><code>run</code>, <code>role</code>, <code>steps</code>, <code>usage</code>, <code>stop</code></td><td>an agent session ends</td></tr>
+<tr><td><code>subtask_updated</code></td><td><code>run</code>, <code>subtask</code>, <code>status</code></td><td>a subtask changes state</td></tr>
+<tr><td><code>subtask_integrated</code></td><td><code>run</code>, <code>subtask</code>, <code>commit</code>, <code>conflicts</code></td><td>a finished attempt was merged into the task branch (<code>conflicts</code> empty) or conflicted</td></tr>
+<tr><td><code>validation_finished</code></td><td><code>run</code>, <code>command</code>, <code>integration</code>, <code>passed</code>, <code>exit_code</code></td><td>a required validation command finished</td></tr>
+<tr><td><code>budget_updated</code></td><td><code>run</code>, <code>tokens</code>, <code>token_limit</code>, <code>active_ms</code>, <code>duration_limit_ms</code></td><td>after each phase and each subtask attempt</td></tr>
+<tr><td><code>artefact_written</code></td><td><code>run</code>, <code>artefact</code> (<code>{"kind":"spec"}</code>, <code>{"kind":"plan"}</code>, <code>{"kind":"qa_report","round":n}</code>)</td><td>the spec, the plan or a QA report was written</td></tr>
+<tr><td><code>approval_requested</code></td><td><code>run</code>, <code>gate</code> (<code>spec</code>, <code>plan</code>, <code>merge</code>)</td><td>the run pauses until a human decides (<code>pipeline.approvals</code>)</td></tr>
+<tr><td><code>approval_resolved</code></td><td><code>run</code>, <code>gate</code>, <code>approved</code>, <code>comment</code></td><td><code>vibe approve</code> or <code>vibe reject</code> answered; logged by that command</td></tr>
+<tr><td><code>retrying</code></td><td><code>run</code>, <code>what</code>, <code>attempt</code>, <code>delay_ms</code></td><td>before a retry</td></tr>
+<tr><td><code>paused</code></td><td><code>run</code>, <code>reason</code></td><td>the run stops and waits for a human</td></tr>
+<tr><td><code>run_finished</code></td><td><code>run</code>, <code>success</code>, <code>status</code></td><td>the run ends, always last, also after <code>paused</code></td></tr>
+<tr><td><code>log</code></td><td><code>run</code> (optional), <code>level</code>, <code>message</code></td><td>diagnostics</td></tr>
+</tbody>
+</table>
+</div>
+<p>Identifiers (<code>run</code>, <code>task</code>, <code>subtask</code>) are UUIDs. <code>role</code> is the agent role (<code>coder</code>,
+<code>qa_reviewer</code>, …). Statuses and phases use the same snake case names as <code>vibe task show</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h1>
 <p>Vibe Factory is young. The list below is ordered by priority, not by date.</p>
-<h2 id="01--foundation-this-release"><a class="header" href="#01--foundation-this-release">0.1 — foundation (this release)</a></h2>
+<h2 id="01--foundation-released"><a class="header" href="#01--foundation-released">0.1 — foundation (released)</a></h2>
 <ul>
 <li><input disabled="" type="checkbox" checked=""> Layered crate architecture with documented extension points</li>
 <li><input disabled="" type="checkbox" checked=""> Anthropic and OpenAI-compatible providers, mock provider</li>
@@ -4654,26 +5240,49 @@ one retry; a still-invalid answer counts as <code>Inconclusive</code> and consum
 <li><input disabled="" type="checkbox" checked=""> <code>vibe</code> CLI</li>
 <li><input disabled="" type="checkbox" checked=""> User guide, design book, ADRs, API docs</li>
 </ul>
-<h2 id="02--reliability-in-development"><a class="header" href="#02--reliability-in-development">0.2 — reliability (in development)</a></h2>
+<h2 id="02--reliability-released"><a class="header" href="#02--reliability-released">0.2 — reliability (released)</a></h2>
 <ul>
 <li><input disabled="" type="checkbox" checked=""> Required commands before ready/merge, persistent results and replay on resume</li>
-<li><input disabled="" type="checkbox" checked=""> Three reproducible Rust evaluation fixtures and an independent acceptance runner</li>
-<li><input disabled="" type="checkbox"> Run real-model evaluations; expand the suite to ten tasks and record success, time and tokens</li>
 <li><input disabled="" type="checkbox" checked=""> Feed deterministic validation failures into the bounded QA/fix loop</li>
 <li><input disabled="" type="checkbox" checked=""> Validate the integration candidate, including assisted conflict resolution, before publication</li>
-<li><input disabled="" type="checkbox"> Worktree per subtask, ordered integration and conflict tests</li>
-<li><input disabled="" type="checkbox"> Container workspace provider with explicit network, mounts and resource limits</li>
-<li><input disabled="" type="checkbox"> Persistent token and duration budgets across resumes</li>
-<li><input disabled="" type="checkbox"> Cancellation-safe plugin writer task</li>
-<li><input disabled="" type="checkbox"> Cross-platform release qualification and migration guide</li>
+<li><input disabled="" type="checkbox" checked=""> Ten reproducible Rust evaluation cases with independent oracles, a suite runner and a
+summary of success, time and tokens</li>
+<li><input disabled="" type="checkbox" checked=""> Worktree per subtask, ordered integration and conflict tests</li>
+<li><input disabled="" type="checkbox" checked=""> Container workspace provider with explicit network, mounts and resource limits</li>
+<li><input disabled="" type="checkbox" checked=""> Persistent token and duration budgets across resumes</li>
+<li><input disabled="" type="checkbox" checked=""> Cancellation-safe plugin writer task</li>
+<li><input disabled="" type="checkbox" checked=""> Cross-platform release qualification and migration guide</li>
 </ul>
-<h2 id="03--interaction-and-capabilities"><a class="header" href="#03--interaction-and-capabilities">0.3 — interaction and capabilities</a></h2>
+<p>Carried over: a published real-model baseline. A first, partial one is published
+(<a href="https://github.com/vincentlauriat/vibe-factory/blob/main/evals/baselines/2026-09-27-claude-sonnet-5.md">Claude Sonnet 5, 2026-09-27</a>:
+16/16 runs over six of the ten cases); the full suite is still to run.</p>
+<h2 id="03--interaction-foundations-and-terminal-ui-done-unreleased"><a class="header" href="#03--interaction-foundations-and-terminal-ui-done-unreleased">0.3 — interaction foundations and terminal UI (done, unreleased)</a></h2>
+<p>The engine learns to stream, to wait for a human and to outlive the terminal that started
+it, then gets a terminal UI. See <a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a>.</p>
 <ul>
-<li><input disabled="" type="checkbox"> Streaming completions and live token output</li>
-<li><input disabled="" type="checkbox"> Terminal UI board with live events</li>
-<li><input disabled="" type="checkbox"> Web fetch and search tools</li>
-<li><input disabled="" type="checkbox"> Richer persistent memory across tasks</li>
-<li><input disabled="" type="checkbox"> HTTP/WebSocket server and issue tracker importers</li>
+<li><input disabled="" type="checkbox" checked=""> Real-model evaluation baseline, published with the framework commit and model
+(partial: six of ten cases on Claude Sonnet 5; the full suite remains to run)</li>
+<li><input disabled="" type="checkbox" checked=""> Streaming completions and live agent text</li>
+<li><input disabled="" type="checkbox" checked=""> Events v2: sequence numbers, schema version, validation, integration, budget and
+artefact events, replay and follow</li>
+<li><input disabled="" type="checkbox" checked=""> Human approvals after spec, plan or before merge</li>
+<li><input disabled="" type="checkbox" checked=""> Run manager and cross-process locking of <code>.vibe/</code></li>
+<li><input disabled="" type="checkbox" checked=""> Terminal UI: task board and live run view</li>
+</ul>
+<h2 id="04--server-web-ui-and-integrations-done-unreleased"><a class="header" href="#04--server-web-ui-and-integrations-done-unreleased">0.4 — server, web UI and integrations (done, unreleased)</a></h2>
+<ul>
+<li><input disabled="" type="checkbox" checked=""> <code>vibe serve</code>: HTTP API and server-sent events over the run manager</li>
+<li><input disabled="" type="checkbox" checked=""> Local web UI: board, activity, plan, spec, QA, changes, approvals, evaluation dashboard</li>
+<li><input disabled="" type="checkbox" checked=""> GitHub and GitLab issue import and pull request creation</li>
+<li><input disabled="" type="checkbox" checked=""> Web fetch and search tools</li>
+<li><input disabled="" type="checkbox" checked=""> Persistent project memory across tasks</li>
+<li><input disabled="" type="checkbox" checked=""> VS Code extension on <code>vibe serve</code></li>
+</ul>
+<h2 id="later"><a class="header" href="#later">Later</a></h2>
+<ul>
+<li>OpenAPI description of the server API</li>
+<li>Editing the plan from the web UI before approving it</li>
+<li>Linear and Jira importers</li>
 </ul>
 <h2 id="ideas"><a class="header" href="#ideas">Ideas</a></h2>
 <ul>

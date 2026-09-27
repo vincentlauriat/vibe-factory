@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -244,8 +244,11 @@ concurrently. <code>params</code> is omitted when there are none (<code>shutdown
 </code></pre>
 <p>If the handshake or a listing fails, the process is shut down and the plugin counts as not
 started. The host only calls <code>tools/*</code>, <code>agents/list</code> and <code>hooks/before_tool</code> when the
-matching capability was advertised. When a request times out before it was fully written,
-the host closes the stream and fails every later call fast.</p>
+matching capability was advertised. All host writes go through one writer task that owns
+the plugin’s stdin and writes whole queued lines one at a time, so a caller that times out or
+is cancelled never leaves a partial line: its line is written whole, or skipped if its turn had
+not come yet. A failed write marks the connection dead and fails every pending and later
+call fast; after <code>shutdown</code> closed stdin, writes fail with <code>plugin `&lt;name&gt;` is closed</code>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -264,9 +267,9 @@ the host closes the stream and fails every later call fast.</p>
 <p>The host sends the VPP fields and, for MCP servers, the MCP fields:</p>
 <pre><code class="language-json">{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
   "protocol_version":"1",
-  "host":{"name":"vibe-factory","version":"0.1.0"},
+  "host":{"name":"vibe-factory","version":"0.2.0"},
   "protocolVersion":"2025-06-18",
-  "clientInfo":{"name":"vibe-factory","version":"0.1.0"},
+  "clientInfo":{"name":"vibe-factory","version":"0.2.0"},
   "capabilities":{}}}
 </code></pre>
 <pre><code class="language-json">{"jsonrpc":"2.0","id":1,"result":{"name":"echo","version":"0.1.0",

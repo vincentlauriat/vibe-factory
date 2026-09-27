@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,7 +182,7 @@
                     <main>
                         <h1 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h1>
 <p>Vibe Factory is young. The list below is ordered by priority, not by date.</p>
-<h2 id="01--foundation-this-release"><a class="header" href="#01--foundation-this-release">0.1 — foundation (this release)</a></h2>
+<h2 id="01--foundation-released"><a class="header" href="#01--foundation-released">0.1 — foundation (released)</a></h2>
 <ul>
 <li><input disabled="" type="checkbox" checked=""> Layered crate architecture with documented extension points</li>
 <li><input disabled="" type="checkbox" checked=""> Anthropic and OpenAI-compatible providers, mock provider</li>
@@ -194,26 +194,49 @@
 <li><input disabled="" type="checkbox" checked=""> <code>vibe</code> CLI</li>
 <li><input disabled="" type="checkbox" checked=""> User guide, design book, ADRs, API docs</li>
 </ul>
-<h2 id="02--reliability-in-development"><a class="header" href="#02--reliability-in-development">0.2 — reliability (in development)</a></h2>
+<h2 id="02--reliability-released"><a class="header" href="#02--reliability-released">0.2 — reliability (released)</a></h2>
 <ul>
 <li><input disabled="" type="checkbox" checked=""> Required commands before ready/merge, persistent results and replay on resume</li>
-<li><input disabled="" type="checkbox" checked=""> Three reproducible Rust evaluation fixtures and an independent acceptance runner</li>
-<li><input disabled="" type="checkbox"> Run real-model evaluations; expand the suite to ten tasks and record success, time and tokens</li>
 <li><input disabled="" type="checkbox" checked=""> Feed deterministic validation failures into the bounded QA/fix loop</li>
 <li><input disabled="" type="checkbox" checked=""> Validate the integration candidate, including assisted conflict resolution, before publication</li>
-<li><input disabled="" type="checkbox"> Worktree per subtask, ordered integration and conflict tests</li>
-<li><input disabled="" type="checkbox"> Container workspace provider with explicit network, mounts and resource limits</li>
-<li><input disabled="" type="checkbox"> Persistent token and duration budgets across resumes</li>
-<li><input disabled="" type="checkbox"> Cancellation-safe plugin writer task</li>
-<li><input disabled="" type="checkbox"> Cross-platform release qualification and migration guide</li>
+<li><input disabled="" type="checkbox" checked=""> Ten reproducible Rust evaluation cases with independent oracles, a suite runner and a
+summary of success, time and tokens</li>
+<li><input disabled="" type="checkbox" checked=""> Worktree per subtask, ordered integration and conflict tests</li>
+<li><input disabled="" type="checkbox" checked=""> Container workspace provider with explicit network, mounts and resource limits</li>
+<li><input disabled="" type="checkbox" checked=""> Persistent token and duration budgets across resumes</li>
+<li><input disabled="" type="checkbox" checked=""> Cancellation-safe plugin writer task</li>
+<li><input disabled="" type="checkbox" checked=""> Cross-platform release qualification and migration guide</li>
 </ul>
-<h2 id="03--interaction-and-capabilities"><a class="header" href="#03--interaction-and-capabilities">0.3 — interaction and capabilities</a></h2>
+<p>Carried over: a published real-model baseline. A first, partial one is published
+(<a href="https://github.com/vincentlauriat/vibe-factory/blob/main/evals/baselines/2026-09-27-claude-sonnet-5.md">Claude Sonnet 5, 2026-09-27</a>:
+16/16 runs over six of the ten cases); the full suite is still to run.</p>
+<h2 id="03--interaction-foundations-and-terminal-ui-done-unreleased"><a class="header" href="#03--interaction-foundations-and-terminal-ui-done-unreleased">0.3 — interaction foundations and terminal UI (done, unreleased)</a></h2>
+<p>The engine learns to stream, to wait for a human and to outlive the terminal that started
+it, then gets a terminal UI. See <a href="../design/adr/007-one-seam-many-interfaces.html">ADR-007</a>.</p>
 <ul>
-<li><input disabled="" type="checkbox"> Streaming completions and live token output</li>
-<li><input disabled="" type="checkbox"> Terminal UI board with live events</li>
-<li><input disabled="" type="checkbox"> Web fetch and search tools</li>
-<li><input disabled="" type="checkbox"> Richer persistent memory across tasks</li>
-<li><input disabled="" type="checkbox"> HTTP/WebSocket server and issue tracker importers</li>
+<li><input disabled="" type="checkbox" checked=""> Real-model evaluation baseline, published with the framework commit and model
+(partial: six of ten cases on Claude Sonnet 5; the full suite remains to run)</li>
+<li><input disabled="" type="checkbox" checked=""> Streaming completions and live agent text</li>
+<li><input disabled="" type="checkbox" checked=""> Events v2: sequence numbers, schema version, validation, integration, budget and
+artefact events, replay and follow</li>
+<li><input disabled="" type="checkbox" checked=""> Human approvals after spec, plan or before merge</li>
+<li><input disabled="" type="checkbox" checked=""> Run manager and cross-process locking of <code>.vibe/</code></li>
+<li><input disabled="" type="checkbox" checked=""> Terminal UI: task board and live run view</li>
+</ul>
+<h2 id="04--server-web-ui-and-integrations-done-unreleased"><a class="header" href="#04--server-web-ui-and-integrations-done-unreleased">0.4 — server, web UI and integrations (done, unreleased)</a></h2>
+<ul>
+<li><input disabled="" type="checkbox" checked=""> <code>vibe serve</code>: HTTP API and server-sent events over the run manager</li>
+<li><input disabled="" type="checkbox" checked=""> Local web UI: board, activity, plan, spec, QA, changes, approvals, evaluation dashboard</li>
+<li><input disabled="" type="checkbox" checked=""> GitHub and GitLab issue import and pull request creation</li>
+<li><input disabled="" type="checkbox" checked=""> Web fetch and search tools</li>
+<li><input disabled="" type="checkbox" checked=""> Persistent project memory across tasks</li>
+<li><input disabled="" type="checkbox" checked=""> VS Code extension on <code>vibe serve</code></li>
+</ul>
+<h2 id="later"><a class="header" href="#later">Later</a></h2>
+<ul>
+<li>OpenAPI description of the server API</li>
+<li>Editing the plan from the web UI before approving it</li>
+<li>Linear and Jira importers</li>
 </ul>
 <h2 id="ideas"><a class="header" href="#ideas">Ideas</a></h2>
 <ul>
@@ -227,7 +250,7 @@
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../design/adr/006-structured-qa.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../reference/events.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -241,7 +264,7 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../design/adr/006-structured-qa.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../reference/events.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

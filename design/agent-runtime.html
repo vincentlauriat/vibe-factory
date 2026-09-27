@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -228,17 +228,19 @@ intersected with what the runner’s <code>ToolRegistry</code> actually contains
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Level</th><th><code>budget()</code></th><th>Anthropic</th><th>OpenAI-compatible <code>reasoning_effort</code></th></tr>
+<tr><th>Level</th><th><code>budget()</code></th><th>Anthropic (adaptive / budget form)</th><th>OpenAI-compatible <code>reasoning_effort</code></th></tr>
 </thead>
 <tbody>
-<tr><td><code>off</code></td><td><code>None</code></td><td>thinking disabled</td><td>not sent</td></tr>
-<tr><td><code>low</code></td><td>1 024</td><td><code>budget_tokens: 1024</code></td><td><code>low</code></td></tr>
-<tr><td><code>medium</code></td><td>4 096</td><td><code>budget_tokens: 4096</code></td><td><code>medium</code></td></tr>
-<tr><td><code>high</code></td><td>16 384</td><td><code>budget_tokens: 16384</code></td><td><code>high</code></td></tr>
-<tr><td><code>max</code></td><td>32 768</td><td><code>budget_tokens: 32768</code></td><td><code>high</code></td></tr>
+<tr><td><code>off</code></td><td><code>None</code></td><td>thinking not sent</td><td>not sent</td></tr>
+<tr><td><code>low</code></td><td>1 024</td><td>effort <code>low</code> / <code>budget_tokens: 1024</code></td><td><code>low</code></td></tr>
+<tr><td><code>medium</code></td><td>4 096</td><td>effort <code>medium</code> / <code>budget_tokens: 4096</code></td><td><code>medium</code></td></tr>
+<tr><td><code>high</code></td><td>16 384</td><td>effort <code>high</code> / <code>budget_tokens: 16384</code></td><td><code>high</code></td></tr>
+<tr><td><code>max</code></td><td>32 768</td><td>effort <code>max</code> / <code>budget_tokens: 32768</code></td><td><code>high</code></td></tr>
 </tbody>
 </table>
 </div>
+<p>The Anthropic provider picks the form from the model id (<code>ThinkingMode::for_model</code>): adaptive
+thinking for Claude 4.6 and later, a token budget for older models.</p>
 <p>When a level has a budget, the runner raises the step’s output budget to at least
 <code>budget + 4096</code> (<code>effective_max_tokens</code>), because providers with extended thinking require
 the output budget to exceed the thinking budget.</p>
@@ -380,6 +382,7 @@ Each retry publishes <code>retrying</code>. The cancel token is checked after ea
 </thead>
 <tbody>
 <tr><td><code>agent_started</code></td><td>before the first step</td></tr>
+<tr><td><code>agent_delta</code></td><td>while a step streams: text or reasoning pieces, merged when several arrive together; ephemeral (not in <code>events.jsonl</code>)</td></tr>
 <tr><td><code>agent_text</code></td><td>after each step whose answer contains text</td></tr>
 <tr><td><code>tool_called</code> / <code>tool_returned</code></td><td>around each tool call</td></tr>
 <tr><td><code>retrying</code></td><td>before each runner-level retry</td></tr>

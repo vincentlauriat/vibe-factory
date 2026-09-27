@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,6 +191,8 @@ and which ones you may edit.</p>
 ├── config.toml                     project configuration
 ├── agents/*.toml                   agent overrides and custom agents (+ prompt files)
 ├── plugins/&lt;name&gt;/vibe-plugin.toml plugin manifests
+├── memory.jsonl                    project memory: one lesson per line, shared by tasks
+├── server.token                    token of a running `vibe serve` (owner-only)
 ├── worktrees/                      one git worktree per task (git_worktree workspace)
 │   ├── .gitignore                  "*"
 │   └── &lt;slug&gt;-&lt;id8&gt;/               the task's workspace
@@ -199,6 +201,7 @@ and which ones you may edit.</p>
 │           └── tool-output/&lt;uuid&gt;.txt   full text of truncated tool outputs
 └── tasks/
     ├── index.json                  task id → directory and number
+    ├── .index.lock                 OS lock serialising index updates across processes
     └── NNN-&lt;slug&gt;/                 one directory per task
         ├── task.json
         ├── spec.json   spec.md
@@ -207,7 +210,9 @@ and which ones you may edit.</p>
         ├── progress.md                           append-only, timestamped
         ├── memory/gotchas.md   memory/patterns.md
         ├── events.jsonl                          every event of every run
-        └── run.json                              state of the last run
+        ├── run.json                              state of the last run
+        ├── run.lock   run.owner                  OS lock and pid of the process running it
+        └── cancel.request                        present while a `vibe cancel` is pending
 </code></pre>
 <div class="table-wrapper">
 <table>
@@ -262,6 +267,8 @@ task id; an ambiguous prefix is an error. A corrupt index is reported as
 <tr><td><code>memory/gotchas.md</code></td><td>repeatedly failing subtasks, escalated QA issues</td><td>appended when they happen</td></tr>
 <tr><td><code>events.jsonl</code></td><td>one <code>Envelope</code> per line</td><td>appended by the run’s event sink</td></tr>
 <tr><td><code>run.json</code></td><td>the <code>RunState</code> of the last run</td><td>before and after every phase, and at the end</td></tr>
+<tr><td><code>run.lock</code>, <code>run.owner</code></td><td>empty lock file, pid</td><td>taken by the process running the task, released when it ends or dies</td></tr>
+<tr><td><code>cancel.request</code></td><td>marker</td><td>written by <code>vibe cancel</code>, consumed by the running process</td></tr>
 </tbody>
 </table>
 </div>

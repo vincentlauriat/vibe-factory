@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,9 +197,13 @@ workspace and governed by a security policy you control from <code>.vibe/config.
 <tr><td><code>glob</code></td><td>Find files by pattern (<code>**/*.rs</code>), newest first, at most 2000 results.</td><td>read</td></tr>
 <tr><td><code>grep</code></td><td>Regex search in text files (<code>content</code>, <code>files</code> or <code>count</code> mode, context lines, case-insensitive).</td><td>read</td></tr>
 <tr><td><code>bash</code></td><td>Run a shell command inside the workspace with a timeout (default 120 s, max 600 s). Background jobs are killed when the command finishes.</td><td>execute</td></tr>
+<tr><td><code>web_fetch</code></td><td>Fetch a public http(s) page and return its text (HTML converted, 2 MB read at most, 30 000 characters returned). Hosts resolving to loopback, private, link-local or other internal addresses are refused, and each redirect is checked again; <code>security.web_allowed_domains</code> narrows it to some domains.</td><td>network</td></tr>
+<tr><td><code>web_search</code></td><td>Search through the SearXNG-compatible endpoint of <code>security.search_url</code> and list the first 10 results. Only registered when that key is set.</td><td>network</td></tr>
 </tbody>
 </table>
 </div>
+<p>The web tools refuse to run unless <code>security.allow_network = true</code>. They are read-only
+tools, so read-only agents such as the researcher and the reviewers get them too.</p>
 <p>Which tools an agent may use is decided per role (see <a href="agents.html">Customising agents</a>):
 the planner and the reviewers of the spec phase are read-only, the coder and the QA agents
 have everything.</p>
@@ -285,9 +289,12 @@ as a plugin in any language; see <a href="plugins.html">Plugins</a> and
 <h2 id="what-the-policy-is-not"><a class="header" href="#what-the-policy-is-not">What the policy is not</a></h2>
 <p>It is a <strong>denylist and a set of validators, not a sandbox</strong>. An agent that can run
 <code>python -c</code> or <code>node -e</code> can, in principle, do anything the interpreter can. For untrusted
-code or strict environments, combine the policy with an isolated workspace (a container or
-a VM through a <code>WorkspaceProvider</code> plugin), keep <code>allow_network = false</code>, and use the
-allowlist.</p>
+code or strict environments, combine the policy with an isolated workspace, keep
+<code>allow_network = false</code>, and use the allowlist. The built-in
+<a href="workspaces.html#container-workspace">container workspace</a> runs every shell command in a
+hardened, throw-away container with no network by default; a VM or remote sandbox can be
+plugged in as a <code>WorkspaceProvider</code> plugin. The file tools still act on the host worktree,
+inside the path containment described above.</p>
 
                     </main>
 

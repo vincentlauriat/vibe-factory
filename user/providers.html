@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -223,6 +223,7 @@ first call only, so listing providers you do not use is harmless.</p>
 <tr><td><code>api_key_env</code></td><td>string</td><td>environment variable holding the key (an empty value counts as missing)</td></tr>
 <tr><td><code>base_url</code></td><td>string</td><td>endpoint override (gateway, proxy, self-hosted server); trailing <code>/</code> is ignored</td></tr>
 <tr><td><code>default_model</code></td><td>string</td><td>model used when a reference names no model, or names <code>default</code></td></tr>
+<tr><td><code>stream</code></td><td>bool</td><td>stream answers as they are generated (default <code>true</code>); set <code>false</code> for a gateway that mishandles server-sent events</td></tr>
 <tr><td><code>extra</code></td><td>table</td><td>kind-specific settings, below</td></tr>
 </tbody>
 </table>
@@ -236,6 +237,7 @@ first call only, so listing providers you do not use is harmless.</p>
 </thead>
 <tbody>
 <tr><td><code>headers</code></td><td>anthropic, openai, ollama</td><td>table of strings</td><td>extra HTTP headers sent with every request</td></tr>
+<tr><td><code>thinking</code></td><td>anthropic</td><td><code>"adaptive"</code> or <code>"budget"</code></td><td>force the thinking form instead of choosing it from the model id (see <a href="#thinking-levels">Thinking levels</a>)</td></tr>
 <tr><td><code>auth</code></td><td>anthropic</td><td><code>"api_key"</code> (default) or <code>"bearer"</code></td><td><code>bearer</code> sends the key as <code>Authorization: Bearer</code> with the OAuth beta header instead of <code>x-api-key</code></td></tr>
 <tr><td><code>require_api_key</code></td><td>openai, ollama</td><td>bool</td><td>default <code>false</code> when <code>base_url</code> is set, <code>true</code> on the official OpenAI endpoint; with <code>false</code>, no <code>Authorization</code> header is sent when the key is missing</td></tr>
 <tr><td><code>max_tokens_param</code></td><td>openai, ollama</td><td>string</td><td>name of the output-budget field; default <code>max_completion_tokens</code> on the official endpoint, <code>max_tokens</code> elsewhere</td></tr>
@@ -313,20 +315,27 @@ also pin a model regardless of the phase; see <a href="agents.html">Customising 
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Level</th><th>Budget</th><th>Anthropic</th><th>OpenAI-compatible</th></tr>
+<tr><th>Level</th><th>Budget</th><th>Anthropic, current models</th><th>Anthropic, older models</th><th>OpenAI-compatible</th></tr>
 </thead>
 <tbody>
-<tr><td><code>off</code></td><td>none</td><td>no extended thinking</td><td>no <code>reasoning_effort</code></td></tr>
-<tr><td><code>low</code></td><td>1 024 tokens</td><td>extended thinking, 1 024</td><td><code>reasoning_effort = "low"</code></td></tr>
-<tr><td><code>medium</code></td><td>4 096</td><td>4 096</td><td><code>"medium"</code></td></tr>
-<tr><td><code>high</code></td><td>16 384</td><td>16 384</td><td><code>"high"</code></td></tr>
-<tr><td><code>max</code></td><td>32 768</td><td>32 768</td><td><code>"high"</code></td></tr>
+<tr><td><code>off</code></td><td>none</td><td>no <code>thinking</code></td><td>no <code>thinking</code></td><td>no <code>reasoning_effort</code></td></tr>
+<tr><td><code>low</code></td><td>1 024 tokens</td><td>adaptive, effort <code>low</code></td><td><code>budget_tokens: 1024</code></td><td><code>reasoning_effort = "low"</code></td></tr>
+<tr><td><code>medium</code></td><td>4 096</td><td>adaptive, effort <code>medium</code></td><td>4 096</td><td><code>"medium"</code></td></tr>
+<tr><td><code>high</code></td><td>16 384</td><td>adaptive, effort <code>high</code></td><td>16 384</td><td><code>"high"</code></td></tr>
+<tr><td><code>max</code></td><td>32 768</td><td>adaptive, effort <code>max</code></td><td>32 768</td><td><code>"high"</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>On OpenAI-compatible servers the level is only sent when <code>reasoning</code> is enabled (see
-above); otherwise it is ignored. With Anthropic, enabling thinking removes the temperature
-from the request, as the API requires.</p>
+above); otherwise it is ignored.</p>
+<p>With Anthropic, current models (Claude 4.6 and later: Sonnet 5, Opus 5 and 5.5, Fable, Opus
+4.6 to 4.8, Sonnet 4.6) take <code>thinking: {type: "adaptive"}</code> with <code>output_config.effort</code> and
+reject <code>budget_tokens</code> and sampling parameters, so vibe never sends a temperature to them.
+Older models (Haiku 4.5, Claude 4.5 and before) and unknown model ids keep
+<code>budget_tokens</code>, and thinking removes the temperature as the API requires. The form is
+chosen from the model id; set <code>extra.thinking = "adaptive"</code> or <code>"budget"</code> on the provider to
+force it, for example behind a gateway that renames models. Model ids are sent as is, so the
+choice follows <code>claude-...</code> names.</p>
 <h2 id="recipes"><a class="header" href="#recipes">Recipes</a></h2>
 <p><strong>Ollama</strong> (local, no key):</p>
 <pre><code class="language-toml">[providers.ollama]
@@ -378,6 +387,16 @@ server.</p>
 kind = "mock"
 extra = { reply = "Nothing to do." }
 </code></pre>
+<h2 id="streaming"><a class="header" href="#streaming">Streaming</a></h2>
+<p>Anthropic and OpenAI-compatible providers stream their answers: the text and, when the
+model exposes it, the reasoning arrive as <code>agent_delta</code> events while a step is being
+generated (<code>vibe --json run</code> prints them; the terminal output shows the complete text at
+the end of each step, as before). The final answer is identical to a non-streamed one.</p>
+<p>A request that fails before any text arrived is retried as usual. A stream that breaks after
+text was sent is not retried by the provider (the text would be repeated): the step fails
+and the agent runtime’s own retry policy applies. An OpenAI-compatible server that refuses
+<code>stream</code> or <code>stream_options</code> with a 4xx error gets the same request without streaming.
+<code>agent_delta</code> events are not written to <code>events.jsonl</code>.</p>
 <h2 id="retries-and-errors"><a class="header" href="#retries-and-errors">Retries and errors</a></h2>
 <p>HTTP providers retry transient failures on their own: four attempts in total, starting at
 1 second and doubling up to 60 seconds, with ±25 % jitter. A <code>Retry-After</code> header from the

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -289,12 +289,17 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in <a href="providers.html">P
 <tr><td><code>validation_commands</code></td><td>list of strings</td><td><code>[]</code></td><td>mandatory shell checks before ready/merge; see below</td></tr>
 <tr><td><code>max_validation_fix_attempts</code></td><td>integer</td><td><code>2</code></td><td>automatic validation fixes over the whole run, including resumes; <code>0</code> disables them</td></tr>
 <tr><td><code>merge_strategy</code></td><td><code>"manual"</code> or <code>"assisted"</code></td><td><code>"manual"</code></td><td><code>manual</code> reports conflicts for a human; <code>assisted</code> lets a model resolve conflict markers first</td></tr>
+<tr><td><code>isolate_subtasks</code></td><td>bool</td><td><code>true</code></td><td>with <code>git_worktree</code>, one worktree per subtask attempt, integrated one at a time; see <a href="workspaces.html#one-worktree-per-subtask-attempt">Workspaces</a></td></tr>
+<tr><td><code>project_memory</code></td><td>bool</td><td><code>true</code></td><td>keep lessons (pitfalls, conventions) in <code>.vibe/memory.jsonl</code> and recall the relevant ones in later tasks; see <code>vibe memory</code></td></tr>
+<tr><td><code>approvals</code></td><td>list of <code>"spec"</code>, <code>"plan"</code>, <code>"merge"</code></td><td><code>[]</code></td><td>where the run waits for a human decision; see <a href="#human-approvals">Human approvals</a></td></tr>
+<tr><td><code>max_tokens</code></td><td>integer</td><td>none</td><td>input plus output tokens of the whole run, including resumes; the run pauses when reached</td></tr>
+<tr><td><code>max_duration_secs</code></td><td>integer</td><td>none</td><td>active time of the whole run in seconds, including resumes; the run pauses when reached</td></tr>
 </tbody>
 </table>
 </div>
 <p>What these limits do at run time is described in <a href="../design/pipeline.html">The pipeline</a>;
 workspaces and merging in <a href="workspaces.html">Workspaces and merging</a>.</p>
-<h2 id="required-validation-commands-unreleased"><a class="header" href="#required-validation-commands-unreleased">Required validation commands (unreleased)</a></h2>
+<h2 id="required-validation-commands"><a class="header" href="#required-validation-commands">Required validation commands</a></h2>
 <pre><code class="language-toml">[pipeline]
 validation_commands = ["cargo fmt --all -- --check", "cargo test --offline"]
 max_validation_fix_attempts = 2
@@ -342,6 +347,75 @@ Third-party workspace providers must implement <code>merge_validated</code> to s
 integration; the default refuses it rather than falling back to an unchecked merge.
 External manual <code>git merge</code> commands are outside this gate. Configuration is loaded by the
 host, not accepted from an agent’s QA report.</p>
+<h2 id="run-budgets"><a class="header" href="#run-budgets">Run budgets</a></h2>
+<pre><code class="language-toml">[pipeline]
+max_tokens = 2_000_000      # input + output tokens over the whole run
+max_duration_secs = 3600    # one hour of active work
+</code></pre>
+<p>Both limits are off by default. They apply to a <strong>run</strong>, not to one invocation of
+<code>vibe run</code>: <code>run.json</code> keeps the tokens (<code>usage</code>) and the active time (<code>active_ms</code>) of every
+invocation, and a resumed run starts from those totals. Time spent paused or between
+invocations is not counted.</p>
+<p>Agents add the tokens of every model call to the budget as it happens. Once a limit is
+reached no new model call starts: running sessions stop before their next step,
+interrupted subtasks go back to pending, and the run <strong>pauses</strong> (exit code 2) at the phase
+it was in, with a note in <code>progress.md</code> naming the limit. A running shell command is not
+interrupted; it is bounded by its own timeout. Resuming without raising the limit pauses
+again immediately and spends nothing. Raise the limit in the configuration, or for one
+invocation with <code>vibe run &lt;REF&gt; --resume --max-tokens N --max-duration 2h</code>, to continue.</p>
+<p>The token limit counts every model call of the run: the agents’ calls and the ones made by
+<code>merge_strategy = "assisted"</code> to resolve conflict markers.</p>
+<h2 id="human-approvals"><a class="header" href="#human-approvals">Human approvals</a></h2>
+<pre><code class="language-toml">[pipeline]
+approvals = ["plan", "merge"]
+</code></pre>
+<p>Each listed gate pauses the run (exit code 2, task <code>review</code>) until a human decides:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Gate</th><th>The run stops</th><th>A rejection goes back to</th></tr>
+</thead>
+<tbody>
+<tr><td><code>spec</code></td><td>after the specification, before planning (only when the profile writes a spec)</td><td>the spec phase</td></tr>
+<tr><td><code>plan</code></td><td>after the plan, before building</td><td>the planner</td></tr>
+<tr><td><code>merge</code></td><td>after QA approval, before the merge phase (validation, integration or marking ready)</td><td>the fixer, through a QA report titled “Human review”, then QA again</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-sh">vibe task show 3                       # read the spec, plan or QA report
+vibe approve 3 --comment "ok"          # or:
+vibe reject 3 --reason "Split the migration into its own subtask"
+vibe run 3 --resume
+</code></pre>
+<p>The decision is stored in <code>run.json</code> (<code>approvals</code>, <code>pending_approval</code>, <code>rejection</code>) and
+logged as an <code>approval_resolved</code> event. A rejection needs a reason: it is handed to the
+agents that redo the work. Regenerating an artefact revokes its approval, so a new plan is
+approved again, and a merge is approved again after any new build or fix. Resuming without
+a decision pauses again at the same gate.</p>
+<h2 id="workspacecontainer"><a class="header" href="#workspacecontainer"><code>[workspace.container]</code></a></h2>
+<p>Settings of the <code>container</code> workspace (<code>pipeline.workspace = "container"</code>). Only <code>image</code> is
+required; unknown keys are refused.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Type</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>image</code></td><td>string</td><td>required</td><td>image the commands run in</td></tr>
+<tr><td><code>runtime</code></td><td>string</td><td><code>"docker"</code></td><td><code>docker</code> or <code>podman</code>, or a path to one of them</td></tr>
+<tr><td><code>network</code></td><td>string</td><td><code>"none"</code></td><td><code>none</code>, <code>bridge</code> or a named network; attached only when <code>security.allow_network</code> is true</td></tr>
+<tr><td><code>mounts</code></td><td>list of tables</td><td><code>[]</code></td><td>extra bind mounts: <code>source</code>, <code>target</code>, <code>read_only</code> (default true)</td></tr>
+<tr><td><code>cpus</code></td><td>number</td><td>none</td><td><code>--cpus</code></td></tr>
+<tr><td><code>memory</code></td><td>string</td><td>none</td><td><code>--memory</code> and <code>--memory-swap</code>, such as <code>4g</code></td></tr>
+<tr><td><code>pids_limit</code></td><td>integer</td><td><code>1024</code></td><td>maximum number of processes</td></tr>
+<tr><td><code>tmp_size</code></td><td>string</td><td>runtime default</td><td>size of the <code>/tmp</code> tmpfs</td></tr>
+<tr><td><code>user</code></td><td>string</td><td>owner of the worktree (Unix)</td><td><code>uid[:gid]</code> or <code>name[:group]</code></td></tr>
+<tr><td><code>env</code></td><td>list of names</td><td><code>[]</code></td><td>host environment variables passed through</td></tr>
+<tr><td><code>mount_git_metadata</code></td><td>bool</td><td><code>false</code></td><td>mount the repository’s git directory read-only (Unix only)</td></tr>
+</tbody>
+</table>
+</div>
+<p>See <a href="workspaces.html#container-workspace">Container workspace</a> for what each setting allows.</p>
 <h2 id="security"><a class="header" href="#security"><code>[security]</code></a></h2>
 <div class="table-wrapper">
 <table>
@@ -354,10 +428,23 @@ host, not accepted from an agent’s QA report.</p>
 <tr><td><code>command_timeout_secs</code></td><td>integer</td><td><code>120</code></td><td>default timeout of a shell command; an agent may ask for up to 600</td></tr>
 <tr><td><code>allow_network</code></td><td>bool</td><td><code>false</code></td><td>grant the network permission (<code>curl</code>, <code>wget</code>, <code>ssh</code>, … and network-using tools)</td></tr>
 <tr><td><code>extra_read_paths</code></td><td>list of paths</td><td><code>[]</code></td><td>directories outside the workspace that agents may read, never write</td></tr>
+<tr><td><code>web_allowed_domains</code></td><td>list of strings</td><td><code>[]</code></td><td>domains (and subdomains) <code>web_fetch</code> may reach; empty means any public host</td></tr>
+<tr><td><code>search_url</code></td><td>string</td><td>none</td><td>SearXNG-compatible search URL with <code>{query}</code>, e.g. <code>https://searx.example/search?q={query}&amp;format=json</code>; registers <code>web_search</code></td></tr>
 </tbody>
 </table>
 </div>
 <p>The rules behind these keys are in <a href="security.html">Tools and security</a>.</p>
+<h2 id="integrations"><a class="header" href="#integrations"><code>[integrations]</code></a></h2>
+<pre><code class="language-toml">[integrations.github]
+api_url = "https://github.example.com/api/v3"   # GitHub Enterprise; default https://api.github.com
+token_env = "GHE_TOKEN"                         # default GITHUB_TOKEN, then GH_TOKEN
+
+[integrations.gitlab]
+api_url = "https://gitlab.example.com/api/v4"   # default https://gitlab.com/api/v4
+token_env = "GITLAB_TOKEN"
+</code></pre>
+<p>Used by <code>vibe task import</code> and <code>vibe pr</code>. Tokens are read from the environment only, never
+from the configuration file.</p>
 <h2 id="plugins"><a class="header" href="#plugins"><code>[[plugins]]</code></a></h2>
 <div class="table-wrapper">
 <table>
@@ -418,6 +505,8 @@ max_phase_retries = 2       # extra planner attempts on an invalid plan
 workspace = "git_worktree"  # or "in_place"
 auto_merge = false          # stop in `ready` and let me merge
 merge_strategy = "manual"
+max_tokens = 3_000_000      # pause the run beyond this, resumes included
+max_duration_secs = 7200    # and beyond two hours of active work
 
 # Security ----------------------------------------------------------------
 [security]
@@ -456,6 +545,7 @@ plugins, <code>.vibe/agents/*.toml</code> in file-name order; see <a href="agent
 </thead>
 <tbody>
 <tr><td><code>ANTHROPIC_API_KEY</code></td><td>key of the built-in <code>anthropic</code> provider (<code>api_key_env</code>)</td></tr>
+<tr><td><code>ANTHROPIC_WORKSPACE_ID</code></td><td>workspace sent as <code>anthropic-workspace-id</code> by every <code>anthropic</code> provider, for an API key that is not scoped to a workspace; an <code>extra.headers</code> entry of the same name wins</td></tr>
 <tr><td><code>OPENAI_API_KEY</code></td><td>key of the built-in <code>openai</code> provider</td></tr>
 <tr><td>any name in an <code>api_key_env</code></td><td>key of that provider</td></tr>
 <tr><td><code>RUST_LOG</code></td><td>log filter, for example <code>RUST_LOG=vibe_pipeline=debug,vibe_plugins=debug</code>; <code>-v</code> and <code>-vv</code> are shortcuts</td></tr>

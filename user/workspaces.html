@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-72713264.js";
+            window.path_to_searchindex_js = "../searchindex-9df34313.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2dd03f19.js"></script>
+        <script src="../toc-4140358a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,6 +190,7 @@ is merged into the base branch, or left for you to review. The design rationale 
 <pre><code class="language-toml">[pipeline]
 workspace = "git_worktree"   # default
 # workspace = "in_place"     # no isolation
+# workspace = "container"    # git worktrees, shell commands in containers
 # workspace = "&lt;name&gt;"       # a WorkspaceProvider registered by an in-process plugin
 
 base_branch = "main"         # top level; default: the branch currently checked out
@@ -202,6 +203,7 @@ base_branch = "main"         # top level; default: the branch currently checked 
 <tbody>
 <tr><td><code>git_worktree</code></td><td>one worktree and branch per task</td><td>yes</td><td>fast-forward, merge commit, or human review</td></tr>
 <tr><td><code>in_place</code></td><td>none: agents work in the project directory</td><td>no</td><td>nothing to merge; changes are already there</td></tr>
+<tr><td><code>container</code></td><td>git worktrees as above, and every shell command in a throw-away container</td><td>yes, and Docker or Podman</td><td>as <code>git_worktree</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -234,6 +236,87 @@ it (a leftover), it is removed and recreated. If the branch exists but its workt
 a new worktree is created on the existing branch, keeping its commits.</p>
 <p>The project must be a git repository; otherwise opening fails with
 <code>&lt;path&gt; is not a git repository; use the in_place workspace or run `git init` </code>.</p>
+<h3 id="one-worktree-per-subtask-attempt"><a class="header" href="#one-worktree-per-subtask-attempt">One worktree per subtask attempt</a></h3>
+<p>With <code>git_worktree</code> (and <code>pipeline.isolate_subtasks = true</code>, the default), every attempt at a
+subtask also gets its own worktree, forked from the current commit of the task branch:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>What</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>directory</td><td><code>&lt;task worktree&gt;--s&lt;N&gt;-a&lt;attempt&gt;</code>, for example <code>.vibe/worktrees/add-oauth-login-github-6f1c3e0a--s2-a1</code></td></tr>
+<tr><td>branch</td><td><code>&lt;task branch&gt;--s&lt;N&gt;-a&lt;attempt&gt;</code>, for example <code>vibe/add-oauth-login-github-6f1c3e0a--s2-a1</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Parallel coder sessions therefore never see each other’s unfinished edits, and a failed
+attempt is thrown away with its worktree instead of being reset in a shared directory.</p>
+<p>When a session reports its subtask done, its work is committed on the attempt branch
+(<code>vibe: complete subtask 2 - Routes</code>) and merged into the task branch right away: a
+fast-forward when the task branch did not move, else a merge commit. Integrations happen one
+at a time; sessions that finish together are integrated in plan order, and a subtask starts
+only once the work of its <code>depends_on</code> subtasks is integrated. If the merge conflicts with
+work integrated since the attempt started, the merge is aborted (the task branch is left
+exactly as it was), the attempt counts as failed with the conflicting files in its notes,
+and the next attempt starts from the updated task branch. With <code>merge_strategy = "assisted"</code>, the model of the merge phase first tries to resolve the conflict markers, as for
+the final merge; the attempt only fails when a file stays unresolved.</p>
+<p>Attempt worktrees and branches are removed after each attempt and, to clean up after a
+crash, when the build starts and ends. <code>vibe task discard</code> removes any that remain. Before
+the first attempt the task worktree is committed as <code>vibe: checkpoint before build</code>, so
+attempts fork from everything already in it.</p>
+<p>Set <code>pipeline.isolate_subtasks = false</code> to have parallel subtasks share the task worktree as
+in 0.1 (completed subtasks are then committed when no other session is running, and failed
+attempts are reset). <code>in_place</code> and plugin workspaces always share the task workspace.</p>
+<h2 id="container-workspace"><a class="header" href="#container-workspace">Container workspace</a></h2>
+<p>The shell policy filters commands but is not a sandbox. With <code>workspace = "container"</code>, the
+<code>bash</code> tool, and therefore the required validation commands, runs every command in a fresh
+container instead of on your machine:</p>
+<pre><code class="language-toml">[pipeline]
+workspace = "container"
+
+[workspace.container]
+image = "rust:1.88"          # required
+runtime = "docker"           # or "podman", or a path to either
+network = "none"             # default; "bridge" or a named network
+cpus = 2.0
+memory = "4g"                # also the swap limit
+pids_limit = 1024            # default
+tmp_size = "1g"              # size of the /tmp tmpfs
+# user = "1000:1000"         # default: owner of the worktree on Unix
+env = ["CARGO_TERM_COLOR"]   # host variables passed through, by name only
+mount_git_metadata = false   # mount the git directory read-only (Unix only)
+
+[[workspace.container.mounts]]
+source = "/home/me/.cargo/registry" # absolute, or relative to the project root; no `~`
+target = "/usr/local/cargo/registry"
+read_only = true             # default
+</code></pre>
+<p>Files still live in the task’s git worktree on the host: it is bind-mounted at <code>/workspace</code>
+and the command’s working directory is translated to the matching path inside the
+container. The file tools, the diff shown to reviewers, commits, merges and validated merges
+work exactly as with <code>git_worktree</code>, and so do subtask worktrees.</p>
+<p>Every container is started with <code>--rm</code>, <code>--cap-drop=ALL</code>,
+<code>--security-opt=no-new-privileges</code>, a read-only root file system, a <code>/tmp</code> tmpfs, a process
+limit and a label <code>io.vibe-factory.managed=true</code>. There is no way to pass raw flags to the
+runtime; unknown keys in <code>[workspace.container]</code> are an error. One container runs per command
+and is removed with <code>rm --force</code> when the command ends, times out or is cancelled, which also
+kills its background processes. The start-up costs a few hundred milliseconds per command.</p>
+<p>What the settings allow and refuse:</p>
+<ul>
+<li><strong>Network.</strong> <code>none</code> unless the configured network is <code>bridge</code> or a named network <strong>and</strong>
+<code>security.allow_network = true</code>. <code>host</code> and <code>container:&lt;id&gt;</code> are refused.</li>
+<li><strong>Mounts.</strong> The source must exist; the filesystem root and sockets (such as the Docker
+socket) are refused; a writable mount may not overlap the project’s <code>.git</code> or <code>.vibe</code>;
+targets must be absolute and outside <code>/workspace</code>, <code>/tmp</code>, <code>/proc</code>, <code>/sys</code> and <code>/dev</code>.</li>
+<li><strong>Git.</strong> The worktree’s <code>.git</code> pointer is mounted read-only, and the repository’s git
+directory is not mounted unless <code>mount_git_metadata = true</code> (then read-only), so git
+commands that write do not work inside the container; the framework commits on the host.</li>
+<li><strong>Failures of the runtime.</strong> An exit status of 125 (image missing, daemon down) is reported
+to the agent as a runner failure with <code>sandbox_error: true</code> in the tool metadata.</li>
+</ul>
+<p>The settings are validated before a run starts. <code>vibe doctor</code> also checks that <code>&lt;runtime&gt; info</code> answers. The image must already contain the tools the agents need (compilers, test
+runners); nothing is installed for you.</p>
 <h2 id="in-place-mode"><a class="header" href="#in-place-mode">In-place mode</a></h2>
 <p><code>pipeline.workspace = "in_place"</code> makes the project directory itself the workspace. Use it
 for directories that are not git repositories, throw-away experiments, or when you want to
@@ -261,7 +344,7 @@ including assisted conflict resolutions. Only a passing, unchanged candidate is 
 by fast-forwarding the base branch to that exact commit. A failed check, unresolved conflict,
 changed target or unsupported provider pauses in <code>review</code>; the target is not updated by the
 integration. Resume builds and checks a fresh candidate. See
-<a href="configuration.html#required-validation-commands-unreleased">Required validation commands</a>.</p>
+<a href="configuration.html#required-validation-commands">Required validation commands</a>.</p>
 <p>Without configured validation commands, merging integrates the task branch into the base
 branch <strong>in your project checkout</strong> using the original algorithm:</p>
 <ol>
