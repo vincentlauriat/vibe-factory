@@ -24,7 +24,7 @@ Global options may appear before or after the subcommand.
 
 | Option | Effect |
 |--------|--------|
-| `-C, --project <DIR>` | start directory; the project is this directory (default: the current one) or its nearest parent that contains a `.vibe` directory; `vibe init` never searches parents |
+| `-C, --project <DIR>` | start directory; the project is this directory (default: the current one) or its nearest parent that contains a `.vibe` directory, without leaving the git repository (the search stops at the first parent that contains `.git`) and never your home directory; `vibe init` never searches parents |
 | `-v, --verbose` | more logging on standard error: default warnings only; `-v` info, `-vv` debug, `-vvv` trace; a non-empty `RUST_LOG` wins |
 | `--json` | machine-readable output: one JSON document, or one JSON event per line for `vibe run` |
 | `--no-color` | no colours; also the case when `NO_COLOR` is set or the output is not a terminal |

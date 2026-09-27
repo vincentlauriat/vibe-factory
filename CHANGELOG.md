@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- The project root search stops at the git repository and never picks the home directory,
+  so a `~/.vibe` left by another tool no longer makes `vibe` treat your home as the
+  project (`… is not a git repository`).
+
 ## [0.4.0] — 2026-09-27
 
 Interaction release, covering the work planned for 0.3 and 0.4 (there was no 0.3 release):

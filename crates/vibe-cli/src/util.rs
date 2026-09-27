@@ -240,7 +240,10 @@ pub fn truncate(text: &str, max: usize) -> String {
 }
 
 /// The project root: `start` (default: the current directory) or its
-/// nearest ancestor containing a `.vibe` directory.
+/// nearest ancestor containing a `.vibe` directory. The search does not leave
+/// the git repository `start` is in (it stops at the first directory that
+/// contains `.git`) and never picks the home directory, where other tools
+/// keep their own `.vibe`.
 pub fn find_project_root(start: Option<&Path>) -> Result<PathBuf> {
     let start = match start {
         Some(p) => p.to_path_buf(),
@@ -251,10 +254,22 @@ pub fn find_project_root(start: Option<&Path>) -> Result<PathBuf> {
     if !start.is_dir() {
         anyhow::bail!("project directory {} does not exist", start.display());
     }
-    Ok(start
-        .ancestors()
-        .find(|p| p.join(VIBE_DIR).is_dir())
-        .map_or_else(|| start.clone(), Path::to_path_buf))
+    Ok(project_root_in(&start, dirs::home_dir().as_deref()))
+}
+
+fn project_root_in(start: &Path, home: Option<&Path>) -> PathBuf {
+    for dir in start.ancestors() {
+        if dir != start && home == Some(dir) {
+            break;
+        }
+        if dir.join(VIBE_DIR).is_dir() {
+            return dir.to_path_buf();
+        }
+        if dir.join(".git").exists() {
+            break;
+        }
+    }
+    start.to_path_buf()
 }
 
 /// The project directory for `vibe init`: `start` or the current directory,
@@ -300,6 +315,35 @@ pub fn task_label(number: Option<u32>, task: &Task) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_root_search_stops_at_the_repository_and_the_home() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path().join("home");
+        let outer = home.join("outer");
+        let repo = outer.join("repo");
+        let deep = repo.join("src").join("deep");
+        std::fs::create_dir_all(&deep).unwrap();
+        std::fs::create_dir_all(home.join(VIBE_DIR)).unwrap();
+        std::fs::create_dir_all(outer.join(VIBE_DIR)).unwrap();
+        std::fs::create_dir(repo.join(".git")).unwrap();
+
+        // Inside a repository without `.vibe`: the start itself, not a parent.
+        assert_eq!(project_root_in(&deep, Some(&home)), deep);
+        // The repository root is the nearest `.vibe` once it exists.
+        std::fs::create_dir(repo.join(VIBE_DIR)).unwrap();
+        assert_eq!(project_root_in(&deep, Some(&home)), repo);
+        // Outside any repository, parents are searched...
+        let plain = outer.join("plain").join("sub");
+        std::fs::create_dir_all(&plain).unwrap();
+        assert_eq!(project_root_in(&plain, Some(&home)), outer);
+        // ...but never up to the home directory's own `.vibe`.
+        let loose = home.join("loose");
+        std::fs::create_dir(&loose).unwrap();
+        assert_eq!(project_root_in(&loose, Some(&home)), loose);
+        // Running in the home directory itself still uses it.
+        assert_eq!(project_root_in(&home, Some(&home)), home);
+    }
 
     #[test]
     fn relative_times() {
