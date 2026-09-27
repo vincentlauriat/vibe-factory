@@ -248,6 +248,7 @@ pub async fn run_spec(ctx: &mut RunContext) -> Result<PhaseResult> {
         return Err(vibe_core::Error::other("the specification is empty"));
     }
     ctx.store.save_spec(&spec).await?;
+    ctx.artefact_written(vibe_core::Artefact::Spec).await;
     for finding in &spec.context.findings {
         ctx.store
             .append_memory(ctx.task.id, MemoryFile::Patterns, finding)

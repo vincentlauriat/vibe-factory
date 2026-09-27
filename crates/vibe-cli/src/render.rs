@@ -193,6 +193,55 @@ impl Renderer {
                     human_duration(Duration::from_millis(*delay_ms))
                 ))
                 .to_string(),
+            Event::ValidationFinished {
+                command,
+                integration,
+                passed,
+                ..
+            } => {
+                let target = if *integration { " (integration)" } else { "" };
+                if *passed {
+                    style::ok()
+                        .apply_to(format!("  ✓ validation{target}: {command}"))
+                        .to_string()
+                } else {
+                    style::warn()
+                        .apply_to(format!("  ✗ validation failed{target}: {command}"))
+                        .to_string()
+                }
+            }
+            Event::SubtaskIntegrated {
+                subtask, conflicts, ..
+            } => {
+                let label = self.subtask_label(*subtask).await;
+                if conflicts.is_empty() {
+                    if self.verbose == 0 {
+                        return None;
+                    }
+                    format!("  ▸ subtask {label}: integrated")
+                } else {
+                    style::warn()
+                        .apply_to(format!(
+                            "  ▸ subtask {label}: conflicts in {}, retrying from the updated branch",
+                            conflicts.join(", ")
+                        ))
+                        .to_string()
+                }
+            }
+            Event::BudgetUpdated { .. } => return None,
+            Event::ArtefactWritten { artefact, .. } => {
+                if self.verbose == 0 {
+                    return None;
+                }
+                let name = match artefact {
+                    vibe_core::Artefact::Spec => "spec".to_string(),
+                    vibe_core::Artefact::Plan => "plan".to_string(),
+                    vibe_core::Artefact::QaReport { round } => format!("QA report {round}"),
+                };
+                style::dim()
+                    .apply_to(format!("  · wrote the {name}"))
+                    .to_string()
+            }
             Event::Paused { reason, .. } => style::warn()
                 .apply_to(format!("⏸ paused: {reason}"))
                 .to_string(),

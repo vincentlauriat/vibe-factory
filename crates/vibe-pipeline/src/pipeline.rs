@@ -316,6 +316,16 @@ impl Pipeline {
             .await;
         self.router
             .set(run_id, store.event_sink(task.id, run_id).await?);
+        // A resumed run continues its numbering.
+        let last_seq = store
+            .load_events(task.id)
+            .await?
+            .iter()
+            .filter(|e| e.event.run_id() == Some(run_id))
+            .filter_map(|e| e.seq)
+            .max()
+            .unwrap_or(0);
+        events.resume_sequence(run_id, last_seq);
 
         events
             .publish(Event::RunStarted {
@@ -453,6 +463,7 @@ impl Pipeline {
                 Phase::Merge => phases::run_merge(&mut ctx).await,
             };
             let usage = usage_delta(ctx.usage, before);
+            ctx.budget_updated().await;
 
             let flow = match result {
                 Ok(mut r) => {

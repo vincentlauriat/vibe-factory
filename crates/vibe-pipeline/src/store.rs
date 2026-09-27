@@ -91,6 +91,13 @@ pub trait PipelineStore: TaskStore {
     /// A sink recording the events of `run` for the task, if the store keeps
     /// an event log.
     async fn event_sink(&self, id: TaskId, run: RunId) -> Result<Option<Arc<dyn EventSink>>>;
+
+    /// Every logged event of the task, in log order. Lines that cannot be
+    /// read are skipped. Default: none (the store keeps no log).
+    async fn load_events(&self, id: TaskId) -> Result<Vec<Envelope>> {
+        let _ = id;
+        Ok(Vec::new())
+    }
 }
 
 /// Shared handle to a pipeline store.
@@ -464,6 +471,26 @@ impl PipelineStore for FileTaskStore {
         let path = self.task_dir(id).await?.join(EVENTS_FILE);
         Ok(Some(Arc::new(FileEventSink::new(path).for_run(run))))
     }
+
+    async fn load_events(&self, id: TaskId) -> Result<Vec<Envelope>> {
+        let path = self.task_dir(id).await?.join(EVENTS_FILE);
+        let text = match tokio::fs::read_to_string(&path).await {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(e.into()),
+        };
+        Ok(parse_event_log(&text))
+    }
+}
+
+/// Parse an event log (one JSON envelope per line), skipping lines that are
+/// not envelopes, such as a line cut by a crash.
+#[must_use]
+pub fn parse_event_log(text: &str) -> Vec<Envelope> {
+    text.lines()
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect()
 }
 
 /// [`EventSink`] appending each [`Envelope`] as one JSON line to a file.
@@ -795,13 +822,10 @@ mod tests {
         let run = RunId::new();
         let sink = s.event_sink(t.id, run).await.unwrap().unwrap();
         for r in [run, RunId::new(), run] {
-            sink.on_event(&Envelope {
-                at: Utc::now(),
-                event: Event::PhaseStarted {
-                    run: r,
-                    phase: Phase::Plan,
-                },
-            })
+            sink.on_event(&Envelope::now(Event::PhaseStarted {
+                run: r,
+                phase: Phase::Plan,
+            }))
             .await;
         }
         let text =

@@ -1441,3 +1441,73 @@ async fn isolation_can_be_turned_off() {
         vec!["vibe: complete subtask 1 - Fix the typo".to_string()]
     );
 }
+
+#[tokio::test]
+async fn logged_events_are_numbered_across_resumes() {
+    let h = Harness::new().await;
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([{"name": "Only", "subtasks": [
+            {"title": "Fix the typo", "description": "edit README"}
+        ]}]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let pipeline = h.pipeline();
+    let first = pipeline
+        .run(
+            task.id,
+            RunOptions {
+                until_phase: Some(Phase::Plan),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    pipeline.resume(task.id).await.unwrap();
+
+    let events = h.store.load_events(task.id).await.unwrap();
+    let seqs: Vec<u64> = events.iter().map(|e| e.seq.unwrap()).collect();
+    let expected: Vec<u64> = (1..=seqs.len() as u64).collect();
+    assert_eq!(
+        seqs, expected,
+        "one run, numbered without gaps across the resume"
+    );
+    assert!(
+        events
+            .iter()
+            .all(|e| e.event.run_id() == Some(first.run_id))
+    );
+    assert!(
+        events
+            .iter()
+            .all(|e| e.schema == vibe_core::EVENT_SCHEMA_VERSION)
+    );
+    let has = |pred: &dyn Fn(&Event) -> bool| events.iter().any(|e| pred(&e.event));
+    assert!(has(&|e| matches!(
+        e,
+        Event::ArtefactWritten {
+            artefact: vibe_core::Artefact::Plan,
+            ..
+        }
+    )));
+    assert!(has(&|e| matches!(
+        e,
+        Event::ArtefactWritten {
+            artefact: vibe_core::Artefact::QaReport { round: 1 },
+            ..
+        }
+    )));
+    assert!(has(
+        &|e| matches!(e, Event::BudgetUpdated { tokens, .. } if *tokens > 0)
+    ));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| matches!(e.event, Event::RunStarted { .. }))
+            .count(),
+        2
+    );
+}

@@ -117,6 +117,51 @@ pub enum Event {
         /// New status.
         status: crate::plan::SubtaskStatus,
     },
+    /// A required validation command finished.
+    ValidationFinished {
+        /// Run id.
+        run: RunId,
+        /// The configured command.
+        command: String,
+        /// True when it checked the combined integration candidate.
+        integration: bool,
+        /// Whether it passed.
+        passed: bool,
+        /// Exit code, when the command ran to completion.
+        exit_code: Option<i64>,
+    },
+    /// A finished subtask attempt was integrated into the task workspace, or
+    /// conflicted with work integrated since it started.
+    SubtaskIntegrated {
+        /// Run id.
+        run: RunId,
+        /// Subtask.
+        subtask: SubtaskId,
+        /// Resulting commit of the task workspace, if any.
+        commit: Option<String>,
+        /// Conflicting files; empty when the integration succeeded.
+        conflicts: Vec<String>,
+    },
+    /// The consumption of the run budget changed.
+    BudgetUpdated {
+        /// Run id.
+        run: RunId,
+        /// Tokens used by the whole run, resumes included.
+        tokens: u64,
+        /// Token limit, if any.
+        token_limit: Option<u64>,
+        /// Active time of the whole run in milliseconds.
+        active_ms: u64,
+        /// Duration limit in milliseconds, if any.
+        duration_limit_ms: Option<u64>,
+    },
+    /// An artefact of the task was written.
+    ArtefactWritten {
+        /// Run id.
+        run: RunId,
+        /// Which artefact.
+        artefact: Artefact,
+    },
     /// A retry is about to happen.
     Retrying {
         /// Run id.
@@ -156,6 +201,53 @@ pub enum Event {
 }
 
 impl Event {
+    /// Every value of the `type` tag, in declaration order.
+    pub const TYPES: &'static [&'static str] = &[
+        "run_started",
+        "phase_started",
+        "phase_finished",
+        "agent_started",
+        "agent_text",
+        "agent_delta",
+        "tool_called",
+        "tool_returned",
+        "agent_finished",
+        "subtask_updated",
+        "validation_finished",
+        "subtask_integrated",
+        "budget_updated",
+        "artefact_written",
+        "retrying",
+        "paused",
+        "run_finished",
+        "log",
+    ];
+
+    /// The `type` tag of the event.
+    #[must_use]
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Event::RunStarted { .. } => "run_started",
+            Event::PhaseStarted { .. } => "phase_started",
+            Event::PhaseFinished { .. } => "phase_finished",
+            Event::AgentStarted { .. } => "agent_started",
+            Event::AgentText { .. } => "agent_text",
+            Event::AgentDelta { .. } => "agent_delta",
+            Event::ToolCalled { .. } => "tool_called",
+            Event::ToolReturned { .. } => "tool_returned",
+            Event::AgentFinished { .. } => "agent_finished",
+            Event::SubtaskUpdated { .. } => "subtask_updated",
+            Event::ValidationFinished { .. } => "validation_finished",
+            Event::SubtaskIntegrated { .. } => "subtask_integrated",
+            Event::BudgetUpdated { .. } => "budget_updated",
+            Event::ArtefactWritten { .. } => "artefact_written",
+            Event::Retrying { .. } => "retrying",
+            Event::Paused { .. } => "paused",
+            Event::RunFinished { .. } => "run_finished",
+            Event::Log { .. } => "log",
+        }
+    }
+
     /// Run this event belongs to, if any.
     #[must_use]
     pub fn run_id(&self) -> Option<RunId> {
@@ -170,12 +262,31 @@ impl Event {
             | Event::ToolReturned { run, .. }
             | Event::AgentFinished { run, .. }
             | Event::SubtaskUpdated { run, .. }
+            | Event::ValidationFinished { run, .. }
+            | Event::SubtaskIntegrated { run, .. }
+            | Event::BudgetUpdated { run, .. }
+            | Event::ArtefactWritten { run, .. }
             | Event::Retrying { run, .. }
             | Event::Paused { run, .. }
             | Event::RunFinished { run, .. } => Some(*run),
             Event::Log { run, .. } => *run,
         }
     }
+}
+
+/// A task artefact, as named by [`Event::ArtefactWritten`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Artefact {
+    /// `spec.json` and `spec.md`.
+    Spec,
+    /// `plan.json` and `plan.md`, as written by the planner.
+    Plan,
+    /// `qa_report_<round>.json` and `.md`.
+    QaReport {
+        /// Review round.
+        round: u32,
+    },
 }
 
 impl Event {
@@ -187,13 +298,42 @@ impl Event {
     }
 }
 
-/// An event with its timestamp.
+/// Version of the event format written in every [`Envelope`]. Logs written
+/// before versioning read as version 1.
+pub const EVENT_SCHEMA_VERSION: u32 = 2;
+
+fn legacy_schema() -> u32 {
+    1
+}
+
+/// An event with its timestamp, schema version and sequence number.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Envelope {
+    /// Version of the event format ([`EVENT_SCHEMA_VERSION`]).
+    #[serde(default = "legacy_schema")]
+    pub schema: u32,
+    /// Position of the event in its run, from 1, without gaps and kept across
+    /// resumes. `None` for ephemeral events and events without a run: those
+    /// are never replayed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
     /// When the event was published.
     pub at: DateTime<Utc>,
     /// The event.
     pub event: Event,
+}
+
+impl Envelope {
+    /// Envelope of `event` published now, without a sequence number.
+    #[must_use]
+    pub fn now(event: Event) -> Self {
+        Self {
+            schema: EVENT_SCHEMA_VERSION,
+            seq: None,
+            at: Utc::now(),
+            event,
+        }
+    }
 }
 
 /// Something that consumes events (a logger, a UI, a file writer, …).
@@ -208,6 +348,11 @@ pub trait EventSink: Send + Sync {
 pub struct EventBus {
     tx: tokio::sync::broadcast::Sender<Envelope>,
     sinks: Arc<tokio::sync::RwLock<Vec<Arc<dyn EventSink>>>>,
+    /// Last sequence number given to each run.
+    seqs: Arc<std::sync::Mutex<std::collections::HashMap<RunId, u64>>>,
+    /// Held while a numbered event is delivered, so that subscribers and
+    /// sinks see sequence numbers in order.
+    order: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl std::fmt::Debug for EventBus {
@@ -232,7 +377,28 @@ impl EventBus {
         Self {
             tx,
             sinks: Arc::new(tokio::sync::RwLock::new(Vec::new())),
+            seqs: Arc::default(),
+            order: Arc::default(),
         }
+    }
+
+    /// Continue the numbering of `run` after `last` (the highest sequence
+    /// number already logged), for a resumed run. Never goes backwards.
+    pub fn resume_sequence(&self, run: RunId, last: u64) {
+        let mut seqs = self.seqs.lock().unwrap_or_else(|e| e.into_inner());
+        let current = seqs.entry(run).or_insert(0);
+        *current = (*current).max(last);
+    }
+
+    fn next_seq(&self, event: &Event) -> Option<u64> {
+        if event.is_ephemeral() {
+            return None;
+        }
+        let run = event.run_id()?;
+        let mut seqs = self.seqs.lock().unwrap_or_else(|e| e.into_inner());
+        let n = seqs.entry(run).or_insert(0);
+        *n += 1;
+        Some(*n)
     }
 
     /// Subscribe to a live stream of events.
@@ -248,10 +414,14 @@ impl EventBus {
 
     /// Publish an event.
     pub async fn publish(&self, event: Event) {
-        let envelope = Envelope {
-            at: Utc::now(),
-            event,
+        let numbered = !event.is_ephemeral() && event.run_id().is_some();
+        let _order = if numbered {
+            Some(self.order.lock().await)
+        } else {
+            None
         };
+        let mut envelope = Envelope::now(event);
+        envelope.seq = self.next_seq(&envelope.event);
         // A send error only means nobody is listening.
         let _ = self.tx.send(envelope.clone());
         for sink in self.sinks.read().await.iter() {
@@ -298,5 +468,93 @@ mod tests {
         let got = rx.recv().await.unwrap();
         assert_eq!(got.event.run_id(), Some(run));
         assert_eq!(counter.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn numbering_skips_ephemeral_events_and_resumes() {
+        let bus = EventBus::default();
+        let mut rx = bus.subscribe();
+        let run = RunId::new();
+        bus.resume_sequence(run, 41);
+        bus.publish(Event::PhaseStarted {
+            run,
+            phase: crate::Phase::Build,
+        })
+        .await;
+        bus.publish(Event::AgentDelta {
+            run,
+            role: crate::AgentRole::Coder,
+            subtask: None,
+            delta: StreamDelta::Text { text: "x".into() },
+        })
+        .await;
+        bus.log(None, "info", "no run").await;
+        bus.publish(Event::Paused {
+            run,
+            reason: "r".into(),
+        })
+        .await;
+        let seqs: Vec<Option<u64>> = std::iter::from_fn(|| rx.try_recv().ok())
+            .map(|e| e.seq)
+            .collect();
+        assert_eq!(seqs, vec![Some(42), None, None, Some(43)]);
+        // Never backwards.
+        bus.resume_sequence(run, 5);
+        bus.publish(Event::Paused {
+            run,
+            reason: "r".into(),
+        })
+        .await;
+        assert_eq!(rx.recv().await.unwrap().seq, Some(44));
+    }
+
+    #[test]
+    fn logs_without_version_read_as_version_one() {
+        let line = format!(
+            r#"{{"at":"2026-09-26T10:00:00Z","event":{{"type":"paused","run":"{}","reason":"x"}}}}"#,
+            RunId::new()
+        );
+        let e: Envelope = serde_json::from_str(&line).unwrap();
+        assert_eq!(e.schema, 1);
+        assert_eq!(e.seq, None);
+        let json = serde_json::to_string(&Envelope::now(e.event)).unwrap();
+        assert!(json.contains("\"schema\":2"));
+        assert!(!json.contains("\"seq\""));
+    }
+
+    #[test]
+    fn type_names_match_serde_tags() {
+        let run = RunId::new();
+        let sample = Event::BudgetUpdated {
+            run,
+            tokens: 1,
+            token_limit: None,
+            active_ms: 0,
+            duration_limit_ms: None,
+        };
+        let json = serde_json::to_value(&sample).unwrap();
+        assert_eq!(json["type"], sample.type_name());
+        assert!(Event::TYPES.contains(&sample.type_name()));
+        let paused = Event::Paused {
+            run,
+            reason: String::new(),
+        };
+        assert_eq!(serde_json::to_value(&paused).unwrap()["type"], "paused");
+        assert_eq!(paused.type_name(), "paused");
+    }
+
+    #[test]
+    fn every_event_type_is_documented() {
+        let doc = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/src/reference/events.md"
+        ))
+        .expect("docs/src/reference/events.md");
+        for name in Event::TYPES {
+            assert!(
+                doc.contains(&format!("| `{name}` |")),
+                "event `{name}` is missing from docs/src/reference/events.md"
+            );
+        }
     }
 }

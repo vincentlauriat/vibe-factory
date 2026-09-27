@@ -359,10 +359,26 @@ async fn launch(
 async fn integrate_attempt(
     ctx: &RunContext,
     iso: &Arc<dyn SubtaskWorkspaces>,
+    id: SubtaskId,
     attempt: &Workspace,
     message: &str,
 ) -> Option<String> {
-    match iso.integrate(&ctx.workspace, attempt, message).await {
+    let outcome = iso.integrate(&ctx.workspace, attempt, message).await;
+    if let Ok(integration) = &outcome {
+        let (commit, conflicts) = match integration {
+            SubtaskIntegration::Integrated { commit } => (commit.clone(), Vec::new()),
+            SubtaskIntegration::Conflict { files } => (None, files.clone()),
+        };
+        ctx.events
+            .publish(Event::SubtaskIntegrated {
+                run: ctx.run_id,
+                subtask: id,
+                commit,
+                conflicts,
+            })
+            .await;
+    }
+    match outcome {
         Ok(SubtaskIntegration::Integrated { .. }) => None,
         Ok(SubtaskIntegration::Conflict { files }) => Some(format!(
             "its changes conflict with work integrated since the attempt started ({}); \
@@ -621,9 +637,10 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
                 && let (Some(iso), Some(ws)) = (isolation.as_ref(), attempt_ws.as_ref())
             {
                 let message = commit_message(&[(n, title.clone())]);
-                reason = integrate_attempt(ctx, iso, ws, &message).await;
+                reason = integrate_attempt(ctx, iso, id, ws, &message).await;
             }
             discard_attempt(ctx, isolation.as_ref(), attempt_ws).await;
+            ctx.budget_updated().await;
             let Some(sub) = plan.subtask_mut(id) else {
                 continue;
             };

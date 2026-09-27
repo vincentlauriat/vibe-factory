@@ -175,6 +175,7 @@ pub async fn run_plan(ctx: &mut RunContext) -> Result<PhaseResult> {
                 match plan_from_output(ctx.task.id, out) {
                     Ok(plan) => {
                         ctx.store.save_plan(&plan).await?;
+                        ctx.artefact_written(vibe_core::Artefact::Plan).await;
                         let summary = format!(
                             "{} subtask(s) in {} phase(s)",
                             plan.len(),

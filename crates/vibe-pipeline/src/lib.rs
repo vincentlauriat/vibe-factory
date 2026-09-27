@@ -117,5 +117,6 @@ pub use kickoff::{Kickoff, KickoffData, kickoff_for};
 pub use pipeline::{Pipeline, PipelineDeps, RunOptions, RunReport, default_profile};
 pub use state::{RunState, RunStatus};
 pub use store::{
-    FileEventSink, FileTaskStore, MemoryFile, PipelineStore, SharedPipelineStore, plan_to_markdown,
+    FileEventSink, FileTaskStore, MemoryFile, PipelineStore, SharedPipelineStore, parse_event_log,
+    plan_to_markdown,
 };

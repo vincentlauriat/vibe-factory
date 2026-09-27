@@ -59,6 +59,15 @@ pub(super) async fn run_validations_in(
                 .as_i64()
                 .is_some_and(|code| code != 0)
                 || output.metadata["timed_out"] == true);
+        ctx.events
+            .publish(vibe_core::Event::ValidationFinished {
+                run: ctx.run_id,
+                command: command.clone(),
+                integration,
+                passed,
+                exit_code: output.metadata["exit_code"].as_i64(),
+            })
+            .await;
         ctx.state.validations.push(ValidationResult {
             integration,
             workspace_root: root.to_path_buf(),

@@ -39,6 +39,7 @@
 
 # Reference
 
+- [Events](reference/events.md)
 - [Roadmap](reference/roadmap.md)
 - [Contributing](reference/contributing.md)
 - [Glossary](reference/glossary.md)

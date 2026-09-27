@@ -419,6 +419,31 @@ impl RunContext {
         Ok(truncate_head(&out, MEMORY_MAX_CHARS))
     }
 
+    /// Publish [`vibe_core::Event::ArtefactWritten`].
+    pub async fn artefact_written(&self, artefact: vibe_core::Artefact) {
+        self.events
+            .publish(vibe_core::Event::ArtefactWritten {
+                run: self.run_id,
+                artefact,
+            })
+            .await;
+    }
+
+    /// Publish [`vibe_core::Event::BudgetUpdated`] with the run totals.
+    pub async fn budget_updated(&self) {
+        let limits = self.budget.limits();
+        let ms = |d: std::time::Duration| u64::try_from(d.as_millis()).unwrap_or(u64::MAX);
+        self.events
+            .publish(vibe_core::Event::BudgetUpdated {
+                run: self.run_id,
+                tokens: self.budget.used_tokens(),
+                token_limit: limits.max_tokens,
+                active_ms: ms(self.budget.elapsed()),
+                duration_limit_ms: limits.max_duration.map(ms),
+            })
+            .await;
+    }
+
     /// Append a progress note.
     pub async fn note(&self, text: &str) -> Result<()> {
         self.store.append_progress(self.task.id, text).await

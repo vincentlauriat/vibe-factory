@@ -195,6 +195,18 @@ with `run_id`, `task_id`, `final_status`, `run_status`, `success`, `exit_code`,
 vibe run 1 --json | jq -r 'select(.event.type == "phase_finished") | "\(.event.phase): \(.event.summary)"'
 ```
 
+## `vibe events`
+
+```sh
+vibe events <REF> [--after SEQ] [--follow] [--all]
+```
+
+Replays the logged events of the task's last run, rendered like `vibe run` (or as JSON
+envelopes with `--json`). `--after SEQ` skips events up to that sequence number,
+`--follow` keeps printing new events until the run ends (use it from another terminal while
+`vibe run` works), and `--all` shows every run of the task. The envelope and every event
+type are described in [Events](../reference/events.md).
+
 ## `vibe status`
 
 ```sh

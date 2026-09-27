@@ -55,7 +55,7 @@ pub use config::{
     VibeConfig,
 };
 pub use error::{Error, ErrorKind, Result};
-pub use event::{Envelope, Event, EventBus, EventSink};
+pub use event::{Artefact, EVENT_SCHEMA_VERSION, Envelope, Event, EventBus, EventSink};
 pub use ids::{RunId, SessionId, SubtaskId, TaskId};
 pub use memory::{InMemoryStore, MemoryEntry, MemoryKind, MemoryStore, SharedMemory};
 pub use message::{ContentBlock, Message, Role};

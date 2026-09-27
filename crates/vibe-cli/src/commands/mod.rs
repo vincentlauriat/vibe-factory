@@ -3,6 +3,7 @@
 pub mod agents;
 pub mod config;
 pub mod doctor;
+pub mod events;
 pub mod init;
 pub mod plugins;
 pub mod run;
@@ -32,6 +33,7 @@ pub async fn dispatch(cli: Cli) -> Result<u8> {
         Command::Init { force } => init::run(&init_root(project)?, force, ui).await,
         Command::Task(cmd) => task::run(&find_project_root(project)?, cmd, ui).await,
         Command::Run(args) => run::run(&find_project_root(project)?, args, ui).await,
+        Command::Events(args) => events::run(&find_project_root(project)?, args, ui).await,
         Command::Status => status::run(&find_project_root(project)?, ui).await,
         Command::Config(cmd) => config::run(&find_project_root(project)?, cmd, ui),
         Command::Agents(cmd) => agents::run(&find_project_root(project)?, cmd, ui),

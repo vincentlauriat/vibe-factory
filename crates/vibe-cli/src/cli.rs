@@ -55,6 +55,8 @@ pub enum Command {
     Task(TaskCommand),
     /// Run a task through the pipeline.
     Run(RunArgs),
+    /// Replay the logged events of a task's run, optionally following new ones.
+    Events(EventsArgs),
     /// Project summary: tasks per status, last runs, active worktrees.
     Status,
     /// Show or edit the configuration.
@@ -185,6 +187,23 @@ pub fn parse_duration_secs(text: &str) -> Result<u64, String> {
     value
         .checked_mul(factor)
         .ok_or_else(|| format!("duration `{text}` is too large"))
+}
+
+/// `vibe events …`
+#[derive(Debug, Args)]
+pub struct EventsArgs {
+    /// Task number, `NNN-slug` directory name, or id prefix.
+    #[arg(value_name = "REF")]
+    pub reference: String,
+    /// Only events whose sequence number is greater than this.
+    #[arg(long, value_name = "SEQ", default_value_t = 0)]
+    pub after: u64,
+    /// Keep printing new events until the run finishes or pauses.
+    #[arg(short, long)]
+    pub follow: bool,
+    /// Every run of the task, not only the last one.
+    #[arg(long, conflicts_with = "follow")]
+    pub all: bool,
 }
 
 /// `vibe config …`

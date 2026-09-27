@@ -1170,3 +1170,46 @@ fn streamed_deltas_reach_json_output_but_not_the_event_log() {
     assert!(!log.contains("agent_delta"));
     assert!(log.contains("\"agent_text\""));
 }
+
+#[test]
+fn events_replays_numbered_events_and_follows_to_the_end() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--dry-run"])
+        .assert()
+        .success();
+    let out = p.vibe().args(["--json", "events", "1"]).output().unwrap();
+    assert!(out.status.success());
+    let lines: Vec<Value> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let seqs: Vec<u64> = lines.iter().map(|l| l["seq"].as_u64().unwrap()).collect();
+    assert_eq!(seqs, (1..=seqs.len() as u64).collect::<Vec<_>>());
+    assert!(lines.iter().all(|l| l["schema"] == 2));
+    assert_eq!(lines.last().unwrap()["event"]["type"], "run_finished");
+
+    let after = p
+        .vibe()
+        .args(["--json", "events", "1", "--after", "3"])
+        .output()
+        .unwrap();
+    let first: Value = serde_json::from_str(
+        String::from_utf8_lossy(&after.stdout)
+            .lines()
+            .next()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(first["seq"], 4);
+
+    // Following a finished run stops at its end.
+    p.vibe()
+        .args(["events", "1", "--follow"])
+        .timeout(std::time::Duration::from_secs(20))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run finished"));
+}
