@@ -47,3 +47,18 @@ baseline commit for what they miss:
   code. The reference solution had that same two-function shape, so these runs match the
   task as it was written. The task was then made explicit (one equality function that both
   build on) and the reference aligned; see the rerun below.
+
+## `catalog` rerun with the explicit task
+
+Three more `catalog` runs after the task change, with `--jobs 3` (framework commit
+`28851f0aca8efdb3f0a2c4d244deeed870f43a4e`, crates unchanged). They are not part of the
+table above.
+
+| provider | model | case | runs | success | mean s | median s | mean tokens | no usage | validations |
+|---|---|---|---|---|---|---|---|---|---|
+| anthropic | anthropic/claude-sonnet-5 | catalog | 3 | 3/3 | 175.6 | 179.3 | 81671 | 0 | 1 |
+
+All three now have a single equality function in its own module; `find` calls it on whole
+items and `search` on each candidate substring (by byte offset on character boundaries in
+two runs, by character windows in the third).
+

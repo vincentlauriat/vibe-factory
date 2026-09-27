@@ -48,6 +48,8 @@ All notable changes to this project are documented here. The format follows
   model name or the configuration instead of failing every run the same way.
 - First real-model baseline: Claude Sonnet 5 passed 30/30 runs over the ten cases
   (`evals/baselines/`).
+- The `catalog` evaluation case asks for one equality function shared by `find` and
+  `search`; its reference solution follows.
 
 ## [0.2.0] — 2026-09-27
 
