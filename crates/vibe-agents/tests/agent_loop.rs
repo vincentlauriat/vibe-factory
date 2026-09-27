@@ -12,7 +12,8 @@ use vibe_agents::test_support::{
 };
 use vibe_agents::{
     AgentRunner, CONTEXT_WARNING_MESSAGE, CONTINUE_NUDGE, CONVERGE_MESSAGE, ContinuationPolicy,
-    MAX_RETRY_DELAY, TRUNCATED_TWICE_MESSAGE, run_structured, run_with_continuation,
+    INVALID_ARGUMENTS_MESSAGE, MAX_RETRY_DELAY, TRUNCATED_TWICE_MESSAGE, run_structured,
+    run_with_continuation,
 };
 use vibe_core::agent::ThinkingLevel;
 use vibe_core::{
@@ -448,6 +449,45 @@ async fn continuation_respects_the_limit() {
 }
 
 // --------------------------------------------------------------- edge cases
+
+#[tokio::test]
+async fn raw_tool_arguments_are_refused_without_execution() {
+    let probe = ConcurrencyProbe::new();
+    let hook = Arc::new(VetoHook::new("nothing", "unused"));
+    let mut registry = Registry::new();
+    registry.add_hook(hook.clone());
+    let tools = ToolRegistry::new().with(Arc::new(EchoTool::new().with_probe(probe.clone())));
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        tool_use_response(vec![
+            ("c1", "echo", json!({"_raw": "{\"text\": \"trunc"})),
+            ("c2", "echo", json!({"text": "fine"})),
+        ]),
+        text_response("retrying properly"),
+    ]));
+    let r = runner_with_registry(provider.clone(), tools, registry);
+    let mut events = r.events().subscribe();
+    let out = r.run(&spec(), "go".into()).await.unwrap();
+    assert_eq!(out.stop, AgentStop::Completed);
+
+    let results = last_tool_results(&provider.requests()[1]);
+    assert_eq!(results.len(), 2);
+    let (id, content, is_error) = &results[0];
+    assert_eq!(id, "c1");
+    assert!(is_error);
+    assert!(content.contains(INVALID_ARGUMENTS_MESSAGE), "{content}");
+    assert_eq!(results[1], ("c2".into(), "fine".into(), false));
+    assert_eq!(probe.order(), vec!["fine"], "the raw call never ran");
+    assert_eq!(hook.after_calls(), 1, "hooks only see the executed call");
+
+    let mut returned = Vec::new();
+    while let Ok(env) = events.try_recv() {
+        if let Event::ToolReturned { is_error, .. } = env.event {
+            returned.push(is_error);
+        }
+    }
+    returned.sort_unstable();
+    assert_eq!(returned, vec![false, true]);
+}
 
 #[tokio::test]
 async fn unknown_failing_and_panicking_tools_become_error_results() {

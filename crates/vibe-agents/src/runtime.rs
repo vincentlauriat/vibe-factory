@@ -55,6 +55,14 @@ pub const MAX_RETRY_DELAY: Duration = Duration::from_secs(60);
 /// row.
 pub const TRUNCATED_TWICE_MESSAGE: &str = "output truncated twice";
 
+/// Key under which providers store tool arguments they could not parse as
+/// JSON (`{"_raw": "<original text>"}`). A call carrying it is never executed.
+pub const RAW_ARGUMENTS_KEY: &str = "_raw";
+
+/// Error returned to the model for a call whose arguments were not valid JSON.
+pub const INVALID_ARGUMENTS_MESSAGE: &str = "the arguments of this call were not valid JSON \
+(possibly truncated); repeat the call with complete JSON arguments";
+
 /// Runs an [`AgentSpec`] against a [`ModelProvider`] with a set of tools.
 ///
 /// The runner is cheap to clone and can be reused for any number of runs;
@@ -650,7 +658,16 @@ impl AgentRunner {
             .await;
         let started = Instant::now();
 
+        let raw_arguments = call
+            .input
+            .as_object()
+            .is_some_and(|o| o.contains_key(RAW_ARGUMENTS_KEY));
         let output = match tools.get(&call.name) {
+            // Unparsable arguments: never run the tool (nor its hooks).
+            _ if raw_arguments => ToolOutput::error(format!(
+                "Tool `{}` was not executed: {INVALID_ARGUMENTS_MESSAGE}.",
+                call.name
+            )),
             None => {
                 let available: Vec<&str> = tools.names().collect();
                 ToolOutput::error(format!(
