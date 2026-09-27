@@ -19,7 +19,7 @@ then a terminal UI on top of it.
       (`evals/baselines/2026-09-27-claude-sonnet-5.md`)
 - [ ] Finish the suite: `lru`, `money`, `semver`, `slug` and two more `inventory` runs
 - [ ] Review a sample of runs by hand (tests added, shared code in refactoring cases)
-- [ ] `run_suite.py --jobs N` to run cases in parallel (a full suite takes about 2 hours)
+- [x] `run_suite.py --jobs N` to run cases in parallel (a full suite takes about 2 hours)
 
 ### 2. Streaming completions
 - [x] `ModelProvider::stream` with a default that falls back to `complete`

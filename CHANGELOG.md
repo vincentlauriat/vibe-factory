@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `evals/run_suite.py --jobs N` runs up to N evaluations in parallel.
 - Streaming: `ModelProvider::complete_streaming`, server-sent events for Anthropic and
   OpenAI-compatible providers, `agent_delta` events while a step is generated, and
   `providers.<name>.stream = false` to opt out.

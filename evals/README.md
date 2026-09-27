@@ -66,7 +66,9 @@ python3 evals/run_suite.py results/2026-10-01-claude \
 ```
 
 `--max-tokens` bounds each run (see run budgets in the configuration guide); omit it for
-no limit. Use a new destination for every baseline: the runners never overwrite anything.
+no limit. `--jobs N` runs up to N evaluations at once (each in its own
+directory); a full suite takes about two hours with one job. Mind the provider's rate
+limits when raising it. Use a new destination for every baseline: the runners never overwrite anything.
 The suite writes `summary.md` and `summary.json` next to the per-run directories:
 
 | Column | Meaning |
