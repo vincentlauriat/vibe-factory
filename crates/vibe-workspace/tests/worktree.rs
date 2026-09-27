@@ -379,6 +379,10 @@ async fn discard_removes_worktree_and_branch_idempotently() {
     provider().discard(&ws).await.unwrap();
 }
 
+/// Unconflicted lines shared by both sides in the assisted-merge test.
+const PREAMBLE: &str =
+    "shared header line one\nshared header line two\nshared header line three\nshared four\n";
+
 struct ResolvingProvider;
 
 #[async_trait::async_trait]
@@ -394,7 +398,7 @@ impl ModelProvider for ResolvingProvider {
 
     async fn complete(&self, _request: CompletionRequest) -> Result<CompletionResponse> {
         Ok(CompletionResponse {
-            message: Message::assistant("line 1\nfrom base and task\nline 3\n"),
+            message: Message::assistant(format!("{PREAMBLE}line 1\nfrom base and task\nline 3\n")),
             stop_reason: StopReason::EndTurn,
             usage: Usage::default(),
             model: "m".into(),
@@ -409,6 +413,15 @@ async fn assisted_merge_commits_model_resolution() {
         provider: Arc::new(ResolvingProvider),
         model: "m".into(),
     });
+    // Shared, unconflicted content keeps the model's answer well above half
+    // the size of the conflicted file.
+    let with_preamble = |s: &str| format!("{PREAMBLE}{s}");
+    repo.commit_file(
+        &repo.root,
+        "a.txt",
+        &with_preamble("line 1\nline 2\nline 3\n"),
+        "preamble",
+    );
     let ws = p
         .open(&repo.root, &Task::new("Assisted", ""))
         .await
@@ -416,20 +429,23 @@ async fn assisted_merge_commits_model_resolution() {
     repo.commit_file(
         &ws.root,
         "a.txt",
-        "line 1\nfrom task\nline 3\n",
+        &with_preamble("line 1\nfrom task\nline 3\n"),
         "task edit",
     );
     repo.commit_file(
         &repo.root,
         "a.txt",
-        "line 1\nfrom base\nline 3\n",
+        &with_preamble("line 1\nfrom base\nline 3\n"),
         "base edit",
     );
 
     let outcome = p.merge(&ws).await.unwrap();
     let head = git(&repo.root, &["rev-parse", "HEAD"]);
     assert_eq!(outcome, MergeOutcome::Merged { commit: Some(head) });
-    assert_eq!(repo.read("a.txt"), "line 1\nfrom base and task\nline 3\n");
+    assert_eq!(
+        repo.read("a.txt"),
+        with_preamble("line 1\nfrom base and task\nline 3\n")
+    );
     assert_eq!(git(&repo.root, &["status", "--porcelain"]), "");
     assert_eq!(
         git(&repo.root, &["rev-list", "--parents", "-1", "HEAD"])
@@ -502,4 +518,223 @@ async fn provider_by_name_builds_working_providers() {
     let ip = provider_by_name("in_place", None).unwrap();
     let ws = ip.open(&repo.root, &task).await.unwrap();
     assert_eq!(ws.root, repo.root);
+}
+
+/// Create a hooks directory whose hooks append their name to `marker`.
+#[cfg(unix)]
+fn evil_hooks(parent: &Path, marker: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = parent.join("evil-hooks");
+    std::fs::create_dir_all(&dir).unwrap();
+    for hook in [
+        "pre-commit",
+        "prepare-commit-msg",
+        "commit-msg",
+        "post-commit",
+        "pre-merge-commit",
+        "post-merge",
+        "post-checkout",
+        "reference-transaction",
+    ] {
+        let path = dir.join(hook);
+        std::fs::write(
+            &path,
+            format!("#!/bin/sh\necho {hook} >> '{}'\nexit 0\n", marker.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    dir
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn hooks_never_run_during_checkpoint_and_merge() {
+    let repo = Repo::new();
+    let marker = repo.root.parent().unwrap().join("hook-ran");
+    let hooks = evil_hooks(repo.root.parent().unwrap(), &marker);
+    // Configured before the workspace is opened: a legitimate user setting.
+    git(
+        &repo.root,
+        &["config", "core.hooksPath", hooks.to_str().unwrap()],
+    );
+
+    let ws = provider()
+        .open(&repo.root, &Task::new("Hooks", ""))
+        .await
+        .unwrap();
+    // Plain git runs the hooks: proves the marker would catch a regression.
+    repo.commit_file(&repo.root, "b.txt", "base moved\n", "base moved");
+    assert!(marker.exists(), "control: hooks fire for ordinary git");
+    std::fs::remove_file(&marker).unwrap();
+
+    std::fs::write(ws.root.join("feature.txt"), "feature\n").unwrap();
+    let outcome = provider().merge(&ws).await.unwrap();
+    assert!(matches!(outcome, MergeOutcome::Merged { .. }));
+    assert_eq!(
+        git(&repo.root, &["rev-list", "--parents", "-1", "HEAD"])
+            .split(' ')
+            .count(),
+        3,
+        "checkpoint commit and merge commit were both made"
+    );
+    assert!(
+        !marker.exists(),
+        "hooks ran: {}",
+        std::fs::read_to_string(&marker).unwrap_or_default()
+    );
+
+    std::fs::write(repo.root.join("c.txt"), "c\n").unwrap();
+    commit_all(&repo.root, "direct", &[])
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!marker.exists(), "commit_all ran hooks");
+}
+
+#[tokio::test]
+async fn tampered_hooks_path_blocks_merge() {
+    let repo = Repo::new();
+    let task = Task::new("Tamper", "");
+    let ws = provider().open(&repo.root, &task).await.unwrap();
+    let before = git(&repo.root, &["rev-parse", "HEAD"]);
+
+    // The agent rewrites the shared repository config from its worktree.
+    let evil = repo.root.parent().unwrap().join("agent-hooks");
+    std::fs::create_dir_all(&evil).unwrap();
+    git(
+        &ws.root,
+        &["config", "core.hooksPath", evil.to_str().unwrap()],
+    );
+    std::fs::write(ws.root.join("feature.txt"), "feature\n").unwrap();
+
+    let err = provider().merge(&ws).await.unwrap_err();
+    assert_eq!(err.kind, vibe_core::ErrorKind::Workspace);
+    assert!(err.message.contains("core.hooksPath"), "{}", err.message);
+    assert!(err.message.contains("tampering"), "{}", err.message);
+    assert_eq!(git(&repo.root, &["rev-parse", "HEAD"]), before);
+
+    // Reopening with a fresh provider does not legitimise the change.
+    let again = provider().open(&repo.root, &task).await.unwrap();
+    assert!(provider().merge(&again).await.is_err());
+
+    // Restoring the original value unblocks the merge.
+    let original = repo.root.parent().unwrap().join("no-hooks");
+    git(
+        &repo.root,
+        &["config", "core.hooksPath", original.to_str().unwrap()],
+    );
+    assert!(matches!(
+        provider().merge(&again).await.unwrap(),
+        MergeOutcome::Merged { .. }
+    ));
+}
+
+#[tokio::test]
+async fn filter_driver_tampering_blocks_merge() {
+    let repo = Repo::new();
+    let ws = provider()
+        .open(&repo.root, &Task::new("Filter", ""))
+        .await
+        .unwrap();
+    let before = git(&repo.root, &["rev-parse", "HEAD"]);
+
+    // A clean filter runs an arbitrary command on `git add` in the user's
+    // checkout once a matching .gitattributes exists (harmless `cat` here).
+    git(&ws.root, &["config", "filter.x.clean", "cat"]);
+    std::fs::write(ws.root.join(".gitattributes"), "* filter=x\n").unwrap();
+
+    let err = provider().merge(&ws).await.unwrap_err();
+    assert_eq!(err.kind, vibe_core::ErrorKind::Workspace);
+    assert!(
+        err.message.contains("filter.x.clean (added)"),
+        "{}",
+        err.message
+    );
+    assert!(err.message.contains("tampering"), "{}", err.message);
+    assert!(!err.message.contains("core.hooksPath"), "{}", err.message);
+    assert_eq!(git(&repo.root, &["rev-parse", "HEAD"]), before);
+}
+
+#[tokio::test]
+async fn legitimate_run_passes_config_check() {
+    let repo = Repo::new();
+    // Pre-existing local configuration, including a filter, is the baseline.
+    git(&repo.root, &["config", "filter.lfs.clean", "cat"]);
+    git(
+        &repo.root,
+        &["config", "remote.origin.url", "https://example.com/r.git"],
+    );
+
+    let p = provider();
+    let ws = p.open(&repo.root, &Task::new("Legit", "")).await.unwrap();
+    let snapshot = p.snapshot_path(&repo.root, ws.branch.as_deref().unwrap());
+    assert!(
+        snapshot.is_file(),
+        "snapshot written at {}",
+        snapshot.display()
+    );
+    assert_eq!(
+        git(&repo.root, &["status", "--porcelain"]),
+        "",
+        "snapshot is ignored"
+    );
+
+    // Other tasks come and go meanwhile: their branch.vibe/* keys are volatile.
+    let other = p.open(&repo.root, &Task::new("Other", "")).await.unwrap();
+    p.discard(&other).await.unwrap();
+
+    std::fs::write(ws.root.join("feature.txt"), "feature\n").unwrap();
+    // A fresh provider falls back to the snapshot file.
+    assert!(matches!(
+        provider().merge(&ws).await.unwrap(),
+        MergeOutcome::Merged { .. }
+    ));
+}
+
+#[tokio::test]
+async fn accepted_config_changes_unblock_merge() {
+    let repo = Repo::new();
+    let p = provider();
+    let ws = p.open(&repo.root, &Task::new("Accept", "")).await.unwrap();
+    git(&repo.root, &["config", "user.signingkey", "ABC"]);
+    std::fs::write(ws.root.join("feature.txt"), "feature\n").unwrap();
+
+    let err = p.merge(&ws).await.unwrap_err();
+    assert!(
+        err.message.contains("user.signingkey (added)"),
+        "{}",
+        err.message
+    );
+
+    p.accept_config_changes(&ws).await.unwrap();
+    assert!(matches!(
+        p.merge(&ws).await.unwrap(),
+        MergeOutcome::Merged { .. }
+    ));
+}
+
+#[tokio::test]
+async fn missing_baseline_refuses_merge() {
+    let repo = Repo::new();
+    let p = provider();
+    let ws = p
+        .open(&repo.root, &Task::new("No baseline", ""))
+        .await
+        .unwrap();
+    std::fs::remove_file(p.snapshot_path(&repo.root, ws.branch.as_deref().unwrap())).unwrap();
+    std::fs::write(ws.root.join("feature.txt"), "feature\n").unwrap();
+
+    // A fresh provider has no in-memory baseline either.
+    let err = provider().merge(&ws).await.unwrap_err();
+    assert!(
+        err.message.contains("no configuration snapshot"),
+        "{}",
+        err.message
+    );
+    // The provider that opened the workspace still remembers it.
+    assert!(matches!(
+        p.merge(&ws).await.unwrap(),
+        MergeOutcome::Merged { .. }
+    ));
 }

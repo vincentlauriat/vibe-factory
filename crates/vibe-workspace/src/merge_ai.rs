@@ -4,14 +4,17 @@
 //! produce a completion can be used. For each conflicted file it sends the
 //! file content (with its conflict markers) to the model, asks for the fully
 //! merged file, strips a surrounding code fence if the model added one, and
-//! writes the result back only when it contains no conflict markers. Files
+//! writes the result back only when it is complete: the model must have
+//! finished normally (not [`StopReason::MaxTokens`] or
+//! [`StopReason::Other`]), the answer must be at least half the size of the
+//! conflicted input, and it must contain no conflict markers. Files
 //! the model could not resolve are left untouched for a human.
 
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
 use vibe_core::provider::SharedProvider;
-use vibe_core::{CompletionRequest, Message, ModelProvider, Result};
+use vibe_core::{CompletionRequest, Message, ModelProvider, Result, StopReason};
 
 /// System prompt sent to the model for every conflicted file.
 pub const MERGE_SYSTEM_PROMPT: &str = "You are a code merge expert. You receive one file that \
@@ -139,9 +142,35 @@ async fn resolve_one(
         Ok(r) => r,
         Err(e) => return Ok(Resolution::unresolved(file, format!("model error: {e}"))),
     };
+    match response.stop_reason {
+        StopReason::MaxTokens => {
+            return Ok(Resolution::unresolved(
+                file,
+                "model output was truncated (max tokens reached)",
+            ));
+        }
+        StopReason::Other => {
+            return Ok(Resolution::unresolved(
+                file,
+                "model stopped for an unexpected reason; output may be incomplete",
+            ));
+        }
+        StopReason::EndTurn | StopReason::StopSequence | StopReason::ToolUse => {}
+    }
     let mut merged = strip_code_fences(&response.message.text());
     if merged.trim().is_empty() {
         return Ok(Resolution::unresolved(file, "model returned an empty file"));
+    }
+    if merged.len().saturating_mul(2) < content.len() {
+        return Ok(Resolution::unresolved(
+            file,
+            format!(
+                "model output is suspiciously short ({} bytes for a {}-byte conflicted file); \
+                 it may be truncated",
+                merged.len(),
+                content.len()
+            ),
+        ));
     }
     if has_conflict_markers(&merged) {
         return Ok(Resolution::unresolved(
@@ -198,10 +227,11 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
     use vibe_core::provider::ProviderInfo;
-    use vibe_core::{CompletionResponse, Error, StopReason, Usage};
+    use vibe_core::{CompletionResponse, Error, Usage};
 
     struct MockProvider {
         answer: std::result::Result<String, String>,
+        stop: StopReason,
         seen: Mutex<Vec<CompletionRequest>>,
     }
 
@@ -209,8 +239,14 @@ mod tests {
         fn new(answer: std::result::Result<&str, &str>) -> Self {
             Self {
                 answer: answer.map(str::to_string).map_err(str::to_string),
+                stop: StopReason::EndTurn,
                 seen: Mutex::new(Vec::new()),
             }
+        }
+
+        fn stopping(mut self, stop: StopReason) -> Self {
+            self.stop = stop;
+            self
         }
     }
 
@@ -230,7 +266,7 @@ mod tests {
             match &self.answer {
                 Ok(text) => Ok(CompletionResponse {
                     message: Message::assistant(text.clone()),
-                    stop_reason: StopReason::EndTurn,
+                    stop_reason: self.stop,
                     usage: Usage::default(),
                     model: "mock-1".into(),
                 }),
@@ -239,8 +275,14 @@ mod tests {
         }
     }
 
-    const CONFLICTED: &str =
-        "fn a() {}\n<<<<<<< HEAD\nlet x = 1;\n=======\nlet x = 2;\n>>>>>>> vibe/t\n";
+    const CONFLICTED: &str = concat!(
+        "fn helper_with_a_fairly_long_name(argument: u32) -> u32 {\n    argument + 1\n}\n",
+        "<<<<<<< HEAD\nlet x = 1;\n=======\nlet x = 2;\n>>>>>>> vibe/t\n"
+    );
+    const RESOLVED: &str = concat!(
+        "fn helper_with_a_fairly_long_name(argument: u32) -> u32 {\n    argument + 1\n}\n",
+        "let x = 3;\n"
+    );
 
     #[test]
     fn detects_markers() {
@@ -270,20 +312,60 @@ mod tests {
     async fn resolves_file_and_writes_it_back() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.rs"), CONFLICTED).unwrap();
-        let provider = MockProvider::new(Ok("```rust\nfn a() {}\nlet x = 3;\n```"));
+        let answer = format!("```rust\n{RESOLVED}```");
+        let provider = MockProvider::new(Ok(&answer));
         let res = resolve_conflicts(&provider, "mock-1", dir.path(), &["a.rs".to_string()])
             .await
             .unwrap();
         assert_eq!(res, vec![Resolution::resolved("a.rs")]);
         assert_eq!(
             std::fs::read_to_string(dir.path().join("a.rs")).unwrap(),
-            "fn a() {}\nlet x = 3;\n"
+            RESOLVED
         );
         let seen = provider.seen.lock().unwrap();
         assert_eq!(seen.len(), 1);
         assert_eq!(seen[0].model, "mock-1");
         assert!(seen[0].system.contains("code merge expert"));
         assert!(seen[0].messages[0].text().contains("<<<<<<< HEAD"));
+    }
+
+    async fn resolve_with(provider: &MockProvider) -> (Resolution, String) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.rs"), CONFLICTED).unwrap();
+        let mut res = resolve_conflicts(provider, "m", dir.path(), &["a.rs".to_string()])
+            .await
+            .unwrap();
+        let on_disk = std::fs::read_to_string(dir.path().join("a.rs")).unwrap();
+        (res.remove(0), on_disk)
+    }
+
+    #[tokio::test]
+    async fn truncated_answer_is_not_written() {
+        // A complete-looking answer is still rejected when the model hit its
+        // output budget: the tail of the file may be missing.
+        let provider = MockProvider::new(Ok(RESOLVED)).stopping(StopReason::MaxTokens);
+        let (res, on_disk) = resolve_with(&provider).await;
+        assert!(!res.resolved);
+        assert!(res.note.as_deref().unwrap().contains("truncated"));
+        assert_eq!(on_disk, CONFLICTED);
+
+        let provider = MockProvider::new(Ok(RESOLVED)).stopping(StopReason::Other);
+        let (res, on_disk) = resolve_with(&provider).await;
+        assert!(!res.resolved);
+        assert_eq!(on_disk, CONFLICTED);
+    }
+
+    #[tokio::test]
+    async fn short_answer_is_not_written() {
+        let provider = MockProvider::new(Ok("let x = 3;\n"));
+        let (res, on_disk) = resolve_with(&provider).await;
+        assert!(!res.resolved);
+        assert!(res.note.as_deref().unwrap().contains("short"));
+        assert_eq!(on_disk, CONFLICTED);
+
+        let provider = MockProvider::new(Ok("  \n"));
+        let (res, _) = resolve_with(&provider).await;
+        assert!(!res.resolved);
     }
 
     #[tokio::test]

@@ -1,11 +1,14 @@
 //! Isolation through git worktrees.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use vibe_core::workspace::MergeOutcome;
 use vibe_core::{Error, Result, Task, Workspace, WorkspaceKind, WorkspaceProvider};
 
 use crate::commit::commit_all;
+use crate::config_guard::{ConfigSnapshot, tampering_error};
 use crate::git::{Git, same_path};
 use crate::merge_ai::{MergeStrategy, resolve_conflicts};
 
@@ -19,6 +22,10 @@ pub const BRANCH_PREFIX: &str = "vibe/";
 /// branch was created from, so that a reopened workspace merges back into
 /// the right place.
 const BASE_CONFIG_NAME: &str = "vibebase";
+
+/// Directory (inside the worktrees directory, hence git-ignored) holding
+/// the configuration snapshot of each task branch.
+pub const SNAPSHOTS_DIR: &str = ".snapshots";
 
 /// Workspace provider giving every task its own git worktree and branch.
 ///
@@ -34,6 +41,11 @@ pub struct GitWorktreeProvider {
     pub worktrees_dir: Option<PathBuf>,
     /// What to do when merging produces conflicts.
     pub merge_strategy: MergeStrategy,
+    /// Repository-local git configuration observed when each branch's
+    /// workspace was first opened by this provider (and its clones), keyed
+    /// by branch. Takes precedence over the snapshot file, which an agent
+    /// could rewrite.
+    config_baseline: Arc<Mutex<HashMap<String, ConfigSnapshot>>>,
 }
 
 impl GitWorktreeProvider {
@@ -105,6 +117,112 @@ impl GitWorktreeProvider {
         }
         self.resolve_base(git).await
     }
+
+    /// File holding the configuration snapshot of `branch`:
+    /// `<worktrees dir>/.snapshots/<branch without "vibe/">.cfg`.
+    #[must_use]
+    pub fn snapshot_path(&self, project_root: &Path, branch: &str) -> PathBuf {
+        let name = branch
+            .strip_prefix(BRANCH_PREFIX)
+            .unwrap_or(branch)
+            .replace(['/', '\\'], "-");
+        self.worktrees_root(project_root)
+            .join(SNAPSHOTS_DIR)
+            .join(format!("{name}.cfg"))
+    }
+
+    fn remembered(&self, branch: &str) -> Option<ConfigSnapshot> {
+        self.config_baseline
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(branch)
+            .cloned()
+    }
+
+    fn remember(&self, branch: &str, snapshot: ConfigSnapshot, overwrite: bool) {
+        let mut map = self
+            .config_baseline
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if overwrite {
+            map.insert(branch.to_string(), snapshot);
+        } else {
+            map.entry(branch.to_string()).or_insert(snapshot);
+        }
+    }
+
+    /// Snapshot the project's repository-local configuration before any
+    /// agent runs in the workspace of `branch`. An existing baseline (in
+    /// memory or on disk) is never overwritten, so reopening a tampered
+    /// workspace cannot legitimise the change.
+    async fn record_config_baseline(
+        &self,
+        git: &Git,
+        project_root: &Path,
+        branch: &str,
+    ) -> Result<()> {
+        if self.remembered(branch).is_some() {
+            return Ok(());
+        }
+        let path = self.snapshot_path(project_root, branch);
+        let snapshot = match ConfigSnapshot::load(&path).await? {
+            Some(saved) => saved,
+            None => {
+                let captured = ConfigSnapshot::capture(git).await?;
+                captured.save(&path).await?;
+                captured
+            }
+        };
+        self.remember(branch, snapshot, false);
+        Ok(())
+    }
+
+    /// Fail when the project's configuration differs from the baseline taken
+    /// at `open` (in memory first, snapshot file otherwise) on any key that
+    /// is not [volatile](crate::config_guard::is_volatile_key). Without any
+    /// baseline the merge is refused too: the configuration cannot be
+    /// vouched for.
+    async fn check_config_untouched(
+        &self,
+        project: &Git,
+        project_root: &Path,
+        branch: &str,
+    ) -> Result<()> {
+        let path = self.snapshot_path(project_root, branch);
+        let baseline = match self.remembered(branch) {
+            Some(b) => b,
+            None => ConfigSnapshot::load(&path).await?.ok_or_else(|| {
+                Error::workspace(format!(
+                    "refusing to merge {branch}: no configuration snapshot was recorded when the \
+                     workspace was opened ({} is missing), so the repository config cannot be \
+                     checked for tampering. Review it, then call \
+                     GitWorktreeProvider::accept_config_changes",
+                    path.display()
+                ))
+            })?,
+        };
+        let current = ConfigSnapshot::capture(project).await?;
+        let changes = baseline.changes_to(&current);
+        if changes.is_empty() {
+            return Ok(());
+        }
+        Err(tampering_error(branch, project_root, &changes))
+    }
+
+    /// Accept the project's current repository-local configuration as the
+    /// new baseline for `workspace`, after a human reviewed the changes a
+    /// merge refused. Overwrites both the in-memory and on-disk snapshots.
+    pub async fn accept_config_changes(&self, workspace: &Workspace) -> Result<()> {
+        let branch = workspace.branch.as_deref().ok_or_else(|| {
+            Error::workspace("cannot accept configuration for a workspace without a branch")
+        })?;
+        let snapshot = ConfigSnapshot::capture(&Git::new(&workspace.project_root)).await?;
+        snapshot
+            .save(&self.snapshot_path(&workspace.project_root, branch))
+            .await?;
+        self.remember(branch, snapshot, true);
+        Ok(())
+    }
 }
 
 fn base_key(branch: &str) -> String {
@@ -162,6 +280,8 @@ impl WorkspaceProvider for GitWorktreeProvider {
         let branch = Self::task_branch(task);
         let dir = self.worktrees_root(project_root);
         ensure_worktrees_dir(&dir).await?;
+        self.record_config_baseline(&git, project_root, &branch)
+            .await?;
         let path = dir.join(Self::task_name(task));
 
         let registered = git.worktree_list().await?;
@@ -224,6 +344,8 @@ impl WorkspaceProvider for GitWorktreeProvider {
             Error::workspace("cannot merge a git worktree workspace without a branch")
         })?;
         let project = Git::new(&workspace.project_root);
+        self.check_config_untouched(&project, &workspace.project_root, branch)
+            .await?;
         let base = self.base_for(&project, workspace).await?;
 
         if !same_path(&workspace.root, &workspace.project_root)

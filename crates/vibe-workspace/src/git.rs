@@ -5,8 +5,16 @@
 //! (stable, parseable messages). Commits made by the framework itself use a
 //! neutral identity (see [`FRAMEWORK_AUTHOR_NAME`]) so that they succeed on
 //! machines without a configured `user.name`.
+//!
+//! Agents can write anywhere in their worktree and may run `git config`, so
+//! the repository configuration is untrusted. Every invocation therefore
+//! neutralises the configuration-driven helpers that would execute code in
+//! the user's checkout: hooks (`core.hooksPath` points at an empty private
+//! directory), the filesystem monitor, the pager, the editor and the SSH
+//! command. `GIT_CONFIG_NOSYSTEM=1` also ignores the system-wide config.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use tokio::process::Command;
 use vibe_core::{Error, Result};
@@ -19,6 +27,44 @@ pub const FRAMEWORK_AUTHOR_EMAIL: &str = "vibe-factory@localhost";
 
 /// Pathspec excluding the framework's private `.vibe` directory.
 pub const EXCLUDE_VIBE: &str = ":(exclude).vibe";
+
+/// Configuration overrides passed as `-c key=value` to every git command,
+/// except the read-only configuration queries
+/// ([`Git::config_get_unneutralized`], [`Git::config_list_raw`]). `core.hooksPath` is appended
+/// separately (see [`empty_hooks_dir`]).
+pub const NEUTRAL_CONFIG: &[&str] = &[
+    "core.fsmonitor=false",
+    "core.pager=cat",
+    "core.editor=true",
+    "core.sshCommand=ssh",
+];
+
+/// An empty directory used as `core.hooksPath`, so no hook can run.
+///
+/// Created once per process under the system temporary directory and kept
+/// for the lifetime of the process. `/dev/null` is not used because it is
+/// not a path on Windows. If the directory cannot be created, a fresh path
+/// that does not exist is used instead: git treats a missing hooks
+/// directory as containing no hooks.
+#[must_use]
+pub fn empty_hooks_dir() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        tempfile::Builder::new()
+            .prefix("vibe-no-hooks-")
+            .tempdir()
+            .map(tempfile::TempDir::keep)
+            .unwrap_or_else(|_| {
+                std::env::temp_dir().join(format!(
+                    "vibe-no-hooks-missing-{}-{}",
+                    std::process::id(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_nanos())
+                ))
+            })
+    })
+}
 
 /// Raw result of a git invocation that is allowed to fail.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,10 +116,19 @@ impl Git {
         &self.root
     }
 
-    fn command(&self, args: &[&str], framework_identity: bool) -> Command {
+    fn command(&self, args: &[&str], framework_identity: bool, neutral: bool) -> Command {
         let mut cmd = Command::new("git");
+        if neutral {
+            let mut hooks = std::ffi::OsString::from("core.hooksPath=");
+            hooks.push(empty_hooks_dir());
+            cmd.arg("-c").arg(hooks);
+            for kv in NEUTRAL_CONFIG {
+                cmd.arg("-c").arg(kv);
+            }
+        }
         cmd.args(args)
             .current_dir(&self.root)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
             .env("GIT_TERMINAL_PROMPT", "0")
             .env("LC_ALL", "C")
             .stdin(std::process::Stdio::null())
@@ -88,9 +143,18 @@ impl Git {
     }
 
     async fn exec(&self, args: &[&str], framework_identity: bool) -> Result<GitOutput> {
-        tracing::debug!(root = %self.root.display(), args = ?args, "git");
+        self.exec_with(args, framework_identity, true).await
+    }
+
+    async fn exec_with(
+        &self,
+        args: &[&str],
+        framework_identity: bool,
+        neutral: bool,
+    ) -> Result<GitOutput> {
+        tracing::debug!(root = %self.root.display(), args = ?args, neutral, "git");
         let out = self
-            .command(args, framework_identity)
+            .command(args, framework_identity, neutral)
             .output()
             .await
             .map_err(|e| {
@@ -279,6 +343,26 @@ impl Git {
         let out = self.output(&["config", "--local", "--get", key]).await?;
         let value = out.stdout.trim();
         Ok((out.success && !value.is_empty()).then(|| value.to_string()))
+    }
+
+    /// Effective value of `key` as the repository itself configures it,
+    /// read without the framework's `-c` overrides (which would otherwise
+    /// mask it). Reading configuration runs no hook or helper.
+    pub async fn config_get_unneutralized(&self, key: &str) -> Result<Option<String>> {
+        let out = self
+            .exec_with(&["config", "--get", key], false, false)
+            .await?;
+        let value = out.stdout.trim();
+        Ok((out.success && !value.is_empty()).then(|| value.to_string()))
+    }
+
+    /// Raw `git config <scope> --list -z` output (NUL-separated entries,
+    /// each `key` or `key\nvalue`), read without the framework's `-c`
+    /// overrides. `scope` is a flag such as `--local` or `--worktree`.
+    /// Listing configuration runs no hook or helper.
+    pub async fn config_list_raw(&self, scope: &str) -> Result<String> {
+        let args = ["config", scope, "--list", "-z"];
+        into_stdout(&args, self.exec_with(&args, false, false).await?)
     }
 
     /// Write a repository-local configuration value.

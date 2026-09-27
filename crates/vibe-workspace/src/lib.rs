@@ -26,6 +26,23 @@
 //! The project checkout is never touched while agents work, so a human can
 //! keep using it and several tasks can run in parallel.
 //!
+//! ## Untrusted repository configuration
+//!
+//! Worktrees share the repository configuration with the user's checkout,
+//! and agents can run `git config`. Two defences apply:
+//!
+//! * every git command the framework runs overrides the helpers that would
+//!   execute code (hooks, fsmonitor, pager, editor, SSH command) and ignores
+//!   the system-wide config (see [`git`]);
+//! * `open` snapshots the project's repository-local configuration
+//!   (`git config --local --list`, plus `--worktree` when enabled) into
+//!   memory and into `<worktrees dir>/.snapshots/<task>.cfg`, never
+//!   overwriting an existing snapshot. `merge` refuses to proceed if any key
+//!   changed, except the explicitly volatile ones
+//!   ([`config_guard::is_volatile_key`]), and lists the changed keys. After a
+//!   human review, [`GitWorktreeProvider::accept_config_changes`] records the
+//!   current configuration as the new baseline.
+//!
 //! [`InPlaceWorkspace`] (`"in_place"`) works directly in the project
 //! directory, without isolation.
 //!
@@ -33,15 +50,17 @@
 //!
 //! [`GitWorktreeProvider`]'s `merge`:
 //!
-//! 1. commits anything left uncommitted in the worktree (`vibe: checkpoint`,
+//! 1. refuses if the repository configuration changed since `open` (see
+//!    above);
+//! 2. commits anything left uncommitted in the worktree (`vibe: checkpoint`,
 //!    `.vibe` excluded, neutral framework identity);
-//! 2. refuses to proceed if tracked files of the project checkout have
+//! 3. refuses to proceed if tracked files of the project checkout have
 //!    uncommitted changes;
-//! 3. returns [`MergeOutcome::NoChanges`] when the task branch has no commit
+//! 4. returns [`MergeOutcome::NoChanges`] when the task branch has no commit
 //!    ahead of the base;
-//! 4. checks out the base branch and tries `git merge --ff-only`, then
+//! 5. checks out the base branch and tries `git merge --ff-only`, then
 //!    `git merge --no-ff`;
-//! 5. on conflicts, with [`MergeStrategy::Assisted`], asks a model to resolve
+//! 6. on conflicts, with [`MergeStrategy::Assisted`], asks a model to resolve
 //!    each file ([`merge_ai::resolve_conflicts`]) and commits if every file
 //!    was resolved; otherwise aborts the merge, returns to the branch the
 //!    project was on, and reports [`MergeOutcome::NeedsHumanReview`] with the
@@ -54,6 +73,7 @@
 //! `GIT_TERMINAL_PROMPT=0` so nothing ever blocks on a prompt.
 
 pub mod commit;
+pub mod config_guard;
 pub mod git;
 pub mod in_place;
 pub mod merge_ai;
@@ -62,6 +82,7 @@ pub mod worktree;
 use std::sync::Arc;
 
 pub use commit::{commit_all, has_uncommitted};
+pub use config_guard::{ChangeKind, ConfigChange, ConfigSnapshot};
 pub use git::{Git, GitOutput, WorktreeInfo};
 pub use in_place::InPlaceWorkspace;
 pub use merge_ai::{MergeStrategy, Resolution, resolve_conflicts};
