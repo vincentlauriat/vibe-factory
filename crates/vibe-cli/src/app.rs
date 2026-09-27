@@ -156,6 +156,8 @@ pub struct AppContext {
     /// Discards the uncommitted changes of a failed subtask attempt, when
     /// the project is a git repository.
     pub resetter: Option<Resetter>,
+    /// Worktree per subtask attempt, with the `git_worktree` workspace.
+    pub subtask_workspaces: Option<Arc<dyn vibe_core::SubtaskWorkspaces>>,
     /// Running plugins (shut down by [`AppContext::shutdown`]).
     pub plugins: PluginHost,
     /// Whether the project is a git repository.
@@ -262,6 +264,9 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
     let events = EventBus::default();
     let committer = is_git.then(git_committer);
     let resetter = is_git.then(git_resetter);
+    let subtask_workspaces: Option<Arc<dyn vibe_core::SubtaskWorkspaces>> = (is_git
+        && workspace.name() == "git_worktree")
+        .then(|| Arc::new(vibe_workspace::GitSubtaskWorkspaces::new()) as _);
 
     Ok(AppContext {
         root: root.to_path_buf(),
@@ -273,6 +278,7 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
         events,
         committer,
         resetter,
+        subtask_workspaces,
         plugins,
         is_git,
     })
@@ -342,6 +348,7 @@ impl AppContext {
             project_root: self.root.clone(),
             committer: self.committer.clone(),
             resetter: self.resetter.clone(),
+            subtask_workspaces: self.subtask_workspaces.clone(),
         })
     }
 

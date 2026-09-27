@@ -959,3 +959,65 @@ fn integration_validation_rejects_combined_tree_and_rebuilds_it_on_resume() {
     assert_eq!(state["validations"][3]["integration"], true);
     assert_eq!(state["validations"][3]["passed"], true);
 }
+
+#[test]
+fn parallel_subtasks_run_in_their_own_worktrees_and_are_integrated() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Add two files", "Create one.txt and two.txt.");
+    // Both coder sessions pull from one queue in whatever order they run;
+    // any interleaving writes both files and ends both sessions.
+    let script = p.write_script(
+        "parallel-script.json",
+        &json!({"routes": {
+            "planner": [fenced(json!({"approach": "two files", "phases": [
+                {"name": "Both", "parallel": true, "subtasks": [
+                    {"title": "Write one.txt", "description": "create it"},
+                    {"title": "Write two.txt", "description": "create it"}
+                ]}
+            ]}))],
+            "coder": [
+                {"tool": "write_file", "input": {"path": "one.txt", "content": "one\n"}},
+                fenced(json!({"status": "done", "summary": "written"})),
+                {"tool": "write_file", "input": {"path": "two.txt", "content": "two\n"}},
+                fenced(json!({"status": "done", "summary": "written"}))
+            ],
+            "qa_reviewer": [fenced(json!({"verdict": "approved", "summary": "ok", "issues": []}))]
+        }}),
+    );
+    let out = p
+        .vibe()
+        .args(["run", "1", "--complexity", "trivial", "--script"])
+        .arg(&script)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(p.task_json(1)["status"], "ready");
+
+    let worktrees = p.root().join(".vibe").join("worktrees");
+    let dirs: Vec<String> = std::fs::read_dir(&worktrees)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| !n.starts_with('.'))
+        .collect();
+    assert_eq!(dirs.len(), 1, "attempt worktrees were removed: {dirs:?}");
+    let task_root = worktrees.join(&dirs[0]);
+    assert_eq!(
+        std::fs::read_to_string(task_root.join("one.txt")).unwrap(),
+        "one\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(task_root.join("two.txt")).unwrap(),
+        "two\n"
+    );
+    assert_eq!(p.git(&["branch", "--list", "*--s*"]).trim(), "");
+    // The project checkout was not touched.
+    assert!(!p.root().join("one.txt").exists());
+}

@@ -808,6 +808,7 @@ async fn auto_merge_conflicts_leave_task_ready() {
         project_root: h.root(),
         committer: None,
         resetter: None,
+        subtask_workspaces: None,
     });
     let report = pipeline.run(task.id, RunOptions::default()).await.unwrap();
     assert_eq!(report.final_status, TaskStatus::Ready);
@@ -1325,4 +1326,118 @@ async fn duration_budget_counts_earlier_invocations() {
     h.config.pipeline.max_duration_secs = None;
     let done = h.pipeline().resume(task.id).await.unwrap();
     assert_eq!(done.final_status, TaskStatus::Ready);
+}
+
+#[tokio::test]
+async fn isolated_subtasks_integrate_one_at_a_time_and_retry_conflicts() {
+    let mut h = Harness::new().await;
+    let fake = Arc::new(FakeSubtasks::default());
+    fake.conflict_once.lock().unwrap().push("s2-".into());
+    h.subtasks = Some(fake.clone());
+    let task = h.task("Add export command", "Export tasks as CSV").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "Par", "parallel": true, "subtasks": [
+                {"title": "First", "description": "a"},
+                {"title": "Second", "description": "b"}
+            ]}
+        ]))],
+    );
+    let first = subtask_key(1, 2, "First");
+    let second = subtask_key(2, 2, "Second");
+    // The first subtask is slow, so the second finishes (and conflicts) first.
+    h.router.route_delayed(
+        CODER,
+        Some(&first),
+        Duration::from_millis(80),
+        vec![coder_done("first")],
+    );
+    h.router.route(
+        CODER,
+        Some(&second),
+        vec![coder_done("second"), coder_done("second again")],
+    );
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+
+    let report = h
+        .pipeline()
+        .run(
+            task.id,
+            RunOptions {
+                complexity_override: Some(Complexity::Trivial),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Ready, "{report:#?}");
+    assert_eq!(h.router.max_in_flight(), 2, "subtasks ran in parallel");
+    assert_eq!(h.router.calls_with_key(&second), 2, "conflict was retried");
+
+    let log = fake.log();
+    assert_eq!(log.first().map(String::as_str), Some("discard_all"));
+    assert_eq!(log.last().map(String::as_str), Some("discard_all"));
+    let integrations: Vec<&str> = log
+        .iter()
+        .filter(|l| l.starts_with("integrate"))
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        integrations,
+        vec!["integrate s2-a1", "integrate s2-a2", "integrate s1-a1"]
+    );
+    for label in ["s1-a1", "s2-a1", "s2-a2"] {
+        assert!(log.contains(&format!("open {label}")), "{log:?}");
+        assert!(log.contains(&format!("discard {label}")), "{log:?}");
+    }
+    // Subtasks are integrated, not committed through the shared committer.
+    assert_eq!(
+        h.commits.lock().unwrap().clone(),
+        vec!["vibe: checkpoint before build".to_string()]
+    );
+    // Each attempt worked in its own workspace.
+    let coders = h.router.calls_for("coder");
+    assert!(
+        coders
+            .iter()
+            .any(|c| c.system.contains("attempt-s1-a1") || c.user.contains("attempt-s1-a1"))
+    );
+    let plan = h.store.load_plan(task.id).await.unwrap().unwrap();
+    assert!(plan.subtasks().all(|s| s.status == SubtaskStatus::Done));
+    let progress = h.store.load_progress(task.id).await.unwrap();
+    assert!(
+        progress.contains("conflict with work integrated since the attempt started"),
+        "{progress}"
+    );
+}
+
+#[tokio::test]
+async fn isolation_can_be_turned_off() {
+    let mut h = Harness::new().await;
+    let fake = Arc::new(FakeSubtasks::default());
+    h.subtasks = Some(fake.clone());
+    h.config.pipeline.isolate_subtasks = false;
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([{"name": "Only", "subtasks": [
+            {"title": "Fix the typo", "description": "edit README"}
+        ]}]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Ready);
+    assert!(fake.log().is_empty());
+    assert_eq!(
+        h.commits.lock().unwrap().clone(),
+        vec!["vibe: complete subtask 1 - Fix the typo".to_string()]
+    );
 }

@@ -53,6 +53,37 @@ a new worktree is created on the existing branch, keeping its commits.
 The project must be a git repository; otherwise opening fails with
 ``<path> is not a git repository; use the in_place workspace or run `git init` ``.
 
+### One worktree per subtask attempt
+
+With `git_worktree` (and `pipeline.isolate_subtasks = true`, the default), every attempt at a
+subtask also gets its own worktree, forked from the current commit of the task branch:
+
+| What | Value |
+|------|-------|
+| directory | `<task worktree>--s<N>-a<attempt>`, for example `.vibe/worktrees/add-oauth-login-github-6f1c3e0a--s2-a1` |
+| branch | `<task branch>--s<N>-a<attempt>`, for example `vibe/add-oauth-login-github-6f1c3e0a--s2-a1` |
+
+Parallel coder sessions therefore never see each other's unfinished edits, and a failed
+attempt is thrown away with its worktree instead of being reset in a shared directory.
+
+When a session reports its subtask done, its work is committed on the attempt branch
+(`vibe: complete subtask 2 - Routes`) and merged into the task branch right away: a
+fast-forward when the task branch did not move, else a merge commit. Integrations happen one
+at a time; sessions that finish together are integrated in plan order, and a subtask starts
+only once the work of its `depends_on` subtasks is integrated. If the merge conflicts with
+work integrated since the attempt started, the merge is aborted (the task branch is left
+exactly as it was), the attempt counts as failed with the conflicting files in its notes,
+and the next attempt starts from the updated task branch.
+
+Attempt worktrees and branches are removed after each attempt and, to clean up after a
+crash, when the build starts and ends. `vibe task discard` removes any that remain. Before
+the first attempt the task worktree is committed as `vibe: checkpoint before build`, so
+attempts fork from everything already in it.
+
+Set `pipeline.isolate_subtasks = false` to have parallel subtasks share the task worktree as
+in 0.1 (completed subtasks are then committed when no other session is running, and failed
+attempts are reset). `in_place` and plugin workspaces always share the task workspace.
+
 ## In-place mode
 
 `pipeline.workspace = "in_place"` makes the project directory itself the workspace. Use it

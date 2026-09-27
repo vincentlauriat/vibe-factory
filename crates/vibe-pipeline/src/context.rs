@@ -10,8 +10,8 @@ use vibe_agents::AgentRunner;
 use vibe_core::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, Complexity, Error, ErrorKind, EventBus,
     ModelProvider, ModelRef, ModelSelection, Permissions, Phase, Plan, Registry, Result, RunBudget,
-    RunId, SecurityConfig, SharedProvider, Spec, Task, TaskStatus, ToolContext, ToolRegistry,
-    ToolSelection, Usage, VibeConfig, Workspace, WorkspaceProvider,
+    RunId, SecurityConfig, SharedProvider, Spec, SubtaskWorkspaces, Task, TaskStatus, ToolContext,
+    ToolRegistry, ToolSelection, Usage, VibeConfig, Workspace, WorkspaceProvider,
 };
 
 use crate::complexity::Profile;
@@ -256,6 +256,8 @@ pub struct RunContext {
     pub committer: Option<Committer>,
     /// Optional reset of the workspace after a failed attempt.
     pub resetter: Option<Resetter>,
+    /// Workspaces of subtask attempts, when the build isolates subtasks.
+    pub subtask_workspaces: Option<Arc<dyn SubtaskWorkspaces>>,
     /// Cancellation token.
     pub cancel: Option<watch::Receiver<bool>>,
     /// Token and duration budget of the run, shared with its agents. A
@@ -328,6 +330,12 @@ impl RunContext {
     /// configuration; tools confined to the workspace with permissions
     /// derived from the agent's tool selection.
     pub fn runner(&self, spec: &AgentSpec) -> Result<AgentRunner> {
+        self.runner_in(spec, self.workspace.root.clone())
+    }
+
+    /// Like [`RunContext::runner`], with tools confined to `root` (the
+    /// workspace of a subtask attempt) instead of the task workspace.
+    pub fn runner_in(&self, spec: &AgentSpec, root: PathBuf) -> Result<AgentRunner> {
         let model = match &spec.model {
             ModelSelection::Fixed(m) => m.clone(),
             ModelSelection::Phase => self.config.model_for(self.phase).0,
@@ -343,7 +351,7 @@ impl RunContext {
         .run_id(self.run_id)
         .task(self.task.clone())
         .context_window(context_window_for(&self.config, &model))
-        .tool_context(ToolContext::new(self.workspace.root.clone()))
+        .tool_context(ToolContext::new(root))
         .permissions(self.permissions(spec))
         .budget(Arc::clone(&self.budget));
         if let Some(c) = &self.cancel {

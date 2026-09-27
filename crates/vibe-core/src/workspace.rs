@@ -142,6 +142,12 @@ pub trait SubtaskWorkspaces: Send + Sync {
     /// Remove a subtask workspace and its resources. Already-missing
     /// resources are not an error.
     async fn discard(&self, subtask: &Workspace) -> Result<()>;
+
+    /// Remove every subtask workspace of `task`, including leftovers of a
+    /// process that died mid-build. Default: nothing to do.
+    async fn discard_all(&self, _task: &Workspace) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Provider that works in place, without any isolation.

@@ -194,6 +194,48 @@ impl SubtaskWorkspaces for GitSubtaskWorkspaces {
         )
         .await
     }
+
+    async fn discard_all(&self, task: &Workspace) -> Result<()> {
+        let Some(task_branch) = task.branch.as_deref() else {
+            return Ok(());
+        };
+        // The project checkout shares the repository and outlives the task
+        // worktree, so this also works after the task worktree is gone.
+        let task_git = Git::new(&task.project_root);
+        let prefix = format!("{task_branch}{SUBTASK_SEPARATOR}");
+        for w in task_git.worktree_list().await? {
+            if w.branch.as_deref().is_some_and(|b| b.starts_with(&prefix)) {
+                remove(&task_git, &w.path, None).await?;
+            }
+        }
+        // Directories git no longer knows about.
+        let dir_prefix = Self::subtask_root(&task.root, "");
+        if let (Some(parent), Some(stem)) = (
+            dir_prefix.parent(),
+            dir_prefix
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned()),
+        ) && tokio::fs::try_exists(parent).await?
+        {
+            let mut entries = tokio::fs::read_dir(parent).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                if entry.file_name().to_string_lossy().starts_with(&stem)
+                    && entry.file_type().await?.is_dir()
+                {
+                    tokio::fs::remove_dir_all(entry.path()).await?;
+                }
+            }
+        }
+        task_git.worktree_prune().await?;
+        let pattern = format!("refs/heads/{prefix}*");
+        let branches = task_git
+            .run(&["for-each-ref", "--format=%(refname:short)", &pattern])
+            .await?;
+        for branch in branches.lines().map(str::trim).filter(|b| !b.is_empty()) {
+            task_git.run(&["branch", "-D", branch]).await?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

@@ -27,6 +27,8 @@ let report = pipeline.resume_with(task_id, options).await?;
 | `config: VibeConfig` | the parsed `.vibe/config.toml` |
 | `project_root: PathBuf` | the project directory |
 | `committer: Option<Committer>` | commits the workspace after subtasks and fixes |
+| `resetter: Option<Resetter>` | discards what a failed attempt left in a shared workspace |
+| `subtask_workspaces: Option<Arc<dyn SubtaskWorkspaces>>` | one workspace per subtask attempt (the CLI plugs `GitSubtaskWorkspaces` for `git_worktree`) |
 
 | `RunOptions` field | Effect |
 |--------------------|--------|
@@ -192,10 +194,22 @@ is allowed). After the last attempt the subtask is **failed**, a line is added t
 transitively, becomes **skipped**. Failures do not skip later phases by ordering alone.
 Pending subtasks that can never become ready are skipped as "blocked by the plan ordering".
 
-Commits are **deferred**: the committer stages the whole workspace, so completed subtasks
-are committed only when no other session is running, possibly several in one commit
-(`vibe: complete subtask 2 - Routes`, `vibe: complete subtasks 2, 3 - Routes; Login page`).
-A failed commit is logged and noted, never fatal.
+**Isolated subtasks.** When `subtask_workspaces` is set and `pipeline.isolate_subtasks` is
+true, `launch` opens a workspace labelled `s<N>-a<attempt>` forked from the task workspace
+and the session's tools are confined to it (`RunContext::runner_in`). The scheduler awaits
+one finished session, drains every other session that already finished (`now_or_never`),
+and handles the batch in plan order. A successful attempt is integrated right away with
+`SubtaskWorkspaces::integrate`; a `Conflict` or an error turns it into a failed attempt with
+the reason in its notes. Every attempt workspace is discarded after its outcome is known;
+`discard_all` runs when the build starts (after a `vibe: checkpoint before build` commit)
+and when it ends or is cancelled. Nothing is deferred: the task workspace only changes
+through integrations, which the scheduler serialises.
+
+**Shared workspace.** Otherwise commits are **deferred**: the committer stages the whole
+workspace, so completed subtasks are committed only when no other session is running,
+possibly several in one commit (`vibe: complete subtask 2 - Routes`,
+`vibe: complete subtasks 2, 3 - Routes; Login page`). A failed commit is logged and noted,
+never fatal.
 
 The build continues to QA when at least one subtask is done and none is pending; its
 `success` flag is false if any subtask failed or was skipped. Otherwise the run fails with

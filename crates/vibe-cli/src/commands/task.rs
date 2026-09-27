@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use serde_json::json;
-use vibe_core::{Task, TaskStatus, TaskStore, WorkspaceProvider};
+use vibe_core::{SubtaskWorkspaces, Task, TaskStatus, TaskStore, WorkspaceProvider};
 use vibe_pipeline::{FileTaskStore, PipelineStore};
 
 use super::{resolve_task, task_number};
@@ -334,6 +334,10 @@ async fn discard(
         "git_worktree" => {
             if is_git_repo(root).await {
                 let ws = app::worktree_workspace(root, &task);
+                vibe_workspace::GitSubtaskWorkspaces::new()
+                    .discard_all(&ws)
+                    .await
+                    .context("cannot discard the task's subtask worktrees")?;
                 vibe_workspace::GitWorktreeProvider::new()
                     .with_base_branch(config.base_branch.clone())
                     .discard(&ws)

@@ -43,6 +43,9 @@
 //!   human review, [`GitWorktreeProvider::accept_config_changes`] records the
 //!   current configuration as the new baseline.
 //!
+//! [`GitSubtaskWorkspaces`] adds one worktree per subtask attempt, forked
+//! from the task branch and merged back one at a time (see [`subtask`]).
+//!
 //! [`InPlaceWorkspace`] (`"in_place"`) works directly in the project
 //! directory, without isolation.
 //!

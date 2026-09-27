@@ -43,6 +43,11 @@ pub struct PipelineDeps {
     pub committer: Option<Committer>,
     /// Discards the changes of a failed subtask attempt (see [`Resetter`]).
     pub resetter: Option<Resetter>,
+    /// Gives every subtask attempt its own workspace (see
+    /// [`vibe_core::SubtaskWorkspaces`]); used when
+    /// `pipeline.isolate_subtasks` is true. `None` shares the task
+    /// workspace between parallel subtasks.
+    pub subtask_workspaces: Option<Arc<dyn vibe_core::SubtaskWorkspaces>>,
 }
 
 impl std::fmt::Debug for PipelineDeps {
@@ -372,6 +377,7 @@ impl Pipeline {
             events: events.clone(),
             committer: self.deps.committer.clone(),
             resetter: self.deps.resetter.clone(),
+            subtask_workspaces: self.deps.subtask_workspaces.clone(),
             cancel: options.cancel.clone(),
             budget,
             complexity_override: options.complexity_override,

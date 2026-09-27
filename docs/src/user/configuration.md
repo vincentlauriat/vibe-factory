@@ -103,6 +103,7 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in [Providers and models](pro
 | `validation_commands` | list of strings | `[]` | mandatory shell checks before ready/merge; see below |
 | `max_validation_fix_attempts` | integer | `2` | automatic validation fixes over the whole run, including resumes; `0` disables them |
 | `merge_strategy` | `"manual"` or `"assisted"` | `"manual"` | `manual` reports conflicts for a human; `assisted` lets a model resolve conflict markers first |
+| `isolate_subtasks` | bool | `true` | with `git_worktree`, one worktree per subtask attempt, integrated one at a time; see [Workspaces](workspaces.md#one-worktree-per-subtask-attempt) |
 | `max_tokens` | integer | none | input plus output tokens of the whole run, including resumes; the run pauses when reached |
 | `max_duration_secs` | integer | none | active time of the whole run in seconds, including resumes; the run pauses when reached |
 

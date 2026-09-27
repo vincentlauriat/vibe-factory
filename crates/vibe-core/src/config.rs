@@ -113,6 +113,12 @@ pub struct PipelineConfig {
     /// `assisted` (let the `merge_resolver` agent's model try first).
     #[serde(default)]
     pub merge_strategy: MergeStrategy,
+    /// Give every subtask attempt its own workspace when the workspace
+    /// provider supports it (`git_worktree`), and integrate finished
+    /// subtasks one at a time. When false, parallel subtasks share the task
+    /// workspace.
+    #[serde(default = "default_true")]
+    pub isolate_subtasks: bool,
     /// Maximum input plus output tokens of a run, counted across resumes.
     /// When reached the run pauses; raise the limit and resume to continue.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -147,6 +153,10 @@ pub enum MergeStrategy {
     Assisted,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 fn default_validation_fix_attempts() -> u32 {
     2
 }
@@ -179,6 +189,7 @@ impl Default for PipelineConfig {
             validation_commands: Vec::new(),
             max_validation_fix_attempts: default_validation_fix_attempts(),
             merge_strategy: MergeStrategy::Manual,
+            isolate_subtasks: true,
             max_tokens: None,
             max_duration_secs: None,
         }
