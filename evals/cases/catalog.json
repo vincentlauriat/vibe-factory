@@ -1,7 +1,7 @@
 {
   "id": "catalog",
   "title": "Share case-insensitive catalog lookup",
-  "task": "Make find and search use the same ASCII case-insensitive comparison helper in a separate module. find returns the first exact match; search returns all substring matches in input order. Preserve public APIs. Add tests covering both functions and empty queries.",
+  "task": "Put a single ASCII case-insensitive equality function in a separate module and build both find and search on it: find compares whole items with it, search compares it against each candidate substring of an item. find returns the first exact match; search returns all substring matches in input order. Preserve public APIs. Add tests covering both functions and empty queries.",
   "files": {
     "src/lib.rs": "mod lookup;\nmod search;\npub use lookup::find;\npub use search::search;\n",
     "src/lookup.rs": "pub fn find<'a>(items: &[&'a str], query: &str) -> Option<&'a str> {\n    items.iter().copied().find(|item| *item == query)\n}\n",

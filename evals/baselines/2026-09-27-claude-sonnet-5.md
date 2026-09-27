@@ -42,9 +42,8 @@ baseline commit for what they miss:
 * `money`: in the three runs, `invoice_line` and `refund_line` are one line each, a call to
   `crate::money::format_cents`; no formatting code is left in either module.
 * `catalog`: the three runs moved the comparison into a separate module used by both `find`
-  and `search`, but only one has a single helper. In the two others the module holds two
-  functions, an equality for `find` and a substring test for `search`, with the same ASCII
-  semantics but independent code (one uses `to_ascii_lowercase`, the other byte windows).
-  The task asks for "the same comparison helper", so these two runs meet the letter of the
-  oracle, not quite the intent. The case could say that `search` must be built on the
-  helper `find` uses.
+  and `search`. One has a single helper; the two others hold two functions, an equality for
+  `find` and a substring test for `search`, with the same ASCII semantics but independent
+  code. The reference solution had that same two-function shape, so these runs match the
+  task as it was written. The task was then made explicit (one equality function that both
+  build on) and the reference aligned; see the rerun below.
