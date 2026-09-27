@@ -17,7 +17,7 @@ use vibe_core::{
     TaskStore, ToolRegistry, VibeConfig,
 };
 use vibe_pipeline::{
-    Committer, FileTaskStore, Pipeline, PipelineDeps, PipelineStore, ProviderResolver,
+    Committer, FileTaskStore, Pipeline, PipelineDeps, PipelineStore, ProviderResolver, Resetter,
 };
 
 /// Marker found in the system prompt of each built-in role.
@@ -291,6 +291,10 @@ pub struct Harness {
     pub events: EventBus,
     pub collector: Arc<Collector>,
     pub commits: Arc<Mutex<Vec<String>>>,
+    /// Commits (`commit: <message>`) and resets (`reset`) in call order.
+    pub journal: Arc<Mutex<Vec<String>>>,
+    /// Plug a counting resetter into the pipeline.
+    pub use_resetter: bool,
     /// When set, the committer flips this cancel token on its first call.
     pub cancel_on_commit: Arc<Mutex<Option<watch::Sender<bool>>>>,
     pub config: VibeConfig,
@@ -313,6 +317,8 @@ impl Harness {
             events,
             collector,
             commits: Arc::new(Mutex::new(Vec::new())),
+            journal: Arc::new(Mutex::new(Vec::new())),
+            use_resetter: false,
             cancel_on_commit: Arc::new(Mutex::new(None)),
             config,
             registry: Registry::new(),
@@ -331,11 +337,14 @@ impl Harness {
 
     pub fn committer(&self) -> Committer {
         let commits = self.commits.clone();
+        let journal = self.journal.clone();
         let cancel = self.cancel_on_commit.clone();
         Arc::new(move |_root, message| {
             let commits = commits.clone();
+            let journal = journal.clone();
             let cancel = cancel.clone();
             Box::pin(async move {
+                journal.lock().unwrap().push(format!("commit: {message}"));
                 commits.lock().unwrap().push(message);
                 if let Some(tx) = cancel.lock().unwrap().take() {
                     let _ = tx.send(true);
@@ -343,6 +352,26 @@ impl Harness {
                 Ok(Some("abc123".to_string()))
             })
         })
+    }
+
+    pub fn resetter(&self) -> Resetter {
+        let journal = self.journal.clone();
+        Arc::new(move |_root| {
+            let journal = journal.clone();
+            Box::pin(async move {
+                journal.lock().unwrap().push("reset".to_string());
+                Ok(())
+            })
+        })
+    }
+
+    pub fn resets(&self) -> usize {
+        self.journal
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| *e == "reset")
+            .count()
     }
 
     pub fn pipeline(&self) -> Pipeline {
@@ -357,6 +386,7 @@ impl Harness {
             config: self.config.clone(),
             project_root: self.root(),
             committer: Some(self.committer()),
+            resetter: self.use_resetter.then(|| self.resetter()),
         })
     }
 

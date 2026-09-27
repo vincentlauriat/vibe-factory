@@ -14,7 +14,7 @@ use vibe_core::{
 
 use crate::complexity::{Profile, heuristic_complexity, profile_for};
 use crate::context::{
-    Committer, PhaseResult, ProviderResolver, RunContext, Transition, usage_delta,
+    Committer, PhaseResult, ProviderResolver, Resetter, RunContext, Transition, usage_delta,
 };
 use crate::phases;
 use crate::state::{RunState, RunStatus};
@@ -41,6 +41,8 @@ pub struct PipelineDeps {
     pub project_root: PathBuf,
     /// Commits the workspace after each successful subtask and QA fix.
     pub committer: Option<Committer>,
+    /// Discards the changes of a failed subtask attempt (see [`Resetter`]).
+    pub resetter: Option<Resetter>,
 }
 
 impl std::fmt::Debug for PipelineDeps {
@@ -341,6 +343,7 @@ impl Pipeline {
             tools: self.tools.clone(),
             events: events.clone(),
             committer: self.deps.committer.clone(),
+            resetter: self.deps.resetter.clone(),
             cancel: options.cancel.clone(),
             complexity_override: options.complexity_override,
             spec,

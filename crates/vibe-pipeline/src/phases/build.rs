@@ -31,6 +31,11 @@
 //! commit taken while a sibling session edits files would capture half of
 //! its work). Subtasks finishing together share one commit.
 //!
+//! After a failed attempt, the injected resetter discards the changes it
+//! left, once no other session is running; until then no new session
+//! starts, so a retry always begins from the last commit. Without a
+//! resetter the changes stay in place and a progress note says so.
+//!
 //! Each session runs in its own tokio task; the tasks are aborted when the
 //! build ends early or its future is dropped.
 
@@ -387,6 +392,10 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
     // Subtasks done but not committed yet: the committer stages the whole
     // workspace, so commits wait until no other session is editing it.
     let mut to_commit: Vec<(usize, String)> = Vec::new();
+    // Failed attempts whose leftovers must be discarded once no session is
+    // editing the workspace. While any is pending, no session starts, so a
+    // retry never begins from a dirty tree.
+    let mut to_reset: Vec<String> = Vec::new();
     let mut cancelled = false;
 
     loop {
@@ -407,7 +416,7 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
                     .await?;
             }
         }
-        while in_flight.len() < max_parallel {
+        while in_flight.len() < max_parallel && to_reset.is_empty() {
             let Some(id) = next_ready(&plan, &preds, &in_flight) else {
                 break;
             };
@@ -515,6 +524,7 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
             Some(why) => {
                 sub.notes
                     .push_str(&format!("Attempt {attempt} failed: {why}\n"));
+                let what = format!("attempt {attempt} of subtask {n} `{title}`");
                 let give_up = attempt >= max_attempts;
                 sub.status = if give_up {
                     SubtaskStatus::Failed
@@ -522,6 +532,11 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
                     SubtaskStatus::Pending
                 };
                 ctx.store.save_plan(&plan).await?;
+                if ctx.resetter.is_some() {
+                    to_reset.push(what);
+                } else {
+                    ctx.reset_workspace(&what).await;
+                }
                 if give_up {
                     publish_status(ctx, id, SubtaskStatus::Failed).await;
                     ctx.note(&format!(
@@ -553,9 +568,18 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
             }
         }
         ctx.plan = Some(plan.clone());
-        if in_flight.is_empty() && !to_commit.is_empty() {
-            ctx.commit(&commit_message(&to_commit)).await;
-            to_commit.clear();
+        if in_flight.is_empty() {
+            // Completed work is committed first so that the reset below can
+            // never discard it; the reset then removes whatever the failed
+            // attempts left behind.
+            if !to_commit.is_empty() {
+                ctx.commit(&commit_message(&to_commit)).await;
+                to_commit.clear();
+            }
+            if !to_reset.is_empty() {
+                ctx.reset_workspace(&to_reset.join(", ")).await;
+                to_reset.clear();
+            }
         }
     }
 

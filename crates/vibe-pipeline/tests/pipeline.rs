@@ -807,6 +807,7 @@ async fn auto_merge_conflicts_leave_task_ready() {
         config: h.config.clone(),
         project_root: h.root(),
         committer: None,
+        resetter: None,
     });
     let report = pipeline.run(task.id, RunOptions::default()).await.unwrap();
     assert_eq!(report.final_status, TaskStatus::Ready);
@@ -867,4 +868,114 @@ fn run_futures_are_send(pipeline: &vibe_pipeline::Pipeline, id: vibe_core::TaskI
     assert_send(&pipeline.resume(id));
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<vibe_pipeline::Pipeline>();
+}
+
+#[tokio::test]
+async fn failed_attempt_is_reset_before_the_retry() {
+    let mut h = Harness::new().await;
+    h.use_resetter = true;
+    h.config.pipeline.max_parallel_subtasks = 1;
+    let task = h.task("Fix typo in docs", "").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "W", "subtasks": [{"title": "Flaky", "description": "f"}]}
+        ]))],
+    );
+    h.router.route(
+        CODER,
+        None,
+        vec![coder_failed("broke the build"), coder_done("fixed")],
+    );
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Ready);
+    assert_eq!(h.resets(), 1);
+    assert_eq!(
+        h.journal.lock().unwrap().clone(),
+        vec![
+            "reset".to_string(),
+            "commit: vibe: complete subtask 1 - Flaky".to_string()
+        ]
+    );
+    let progress = h.store.load_progress(task.id).await.unwrap();
+    assert!(progress.contains("Workspace reset after attempt 1 of subtask 1 `Flaky`"));
+}
+
+#[tokio::test]
+async fn reset_waits_for_running_sessions_and_blocks_new_ones() {
+    let mut h = Harness::new().await;
+    h.use_resetter = true;
+    h.config.pipeline.max_parallel_subtasks = 2;
+    let task = h.task("Fix typo in docs", "").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "W", "parallel": true, "subtasks": [
+                {"title": "Slow", "description": "s"},
+                {"title": "Bad", "description": "b"}
+            ]}
+        ]))],
+    );
+    h.router.route_delayed(
+        CODER,
+        Some(&subtask_key(1, 2, "Slow")),
+        Duration::from_millis(150),
+        vec![coder_done("slow")],
+    );
+    h.router.route(
+        CODER,
+        Some(&subtask_key(2, 2, "Bad")),
+        vec![coder_failed("oops"), coder_done("bad fixed")],
+    );
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Ready);
+    // Bad failed while Slow was running: the reset waited for Slow (whose
+    // work was committed first) and Bad's retry only started afterwards.
+    assert_eq!(
+        h.journal.lock().unwrap().clone(),
+        vec![
+            "commit: vibe: complete subtask 1 - Slow".to_string(),
+            "reset".to_string(),
+            "commit: vibe: complete subtask 2 - Bad".to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn without_resetter_leftovers_are_noted() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.max_subtask_attempts = 2;
+    let task = h.task("Fix typo in docs", "").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "W", "subtasks": [{"title": "Flaky", "description": "f"}]}
+        ]))],
+    );
+    h.router.route(CODER, None, vec![coder_failed("nope")]);
+    h.router
+        .route(RECOVERY, None, vec![coder_done("recovered")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Ready);
+    assert_eq!(h.resets(), 0);
+    let progress = h.store.load_progress(task.id).await.unwrap();
+    assert!(progress.contains("attempt 1 of subtask 1 `Flaky` left uncommitted changes in place"));
 }

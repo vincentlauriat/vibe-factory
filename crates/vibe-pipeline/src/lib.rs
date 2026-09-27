@@ -110,7 +110,8 @@ pub use complexity::{
     AssessmentOutput, Profile, heuristic_complexity, parse_complexity, profile_for,
 };
 pub use context::{
-    Committer, PhaseResult, ProviderResolver, RegistryResolver, RunContext, Transition,
+    Committer, PhaseResult, ProviderResolver, RegistryResolver, Resetter, RunContext, Transition,
+    context_window_for, permissions_for,
 };
 pub use kickoff::{Kickoff, KickoffData, kickoff_for};
 pub use pipeline::{Pipeline, PipelineDeps, RunOptions, RunReport, default_profile};

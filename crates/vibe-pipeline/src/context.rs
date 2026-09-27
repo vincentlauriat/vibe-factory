@@ -10,8 +10,8 @@ use vibe_agents::AgentRunner;
 use vibe_core::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, Complexity, Error, ErrorKind, EventBus,
     ModelProvider, ModelRef, ModelSelection, Permissions, Phase, Plan, Registry, Result, RunId,
-    SharedProvider, Spec, Task, TaskStatus, ToolContext, ToolRegistry, Usage, VibeConfig,
-    Workspace, WorkspaceProvider,
+    SecurityConfig, SharedProvider, Spec, Task, TaskStatus, ToolContext, ToolRegistry,
+    ToolSelection, Usage, VibeConfig, Workspace, WorkspaceProvider,
 };
 
 use crate::complexity::Profile;
@@ -104,6 +104,61 @@ impl ProviderResolver for RegistryResolver {
 /// ```
 pub type Committer =
     Arc<dyn Fn(PathBuf, String) -> BoxFuture<'static, Result<Option<String>>> + Send + Sync>;
+
+/// Discards the uncommitted changes left in a workspace (argument: the
+/// workspace root) after a failed subtask attempt, so that the next attempt
+/// starts from the last commit and leftovers never reach another subtask's
+/// commit. The `.vibe` directory must be preserved.
+///
+/// The CLI plugs a git implementation in, equivalent to
+/// `git checkout -- . && git clean -fd -e .vibe`:
+///
+/// ```
+/// # use std::path::Path;
+/// # use std::sync::Arc;
+/// # use vibe_pipeline::Resetter;
+/// # async fn discard_changes(_root: &Path) -> vibe_core::Result<()> { Ok(()) }
+/// let resetter: Resetter = Arc::new(|root| Box::pin(async move { discard_changes(&root).await }));
+/// ```
+pub type Resetter = Arc<dyn Fn(PathBuf) -> BoxFuture<'static, Result<()>> + Send + Sync>;
+
+/// Permissions matching an agent's tool selection:
+///
+/// | Selection | read | write | execute |
+/// |-----------|------|-------|---------|
+/// | `None`, `ReadOnly` | yes | no | no |
+/// | `ReadWrite` | yes | yes | no |
+/// | `All`, `Named` | yes | yes | yes |
+///
+/// `network` and `extra_read_paths` always come from the security
+/// configuration.
+#[must_use]
+pub fn permissions_for(selection: &ToolSelection, security: &SecurityConfig) -> Permissions {
+    let mut p = match selection {
+        ToolSelection::None | ToolSelection::ReadOnly => Permissions::read_only(),
+        ToolSelection::ReadWrite => Permissions {
+            write: true,
+            ..Permissions::read_only()
+        },
+        ToolSelection::All | ToolSelection::Named(_) => Permissions::local(),
+    };
+    p.network = security.allow_network;
+    p.extra_read_paths = security.extra_read_paths.clone();
+    p
+}
+
+/// Context window (tokens) of `model`: the `context_window` of its provider
+/// configuration, else `vibe_agents::DEFAULT_CONTEXT_WINDOW`.
+#[must_use]
+pub fn context_window_for(config: &VibeConfig, model: &ModelRef) -> usize {
+    config
+        .providers
+        .get(&model.provider)
+        .and_then(|p| p.context_window)
+        .and_then(|w| usize::try_from(w).ok())
+        .filter(|w| *w > 0)
+        .unwrap_or(vibe_agents::DEFAULT_CONTEXT_WINDOW)
+}
 
 /// What the pipeline does after a phase.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -199,6 +254,8 @@ pub struct RunContext {
     pub events: EventBus,
     /// Optional per-subtask committer.
     pub committer: Option<Committer>,
+    /// Optional reset of the workspace after a failed attempt.
+    pub resetter: Option<Resetter>,
     /// Cancellation token.
     pub cancel: Option<watch::Receiver<bool>>,
     /// Complexity forced by the caller.
@@ -256,20 +313,16 @@ impl RunContext {
         Ok(spec)
     }
 
-    /// Tool permissions granted by the configuration.
+    /// Tool permissions of an agent (see [`permissions_for`]).
     #[must_use]
-    pub fn permissions(&self) -> Permissions {
-        Permissions {
-            read: true,
-            write: true,
-            execute: true,
-            network: self.config.security.allow_network,
-            extra_read_paths: self.config.security.extra_read_paths.clone(),
-        }
+    pub fn permissions(&self, spec: &AgentSpec) -> Permissions {
+        permissions_for(&spec.tools, &self.config.security)
     }
 
     /// Agent runner for `spec`: model from the spec when fixed, else the
-    /// model of the current phase; tools confined to the workspace.
+    /// model of the current phase; context window from the provider
+    /// configuration; tools confined to the workspace with permissions
+    /// derived from the agent's tool selection.
     pub fn runner(&self, spec: &AgentSpec) -> Result<AgentRunner> {
         let model = match &spec.model {
             ModelSelection::Fixed(m) => m.clone(),
@@ -285,8 +338,9 @@ impl RunContext {
         )
         .run_id(self.run_id)
         .task(self.task.clone())
+        .context_window(context_window_for(&self.config, &model))
         .tool_context(ToolContext::new(self.workspace.root.clone()))
-        .permissions(self.permissions());
+        .permissions(self.permissions(spec));
         if let Some(c) = &self.cancel {
             runner = runner.cancel_token(c.clone());
         }
@@ -374,6 +428,41 @@ impl RunContext {
     }
 }
 
+impl RunContext {
+    /// Discard the workspace changes through the injected resetter. Returns
+    /// `false` (after a progress note) when no resetter is configured or
+    /// the reset failed.
+    pub async fn reset_workspace(&self, what: &str) -> bool {
+        let Some(resetter) = self.resetter.as_ref() else {
+            let _ = self
+                .note(&format!("{what} left uncommitted changes in place"))
+                .await;
+            return false;
+        };
+        match resetter(self.workspace.root.clone()).await {
+            Ok(()) => {
+                let _ = self.note(&format!("Workspace reset after {what}.")).await;
+                true
+            }
+            Err(e) => {
+                self.events
+                    .log(
+                        Some(self.run_id),
+                        "warn",
+                        format!("workspace reset failed: {e}"),
+                    )
+                    .await;
+                let _ = self
+                    .note(&format!(
+                        "Workspace reset after {what} failed ({e}); its changes are still in place"
+                    ))
+                    .await;
+                false
+            }
+        }
+    }
+}
+
 /// `after - before`, field by field.
 #[must_use]
 pub fn usage_delta(after: Usage, before: Usage) -> Usage {
@@ -420,6 +509,52 @@ mod tests {
         });
         let sha = c(PathBuf::from("/w"), "msg".into()).await.unwrap();
         assert_eq!(sha.as_deref(), Some("/w:msg"));
+    }
+
+    #[test]
+    fn permissions_follow_tool_selection() {
+        let mut security = SecurityConfig::default();
+        let p = permissions_for(&ToolSelection::None, &security);
+        assert!(p.read && !p.write && !p.execute && !p.network);
+        let p = permissions_for(&ToolSelection::ReadOnly, &security);
+        assert!(p.read && !p.write && !p.execute);
+        let p = permissions_for(&ToolSelection::ReadWrite, &security);
+        assert!(p.read && p.write && !p.execute);
+        let p = permissions_for(&ToolSelection::All, &security);
+        assert!(p.read && p.write && p.execute && !p.network);
+        let p = permissions_for(&ToolSelection::Named(vec!["bash".into()]), &security);
+        assert!(p.write && p.execute);
+        security.allow_network = true;
+        security.extra_read_paths.push(PathBuf::from("/opt/docs"));
+        for sel in [
+            ToolSelection::None,
+            ToolSelection::ReadWrite,
+            ToolSelection::All,
+        ] {
+            let p = permissions_for(&sel, &security);
+            assert!(p.network);
+            assert_eq!(p.extra_read_paths, vec![PathBuf::from("/opt/docs")]);
+        }
+    }
+
+    #[test]
+    fn context_window_from_provider_config() {
+        let mut config = VibeConfig::default();
+        let m = ModelRef::new("anthropic", "x");
+        assert_eq!(
+            context_window_for(&config, &m),
+            vibe_agents::DEFAULT_CONTEXT_WINDOW
+        );
+        config
+            .providers
+            .get_mut("anthropic")
+            .expect("built-in provider")
+            .context_window = Some(32_000);
+        assert_eq!(context_window_for(&config, &m), 32_000);
+        assert_eq!(
+            context_window_for(&config, &ModelRef::new("unknown", "y")),
+            vibe_agents::DEFAULT_CONTEXT_WINDOW
+        );
     }
 
     #[test]
