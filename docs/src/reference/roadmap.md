@@ -31,14 +31,26 @@ Carried over: a published real-model baseline. The harness is ready
 ([evals/README.md](https://github.com/vincentlauriat/vibe-factory/blob/main/evals/README.md));
 no score will be claimed before it has been run with repetitions on named models.
 
-## 0.3 — interaction and capabilities
+## 0.3 — interaction foundations and terminal UI
+
+The engine learns to stream, to wait for a human and to outlive the terminal that started
+it, then gets a terminal UI. See [ADR-007](../design/adr/007-one-seam-many-interfaces.md).
 
 - [ ] Real-model evaluation baseline, published with the framework commit and models used
-- [ ] Streaming completions and live token output
-- [ ] Terminal UI board with live events
+- [ ] Streaming completions and live agent text
+- [ ] Events v2: sequence numbers, schema version, validation, integration, budget and
+      artefact events, replay and follow
+- [ ] Human approvals after spec, plan or before merge
+- [ ] Run manager and cross-process locking of `.vibe/`
+- [ ] Terminal UI: task board and live run view
+
+## 0.4 — server, web UI and integrations
+
+- [ ] `vibe serve`: HTTP API and server-sent events over the run manager
+- [ ] Local web UI: board, run timeline, diff, plan editing, approvals, evaluation dashboard
+- [ ] Issue importers and pull request creation
 - [ ] Web fetch and search tools
-- [ ] Richer persistent memory across tasks
-- [ ] HTTP/WebSocket server and issue tracker importers
+- [ ] Persistent memory across tasks
 
 ## Ideas
 
