@@ -164,9 +164,11 @@ impl Tool for BashTool {
          return its combined stdout and stderr followed by the exit code. Use it for builds, \
          tests, git and other command-line tools; prefer `read_file`, `grep`, `glob` and \
          `edit_file` for reading, searching and editing files. Every command is checked by a \
-         security policy: privilege escalation, system administration, destructive `rm` \
-         targets, force-pushes to main/master, git identity changes and (unless network \
-         access is granted) network tools are refused with an explanation. `cwd` is a \
+         security policy: privilege escalation, system administration, force-pushes to \
+         main/master, git configuration changes, overriding PATH-like variables and (unless \
+         network access is granted) network tools are refused with an explanation. Paths \
+         that are removed, written by a redirection or entered with `cd` must be exact \
+         (no `~`, `$VAR` or wildcards) and inside the workspace. `cwd` is a \
          directory inside the workspace (default: the root). The command is killed after \
          `timeout_secs` (default from the project configuration, at most 600). Output longer \
          than 30000 characters keeps its beginning and end. Commands run non-interactively \
@@ -195,9 +197,10 @@ impl Tool for BashTool {
             return Ok(permission_denied("execute commands"));
         }
         let input: Input = try_output!(parse_input(self.name(), input));
-        if let Err(reason) = self
-            .policy
-            .validate_with_network(&input.command, ctx.permissions.network)
+        let root = workspace_root(ctx);
+        if let Err(reason) =
+            self.policy
+                .validate_command(&input.command, ctx.permissions.network, Some(&root))
         {
             let mut out =
                 ToolOutput::error(format!("Command denied by the security policy: {reason}"));
@@ -471,5 +474,34 @@ mod tests {
             out.content
         );
         assert!(!outside.path().join("pwned").exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn paths_are_confined_to_the_workspace() {
+        let (dir, ctx) = workspace();
+        let outside = tempfile::tempdir().unwrap();
+        let target = outside.path().join("escape.txt");
+        for cmd in [
+            format!("echo x > {}", target.display()),
+            format!("rm -f {}", target.display()),
+            "echo x > ../escape.txt".to_string(),
+            "cd .. && ls".to_string(),
+        ] {
+            let out = run(&ctx, json!({"command": cmd})).await;
+            assert!(
+                out.is_error && out.content.contains("security policy"),
+                "{cmd}"
+            );
+        }
+        assert!(!target.exists());
+        let inside = dir.path().canonicalize().unwrap().join("inside.txt");
+        let out = run(
+            &ctx,
+            json!({"command": format!("echo x > {}", inside.display())}),
+        )
+        .await;
+        assert!(!out.is_error, "{}", out.content);
+        assert!(inside.exists());
     }
 }

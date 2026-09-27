@@ -1,42 +1,93 @@
 //! A conservative POSIX shell command-line parser.
 //!
 //! The parser does not execute or expand anything. Its only job is to find
-//! every program a command line would start, so that the security policy can
-//! check each of them. It therefore:
+//! every program a command line would start, together with the context the
+//! security policy needs, so that each of them can be checked. It therefore:
 //!
-//! - splits on `|`, `||`, `|&`, `&&`, `;`, `&` and newlines;
+//! - splits on `|`, `||`, `|&`, `&&`, `;`, `&` and newlines, remembering which
+//!   commands form a pipeline;
 //! - recursively extracts the commands inside `$( … )`, backticks, subshells
 //!   `( … )` and process substitutions `<( … )` / `>( … )`;
-//! - drops redirections (`>`, `2>&1`, `<<EOF` …) and their targets, and skips
-//!   here-document bodies;
-//! - strips leading environment assignments (`FOO=bar cmd`) and wrapper
-//!   programs (`env`, `time`, `nice`, `nohup`, `exec`, `command`, `builtin`,
-//!   `timeout`, `xargs`);
+//! - records redirections (`>`, `2>&1`, `<<EOF` …) with their targets and
+//!   skips here-document bodies;
+//! - records leading environment assignments (`FOO=bar cmd`, `env FOO=bar
+//!   cmd`) and loop variables (`for NAME in …`);
+//! - strips wrapper programs (`env`, `time`, `nice`, `nohup`, `exec`,
+//!   `command`, `builtin`, `timeout`, `xargs`, `setsid`, `stdbuf`,
+//!   `caffeinate`, `chronic`, `unbuffer`, `ionice`, `taskset`, `flock`,
+//!   `watch`, `strace`, `ltrace`, `script`, `busybox`, `toybox`) and parses the
+//!   command strings some of them take (`flock -c`, `watch`, `script -c`);
 //! - removes quotes and backslash escapes from every word.
 //!
 //! Anything it does not understand (unbalanced quotes or parentheses, `case`
-//! statements, `env -S`, …) is reported as a [`ParseError`]. Callers must treat
-//! an error as a denial.
+//! statements, `env -S`, `xargs` without an explicit program, …) is reported
+//! as a [`ParseError`]. Callers must treat an error as a denial.
 
 /// Maximum nesting of command substitutions, subshells and `sh -c` strings.
 pub const MAX_NESTING_DEPTH: usize = 16;
 
-/// One simple command found in a command line.
+/// A redirection attached to a command, such as `> out.txt` or `2>&1`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Redirection {
+    /// The operator without its file-descriptor prefix: `>`, `>>`, `>|`,
+    /// `>&`, `&>`, `&>>`, `<`, `<>`, `<&`, `<<`, `<<-` or `<<<`.
+    pub operator: String,
+    /// The target word after quote removal (a file, a descriptor number or a
+    /// here-document delimiter).
+    pub target: String,
+}
+
+impl Redirection {
+    /// Whether this redirection creates or writes a file.
+    #[must_use]
+    pub fn writes_file(&self) -> bool {
+        match self.operator.as_str() {
+            ">" | ">>" | ">|" | "&>" | "&>>" | "<>" => true,
+            ">&" => !(self.target == "-" || self.target.chars().all(|c| c.is_ascii_digit())),
+            _ => false,
+        }
+    }
+}
+
+/// One simple command found in a command line.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CommandSegment {
     /// Normalised program name: the last path component of the first word,
     /// lowercased, with a trailing `.exe` removed (`/usr/bin/Git.exe` → `git`).
+    /// Empty when the command only assigns variables or redirects.
     pub program: String,
     /// The words of the command after quote removal, starting with the
-    /// program exactly as written.
+    /// program exactly as written. Empty when `program` is empty.
     pub argv: Vec<String>,
+    /// Environment or shell variables set by the command, as `(name, value)`:
+    /// leading `NAME=value` words, `env NAME=value` arguments and `for NAME`
+    /// loop variables.
+    pub assignments: Vec<(String, String)>,
+    /// Redirections of the command.
+    pub redirections: Vec<Redirection>,
+    /// Wrapper programs stripped in front of the program, outermost first
+    /// (normalised like `program`).
+    pub wrappers: Vec<String>,
+    /// Identifier of the pipeline the command belongs to. Commands joined by
+    /// `|` share it; identifiers are unique within one parse result.
+    pub pipeline: usize,
+    /// Whether the command's standard input comes from a previous command of
+    /// the same pipeline.
+    pub piped_input: bool,
 }
 
 impl CommandSegment {
     /// Arguments after the program word.
     #[must_use]
     pub fn args(&self) -> &[String] {
-        &self.argv[1..]
+        self.argv.get(1..).unwrap_or(&[])
+    }
+
+    /// Whether the segment runs a program (as opposed to only assigning
+    /// variables or redirecting).
+    #[must_use]
+    pub fn is_command(&self) -> bool {
+        !self.program.is_empty()
     }
 }
 
@@ -67,9 +118,20 @@ pub(crate) fn parse_at_depth(input: &str, depth: usize) -> Result<Vec<CommandSeg
     }
     let lexer = Lexer::new(input, depth);
     let (tokens, nested) = lexer.run()?;
-    let mut segments = build_segments(tokens)?;
-    segments.extend(nested);
+    let mut segments = build_segments(tokens, depth)?;
+    for group in nested {
+        merge(&mut segments, group);
+    }
     Ok(segments)
+}
+
+/// Append `more` to `out`, renumbering its pipelines so they stay distinct.
+fn merge(out: &mut Vec<CommandSegment>, more: Vec<CommandSegment>) {
+    let base = out.iter().map(|s| s.pipeline + 1).max().unwrap_or(0);
+    out.extend(more.into_iter().map(|mut s| {
+        s.pipeline += base;
+        s
+    }));
 }
 
 /// Normalise a program word into a comparable program name.
@@ -100,8 +162,8 @@ struct Word {
 #[derive(Debug)]
 enum Token {
     Word(Word),
-    Separator,
-    Redirect,
+    Separator { pipe: bool },
+    Redirect(String),
 }
 
 #[derive(Debug)]
@@ -116,7 +178,7 @@ struct Lexer {
     pos: usize,
     depth: usize,
     tokens: Vec<Token>,
-    nested: Vec<CommandSegment>,
+    nested: Vec<Vec<CommandSegment>>,
     current: Option<Word>,
     heredocs: Vec<PendingHeredoc>,
     /// Set right after `<<` / `<<-`: the next word is a here-doc delimiter.
@@ -164,9 +226,9 @@ impl Lexer {
         }
     }
 
-    fn push_separator(&mut self) {
+    fn push_separator(&mut self, pipe: bool) {
         self.finish_word();
-        self.tokens.push(Token::Separator);
+        self.tokens.push(Token::Separator { pipe });
     }
 
     fn slice(&self, from: usize, to: usize) -> String {
@@ -175,11 +237,11 @@ impl Lexer {
 
     fn parse_nested(&mut self, inner: &str) -> Result<(), ParseError> {
         let segments = parse_at_depth(inner, self.depth + 1)?;
-        self.nested.extend(segments);
+        self.nested.push(segments);
         Ok(())
     }
 
-    fn run(mut self) -> Result<(Vec<Token>, Vec<CommandSegment>), ParseError> {
+    fn run(mut self) -> Result<(Vec<Token>, Vec<Vec<CommandSegment>>), ParseError> {
         while let Some(c) = self.peek(0) {
             match c {
                 ' ' | '\t' | '\r' => {
@@ -187,7 +249,7 @@ impl Lexer {
                     self.pos += 1;
                 }
                 '\n' => {
-                    self.push_separator();
+                    self.push_separator(false);
                     self.pos += 1;
                     self.read_heredoc_bodies()?;
                 }
@@ -227,10 +289,10 @@ impl Lexer {
                     }
                     let close = find_matching_paren(&self.chars, self.pos)?;
                     let inner = self.slice(self.pos + 1, close);
-                    self.push_separator();
+                    self.push_separator(false);
                     self.parse_nested(&inner)?;
                     self.pos = close + 1;
-                    self.push_separator();
+                    self.push_separator(false);
                 }
                 ')' => return err("unbalanced `)`"),
                 other => {
@@ -386,20 +448,29 @@ impl Lexer {
             (Some('&'), Some('>')) => {
                 self.finish_word();
                 self.pos += 2;
-                if self.peek(0) == Some('>') {
+                let op = if self.peek(0) == Some('>') {
                     self.pos += 1;
-                }
-                self.tokens.push(Token::Redirect);
+                    "&>>"
+                } else {
+                    "&>"
+                };
+                self.tokens.push(Token::Redirect(op.to_string()));
             }
-            (Some('&'), Some('&'))
-            | (Some('|'), Some('|' | '&'))
-            | (Some(';'), Some(';' | '&')) => {
+            (Some('|'), Some('&')) => {
                 self.pos += 2;
-                self.push_separator();
+                self.push_separator(true);
+            }
+            (Some('&'), Some('&')) | (Some('|'), Some('|')) | (Some(';'), Some(';' | '&')) => {
+                self.pos += 2;
+                self.push_separator(false);
+            }
+            (Some('|'), _) => {
+                self.pos += 1;
+                self.push_separator(true);
             }
             _ => {
                 self.pos += 1;
-                self.push_separator();
+                self.push_separator(false);
             }
         }
     }
@@ -432,27 +503,35 @@ impl Lexer {
         }
         self.finish_word();
         self.pos += 1;
+        let mut op = String::from(c);
         let mut heredoc = None;
         if c == '<' {
             match self.peek(0) {
                 Some('<') => {
                     self.pos += 1;
+                    op.push('<');
                     if self.peek(0) == Some('<') {
                         self.pos += 1; // here-string
+                        op.push('<');
                     } else if self.peek(0) == Some('-') {
                         self.pos += 1;
+                        op.push('-');
                         heredoc = Some(true);
                     } else {
                         heredoc = Some(false);
                     }
                 }
-                Some('&' | '>') => self.pos += 1,
+                Some(n @ ('&' | '>')) => {
+                    self.pos += 1;
+                    op.push(n);
+                }
                 _ => {}
             }
-        } else if matches!(self.peek(0), Some('>' | '&' | '|')) {
+        } else if let Some(n @ ('>' | '&' | '|')) = self.peek(0) {
             self.pos += 1;
+            op.push(n);
         }
-        self.tokens.push(Token::Redirect);
+        self.tokens.push(Token::Redirect(op));
         self.expect_delimiter = heredoc;
         Ok(())
     }
@@ -534,46 +613,68 @@ fn find_matching_paren(chars: &[char], open: usize) -> Result<usize, ParseError>
 // Grouping
 // ---------------------------------------------------------------------------
 
-fn build_segments(tokens: Vec<Token>) -> Result<Vec<CommandSegment>, ParseError> {
+fn build_segments(tokens: Vec<Token>, depth: usize) -> Result<Vec<CommandSegment>, ParseError> {
     let mut out = Vec::new();
+    let mut extras = Vec::new();
     let mut words: Vec<Word> = Vec::new();
-    let mut expect_target = false;
+    let mut redirections = Vec::new();
+    let mut pending: Option<String> = None;
+    let mut pipeline = 0usize;
+    let mut piped = false;
+    let mut flush = |words: &mut Vec<Word>,
+                     redirections: &mut Vec<Redirection>,
+                     pipeline: usize,
+                     piped: bool|
+     -> Result<(), ParseError> {
+        let (main, extra) =
+            simple_command(&std::mem::take(words), std::mem::take(redirections), depth)?;
+        if let Some(mut seg) = main {
+            seg.pipeline = pipeline;
+            seg.piped_input = piped;
+            out.push(seg);
+        }
+        extras.push(extra);
+        Ok(())
+    };
     for token in tokens {
         match token {
-            Token::Redirect => {
-                if expect_target {
+            Token::Redirect(op) => {
+                if pending.is_some() {
                     return err("a redirection is missing its target");
                 }
-                expect_target = true;
+                pending = Some(op);
             }
-            Token::Word(w) => {
-                if expect_target {
-                    expect_target = false;
-                } else {
-                    words.push(w);
-                }
-            }
-            Token::Separator => {
-                if expect_target {
+            Token::Word(w) => match pending.take() {
+                Some(operator) => redirections.push(Redirection {
+                    operator,
+                    target: w.text,
+                }),
+                None => words.push(w),
+            },
+            Token::Separator { pipe } => {
+                if pending.is_some() {
                     return err("a redirection is missing its target");
                 }
-                if let Some(seg) = simple_command(&std::mem::take(&mut words))? {
-                    out.push(seg);
+                flush(&mut words, &mut redirections, pipeline, piped)?;
+                piped = pipe;
+                if !pipe {
+                    pipeline += 1;
                 }
             }
         }
     }
-    if expect_target {
+    if pending.is_some() {
         return err("a redirection is missing its target");
     }
-    if let Some(seg) = simple_command(&words)? {
-        out.push(seg);
+    flush(&mut words, &mut redirections, pipeline, piped)?;
+    for extra in extras {
+        merge(&mut out, extra);
     }
     Ok(out)
 }
 
-fn is_assignment(raw: &str) -> bool {
-    let mut chars = raw.chars();
+fn is_assignment(word: &str) -> bool {
+    let mut chars = word.chars();
     match chars.next() {
         Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
         _ => return false,
@@ -592,30 +693,481 @@ fn is_assignment(raw: &str) -> bool {
     false
 }
 
-/// Options of `xargs` that take a separate value.
-const XARGS_VALUE_OPTIONS: &[&str] = &["-I", "-n", "-L", "-P", "-s", "-d", "-E", "-a"];
+/// Split `NAME=value` (or `NAME+=value`) into its name and value.
+fn split_assignment(word: &str) -> (String, String) {
+    let (name, value) = word.split_once('=').unwrap_or((word, ""));
+    (name.trim_end_matches('+').to_string(), value.to_string())
+}
 
-/// Turn the words of one simple command into a segment, stripping
-/// assignments, shell keywords and wrapper programs.
-fn simple_command(words: &[Word]) -> Result<Option<CommandSegment>, ParseError> {
-    let text = |i: usize| words[i].text.as_str();
-    let len = words.len();
-    let mut i = 0;
+/// Options of `xargs` that take a separate value.
+const XARGS_VALUE_OPTIONS: &[&str] = &[
+    "-I",
+    "-n",
+    "-L",
+    "-P",
+    "-s",
+    "-d",
+    "-E",
+    "-a",
+    "--max-args",
+    "--max-procs",
+    "--max-chars",
+    "--arg-file",
+    "--delimiter",
+];
+
+/// State of the wrapper-stripping loop in [`simple_command`].
+struct Stripper<'a> {
+    words: &'a [Word],
+    i: usize,
+    depth: usize,
+    extra: Vec<CommandSegment>,
+}
+
+impl Stripper<'_> {
+    fn len(&self) -> usize {
+        self.words.len()
+    }
+
+    fn text(&self, i: usize) -> &str {
+        self.words.get(i).map_or("", |w| w.text.as_str())
+    }
+
+    fn current(&self) -> &str {
+        self.text(self.i)
+    }
+
+    /// Whether any word in `from..self.i` is one of `names`.
+    fn saw(&self, from: usize, names: &[&str]) -> bool {
+        self.words[from..self.i.min(self.len())]
+            .iter()
+            .any(|w| names.contains(&w.text.as_str()))
+    }
+
+    /// Skip options: `value` options consume the next word, other words
+    /// starting with `-` are flags; stops at `--` (consumed) or a positional.
+    fn skip_options(&mut self, value: &[&str]) {
+        while self.i < self.len() {
+            let a = self.current();
+            if a == "--" {
+                self.i += 1;
+                return;
+            }
+            if value.contains(&a) {
+                self.i += 2;
+            } else if a.starts_with('-') && a.len() > 1 {
+                self.i += 1;
+            } else {
+                return;
+            }
+        }
+    }
+
+    /// Parse a shell command string passed to a wrapper.
+    fn nested(&mut self, command: &str) -> Result<(), ParseError> {
+        let segments = parse_at_depth(command, self.depth + 1)?;
+        merge(&mut self.extra, segments);
+        Ok(())
+    }
+
+    /// Values given to any of `names` among the words `from..self.i`, in the
+    /// separate (`-o file`), attached (`-ofile`) and `--name=value` forms.
+    fn option_values(&self, from: usize, names: &[&str]) -> Vec<String> {
+        let mut values = Vec::new();
+        let mut j = from;
+        while j < self.i.min(self.len()) {
+            let w = self.text(j);
+            if names.contains(&w) {
+                values.push(self.text(j + 1).to_string());
+                j += 2;
+                continue;
+            }
+            for name in names {
+                let attached = if name.starts_with("--") {
+                    w.strip_prefix(name).and_then(|rest| rest.strip_prefix('='))
+                } else {
+                    w.strip_prefix(name).filter(|rest| !rest.is_empty())
+                };
+                if let Some(value) = attached {
+                    values.push(value.to_string());
+                }
+            }
+            j += 1;
+        }
+        values
+    }
+
+    /// Record a command implied by a wrapper option (`env -C dir` → `cd dir`).
+    fn synthetic_command(&mut self, argv: Vec<String>) {
+        let segment = CommandSegment {
+            program: normalize_program(&argv[0]),
+            argv,
+            ..CommandSegment::default()
+        };
+        merge(&mut self.extra, vec![segment]);
+    }
+
+    /// Record a file a wrapper writes (`time -o file`, `script file`).
+    fn synthetic_write(&mut self, target: &str) {
+        let segment = CommandSegment {
+            redirections: vec![Redirection {
+                operator: ">".into(),
+                target: target.to_string(),
+            }],
+            ..CommandSegment::default()
+        };
+        merge(&mut self.extra, vec![segment]);
+    }
+
+    /// Analyse `words[from..]` as a separate simple command.
+    fn nested_words(&mut self, from: usize) -> Result<(), ParseError> {
+        let words: Vec<Word> = self.words[from..]
+            .iter()
+            .map(|w| Word {
+                text: w.text.clone(),
+                raw: w.raw.clone(),
+                quoted: w.quoted,
+            })
+            .collect();
+        let (main, extra) = simple_command(&words, Vec::new(), self.depth)?;
+        merge(&mut self.extra, main.into_iter().collect());
+        merge(&mut self.extra, extra);
+        Ok(())
+    }
+}
+
+/// What one wrapper did to the stripping loop.
+enum Step {
+    /// The wrapper was stripped; continue with the word at the new position.
+    Stripped,
+    /// Not a wrapper, or a wrapper that is itself the program (nothing to
+    /// wrap); the program starts at the unchanged position.
+    Program,
+}
+
+/// Strip one wrapper program starting at `s.i`.
+#[allow(clippy::too_many_lines)]
+fn strip_wrapper(s: &mut Stripper<'_>, program: &str) -> Result<Step, ParseError> {
+    let start = s.i;
+    s.i += 1;
+    match program {
+        "env" => {
+            while s.i < s.len() {
+                let a = s.current().to_string();
+                if a == "--" {
+                    s.i += 1;
+                    break;
+                } else if a.starts_with("-S") || a.starts_with("--split-string") {
+                    return err("`env -S` cannot be verified; run the command directly");
+                } else if a.starts_with("-P") {
+                    return err(
+                        "`env -P` changes where programs are looked up; run the command \
+                                directly",
+                    );
+                } else if a == "-C" || a == "--chdir" {
+                    let dir = s.text(s.i + 1).to_string();
+                    s.synthetic_command(vec!["cd".into(), dir]);
+                    s.i += 2;
+                } else if let Some(dir) =
+                    a.strip_prefix("--chdir=").or_else(|| a.strip_prefix("-C"))
+                {
+                    s.synthetic_command(vec!["cd".into(), dir.to_string()]);
+                    s.i += 1;
+                } else if a == "-u" || a == "--unset" {
+                    s.i += 2;
+                } else if a.starts_with('-') {
+                    s.i += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        "time" => {
+            let from = s.i;
+            s.skip_options(&["-o", "-f", "--output", "--format"]);
+            for file in s.option_values(from, &["-o", "--output"]) {
+                s.synthetic_write(&file);
+            }
+        }
+        "nohup" | "builtin" | "setsid" | "chronic" | "unbuffer" => s.skip_options(&[]),
+        "nice" => s.skip_options(&["-n", "--adjustment"]),
+        "exec" => s.skip_options(&["-a"]),
+        "stdbuf" => s.skip_options(&["-i", "-o", "-e", "--input", "--output", "--error"]),
+        "caffeinate" => s.skip_options(&["-t", "-w"]),
+        "strace" | "ltrace" => {
+            let from = s.i;
+            s.skip_options(&[
+                "-o",
+                "-e",
+                "-p",
+                "-s",
+                "-u",
+                "-E",
+                "-P",
+                "-a",
+                "-b",
+                "-I",
+                "-X",
+                "-O",
+                "-S",
+                "-U",
+                "-A",
+                "-D",
+                "-F",
+                "-l",
+                "-n",
+                "-x",
+                "--output",
+                "--attach",
+                "--user",
+                "--env",
+                "--string-limit",
+                "--columns",
+                "--library",
+            ]);
+            for file in s.option_values(from, &["-o", "--output"]) {
+                s.synthetic_write(&file);
+            }
+        }
+        "command" => {
+            if matches!(s.current(), "-v" | "-V") {
+                s.i = start;
+                return Ok(Step::Program);
+            }
+            s.skip_options(&[]);
+        }
+        "timeout" => {
+            s.skip_options(&["-s", "--signal", "-k", "--kill-after"]);
+            s.i += 1; // duration
+        }
+        "ionice" => {
+            let from = s.i;
+            s.skip_options(&[
+                "-c",
+                "--class",
+                "-n",
+                "--classdata",
+                "-p",
+                "--pid",
+                "-P",
+                "--pgid",
+                "-u",
+                "--uid",
+            ]);
+            if s.saw(from, &["-p", "--pid", "-P", "--pgid", "-u", "--uid"]) {
+                s.i = start;
+                return Ok(Step::Program);
+            }
+        }
+        "taskset" => {
+            let from = s.i;
+            s.skip_options(&[]);
+            let targets_process = s.words[from..s.i.min(s.len())].iter().any(|w| {
+                w.text == "--pid"
+                    || (w.text.starts_with('-')
+                        && !w.text.starts_with("--")
+                        && w.text.contains('p'))
+            });
+            if targets_process {
+                s.i = start;
+                return Ok(Step::Program);
+            }
+            s.i += 1; // CPU mask or list
+        }
+        "flock" => {
+            let mut lock_file_seen = false;
+            while s.i < s.len() {
+                let a = s.current().to_string();
+                if a == "-c" || a == "--command" {
+                    let command = s.text(s.i + 1).to_string();
+                    s.nested(&command)?;
+                    s.i += 2;
+                } else if let Some(command) = a.strip_prefix("--command=") {
+                    s.nested(command)?;
+                    s.i += 1;
+                } else if matches!(
+                    a.as_str(),
+                    "-w" | "--timeout" | "-E" | "--conflict-exit-code"
+                ) {
+                    s.i += 2;
+                } else if a.starts_with('-') && a.len() > 1 {
+                    s.i += 1;
+                } else if !lock_file_seen {
+                    lock_file_seen = true;
+                    s.i += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        "watch" => {
+            let from = s.i;
+            s.skip_options(&["-n", "--interval", "-q", "--equexit"]);
+            if !s.saw(from, &["-x", "--exec"]) && s.i < s.len() {
+                // `watch` joins its arguments and runs them through `sh -c`.
+                let command = s.words[s.i..]
+                    .iter()
+                    .map(|w| w.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                s.nested(&command)?;
+                s.i = start;
+                return Ok(Step::Program);
+            }
+        }
+        "script" => {
+            let mut positionals = Vec::new();
+            let mut takes_time = false;
+            while s.i < s.len() {
+                let a = s.current().to_string();
+                if a == "-c" || a == "--command" {
+                    let command = s.text(s.i + 1).to_string();
+                    s.nested(&command)?;
+                    s.i += 2;
+                } else if let Some(command) = a.strip_prefix("--command=") {
+                    s.nested(command)?;
+                    s.i += 1;
+                } else if matches!(
+                    a.as_str(),
+                    "-E" | "--echo"
+                        | "-o"
+                        | "--output-limit"
+                        | "-T"
+                        | "--log-timing"
+                        | "-I"
+                        | "--log-in"
+                        | "-O"
+                        | "--log-out"
+                        | "-B"
+                        | "--log-io"
+                        | "-m"
+                        | "--logging-format"
+                ) {
+                    s.i += 2;
+                } else if a.starts_with('-') && a.len() > 1 {
+                    takes_time |= a == "-t";
+                    s.i += 1;
+                } else {
+                    positionals.push(s.i);
+                    s.i += 1;
+                }
+            }
+            // The first positional is the transcript file (truncated). BSD
+            // form: `script [file [command …]]`. With BSD `-t time` the first
+            // positional may be the time, so both readings are checked.
+            for &at in positionals.iter().take(if takes_time { 2 } else { 1 }) {
+                let file = s.text(at).to_string();
+                s.synthetic_write(&file);
+            }
+            if let Some(&from) = positionals.get(1) {
+                s.nested_words(from)?;
+            }
+            if takes_time && let Some(&from) = positionals.get(2) {
+                s.nested_words(from)?;
+            }
+            s.i = start;
+            return Ok(Step::Program);
+        }
+        "busybox" | "toybox" => {
+            if s.i >= s.len() || s.current().starts_with('-') {
+                s.i = start;
+                return Ok(Step::Program);
+            }
+        }
+        "xargs" => {
+            let mut replace: Vec<String> = Vec::new();
+            while s.i < s.len() {
+                let a = s.current().to_string();
+                if a.starts_with("--process-slot-var") {
+                    return err("`xargs --process-slot-var` is not allowed");
+                } else if a == "-I" {
+                    replace.push(s.text(s.i + 1).to_string());
+                    s.i += 2;
+                } else if a == "-i" || a == "--replace" {
+                    replace.push("{}".into());
+                    s.i += 1;
+                } else if let Some(r) = a.strip_prefix("--replace=") {
+                    replace.push(r.to_string());
+                    s.i += 1;
+                } else if let Some(r) = a.strip_prefix("-I").or_else(|| a.strip_prefix("-i")) {
+                    replace.push(r.to_string());
+                    s.i += 1;
+                } else if XARGS_VALUE_OPTIONS.contains(&a.as_str()) {
+                    s.i += 2;
+                } else if a == "--" {
+                    s.i += 1;
+                    break;
+                } else if a.starts_with('-') && a.len() > 1 {
+                    s.i += 1;
+                } else {
+                    break;
+                }
+            }
+            if s.i >= s.len() {
+                return err(
+                    "`xargs` must name the program to run explicitly (for example `xargs rm`)",
+                );
+            }
+            let program = s.current();
+            if replace
+                .iter()
+                .any(|r| !r.is_empty() && program.contains(r.as_str()))
+            {
+                return err("the program run by `xargs` would come from its input");
+            }
+        }
+        _ => {
+            s.i = start;
+            return Ok(Step::Program);
+        }
+    }
+    Ok(Step::Stripped)
+}
+
+/// Turn the words of one simple command into a segment, recording
+/// assignments and stripping shell keywords and wrapper programs. Returns the
+/// main segment and any segments parsed from command strings given to
+/// wrappers.
+fn simple_command(
+    words: &[Word],
+    redirections: Vec<Redirection>,
+    depth: usize,
+) -> Result<(Option<CommandSegment>, Vec<CommandSegment>), ParseError> {
+    let mut s = Stripper {
+        words,
+        i: 0,
+        depth,
+        extra: Vec::new(),
+    };
+    let mut assignments = Vec::new();
+    let mut wrappers: Vec<String> = Vec::new();
+    let mut last_wrapper: Option<usize> = None;
+    let mut after_env = false;
     loop {
-        while i < len && is_assignment(&words[i].raw) {
-            i += 1;
+        while s.i < s.len()
+            && (is_assignment(&words[s.i].raw) || (after_env && is_assignment(&words[s.i].text)))
+        {
+            assignments.push(split_assignment(&words[s.i].text));
+            s.i += 1;
         }
-        if i >= len {
-            return Ok(None);
+        after_env = false;
+        if s.i >= s.len() {
+            break;
         }
-        if !words[i].quoted {
-            match text(i) {
+        if !words[s.i].quoted {
+            match s.current() {
                 "{" | "}" | "!" | "if" | "then" | "else" | "elif" | "fi" | "do" | "done"
                 | "while" | "until" | "esac" => {
-                    i += 1;
+                    s.i += 1;
                     continue;
                 }
-                "for" | "select" => return Ok(None),
+                "for" | "select" => {
+                    // `for NAME in …`: only the loop variable matters.
+                    let name = s.text(s.i + 1).to_string();
+                    assignments.push((name, String::new()));
+                    s.i = s.len();
+                    break;
+                }
                 kw @ ("case" | "function") => {
                     return err(format!(
                         "`{kw}` constructs are not supported by the command checker; \
@@ -625,132 +1177,47 @@ fn simple_command(words: &[Word]) -> Result<Option<CommandSegment>, ParseError> 
                 _ => {}
             }
         }
-        match normalize_program(text(i)).as_str() {
-            "env" => {
-                i += 1;
-                while i < len {
-                    let a = text(i);
-                    if a == "--" {
-                        i += 1;
-                        break;
-                    } else if a == "-S" || a.starts_with("-S") || a.starts_with("--split-string") {
-                        return err("`env -S` cannot be verified; run the command directly");
-                    } else if matches!(a, "-u" | "--unset" | "-C" | "--chdir") {
-                        i += 2;
-                    } else if a.starts_with('-') {
-                        i += 1;
-                    } else {
-                        break;
-                    }
-                }
+        let start = s.i;
+        let program = normalize_program(s.current());
+        match strip_wrapper(&mut s, &program)? {
+            Step::Stripped => {
+                after_env = program == "env";
+                wrappers.push(program);
+                last_wrapper = Some(start);
             }
-            "time" => {
-                i += 1;
-                while i < len && text(i).starts_with('-') {
-                    let done = text(i) == "--";
-                    i += 1;
-                    if done {
-                        break;
-                    }
-                }
-            }
-            "nice" => {
-                i += 1;
-                while i < len {
-                    let a = text(i);
-                    if a == "-n" || a == "--adjustment" {
-                        i += 2;
-                    } else if a.starts_with('-') {
-                        let done = a == "--";
-                        i += 1;
-                        if done {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            }
-            "nohup" | "builtin" => {
-                i += 1;
-                if i < len && text(i) == "--" {
-                    i += 1;
-                }
-            }
-            "exec" => {
-                i += 1;
-                while i < len {
-                    match text(i) {
-                        "-a" => i += 2,
-                        "--" => {
-                            i += 1;
-                            break;
-                        }
-                        a if a.starts_with('-') => i += 1,
-                        _ => break,
-                    }
-                }
-            }
-            "command" => {
-                if i + 1 < len && matches!(text(i + 1), "-v" | "-V") {
-                    break;
-                }
-                i += 1;
-                while i < len && text(i).starts_with('-') {
-                    let done = text(i) == "--";
-                    i += 1;
-                    if done {
-                        break;
-                    }
-                }
-            }
-            "timeout" => {
-                i += 1;
-                while i < len {
-                    let a = text(i);
-                    if matches!(a, "-s" | "--signal" | "-k" | "--kill-after") {
-                        i += 2;
-                    } else if a == "--" {
-                        i += 1;
-                        break;
-                    } else if a.starts_with('-') {
-                        i += 1;
-                    } else {
-                        break;
-                    }
-                }
-                i += 1; // duration
-            }
-            "xargs" => {
-                i += 1;
-                while i < len {
-                    let a = text(i);
-                    if XARGS_VALUE_OPTIONS.contains(&a) {
-                        i += 2;
-                    } else if a == "--" {
-                        i += 1;
-                        break;
-                    } else if a.starts_with('-') {
-                        i += 1;
-                    } else {
-                        break;
-                    }
-                }
-                if i >= len {
-                    return Ok(Some(CommandSegment {
-                        program: "echo".into(),
-                        argv: vec!["echo".into()],
-                    }));
-                }
-            }
-            _ => break,
+            Step::Program => break,
         }
     }
-    let argv: Vec<String> = words[i..].iter().map(|w| w.text.clone()).collect();
-    Ok(Some(CommandSegment {
-        program: normalize_program(&argv[0]),
-        argv,
-    }))
+    let extra = std::mem::take(&mut s.extra);
+    let from = if s.i < words.len() {
+        Some(s.i)
+    } else if let Some(w) = last_wrapper {
+        // The last wrapper had nothing to wrap: it is the program itself.
+        wrappers.pop();
+        Some(w)
+    } else {
+        None
+    };
+    let segment = match from {
+        Some(from) => {
+            let argv: Vec<String> = words[from..].iter().map(|w| w.text.clone()).collect();
+            Some(CommandSegment {
+                program: normalize_program(&argv[0]),
+                argv,
+                assignments,
+                redirections,
+                wrappers,
+                ..CommandSegment::default()
+            })
+        }
+        None if !assignments.is_empty() || !redirections.is_empty() => Some(CommandSegment {
+            assignments,
+            redirections,
+            ..CommandSegment::default()
+        }),
+        None => None,
+    };
+    Ok((segment, extra))
 }
 
 #[cfg(test)]
@@ -758,18 +1225,22 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
+    fn segments(cmd: &str) -> Vec<CommandSegment> {
+        parse_command(cmd).unwrap_or_else(|e| panic!("`{cmd}` failed: {e}"))
+    }
+
     fn programs(cmd: &str) -> Vec<String> {
-        parse_command(cmd)
-            .unwrap_or_else(|e| panic!("`{cmd}` failed: {e}"))
+        segments(cmd)
             .into_iter()
+            .filter(CommandSegment::is_command)
             .map(|s| s.program)
             .collect()
     }
 
     fn argv(cmd: &str) -> Vec<Vec<String>> {
-        parse_command(cmd)
-            .unwrap()
+        segments(cmd)
             .into_iter()
+            .filter(CommandSegment::is_command)
             .map(|s| s.argv)
             .collect()
     }
@@ -780,6 +1251,23 @@ mod tests {
             programs("a | b || c && d ; e & f\ng |& h"),
             ["a", "b", "c", "d", "e", "f", "g", "h"]
         );
+    }
+
+    #[test]
+    fn pipelines_are_tracked() {
+        let segs = segments("a | b && c | d");
+        let ids: Vec<(usize, bool)> = segs.iter().map(|s| (s.pipeline, s.piped_input)).collect();
+        assert_eq!(ids[0].0, ids[1].0);
+        assert_eq!(ids[2].0, ids[3].0);
+        assert_ne!(ids[0].0, ids[2].0);
+        assert_eq!(
+            ids.iter().map(|x| x.1).collect::<Vec<_>>(),
+            [false, true, false, true]
+        );
+        // Nested pipelines get distinct identifiers.
+        let segs = segments("a | b $(c | d)");
+        let outer = segs[0].pipeline;
+        assert_eq!(segs.iter().filter(|s| s.pipeline == outer).count(), 2);
     }
 
     #[test]
@@ -827,13 +1315,30 @@ mod tests {
     }
 
     #[test]
-    fn redirections_are_dropped() {
+    fn redirections_are_recorded() {
+        let seg = &segments("cargo test 2>&1 > out.txt < in.txt")[0];
+        assert_eq!(seg.argv, ["cargo", "test"]);
+        let ops: Vec<(&str, &str, bool)> = seg
+            .redirections
+            .iter()
+            .map(|r| (r.operator.as_str(), r.target.as_str(), r.writes_file()))
+            .collect();
         assert_eq!(
-            argv("cargo test 2>&1 > out.txt < in.txt"),
-            [vec!["cargo", "test"]]
+            ops,
+            [
+                (">&", "1", false),
+                (">", "out.txt", true),
+                ("<", "in.txt", false)
+            ]
         );
-        assert_eq!(argv("ls &> log"), [vec!["ls"]]);
-        assert_eq!(argv("echo hi >> f"), [vec!["echo", "hi"]]);
+        let seg = &segments("ls &>> log")[0];
+        assert_eq!(seg.redirections[0].operator, "&>>");
+        // A redirection without a command still produces a segment.
+        let seg = &segments("> ~/x")[0];
+        assert!(!seg.is_command());
+        assert_eq!(seg.redirections[0].target, "~/x");
+        let seg = &segments("{ ls; } > f")[1];
+        assert_eq!(seg.redirections[0].target, "f");
     }
 
     #[test]
@@ -850,21 +1355,87 @@ mod tests {
     }
 
     #[test]
-    fn env_assignments_and_wrappers_are_stripped() {
+    fn assignments_are_recorded() {
+        let seg = &segments("FOO=bar BAZ='q x' cargo build")[0];
+        assert_eq!(seg.argv, ["cargo", "build"]);
         assert_eq!(
-            argv("FOO=bar BAZ='q x' cargo build"),
-            [vec!["cargo", "build"]]
+            seg.assignments,
+            [("FOO".into(), "bar".into()), ("BAZ".into(), "q x".into())]
         );
+        let seg = &segments("env -i 'PATH=/tmp' A+=1 ls")[0];
+        assert_eq!(seg.program, "ls");
+        assert_eq!(seg.wrappers, ["env"]);
+        assert_eq!(
+            seg.assignments,
+            [("PATH".into(), "/tmp".into()), ("A".into(), "1".into())]
+        );
+        let seg = &segments("PATH=/tmp")[0];
+        assert!(!seg.is_command());
+        assert_eq!(seg.assignments[0].0, "PATH");
+        let seg = &segments("for PATH in a b; do ls; done")[0];
+        assert_eq!(seg.assignments[0].0, "PATH");
+    }
+
+    #[test]
+    fn classic_wrappers_are_stripped() {
         assert_eq!(programs("env -i FOO=1 sudo ls"), ["sudo"]);
         assert_eq!(programs("env -u HOME rm x"), ["rm"]);
         assert_eq!(programs("time -p nice -n 10 nohup make"), ["make"]);
         assert_eq!(programs("exec rm x"), ["rm"]);
         assert_eq!(programs("timeout -s KILL 10 sudo x"), ["sudo"]);
         assert_eq!(programs("xargs -n 1 rm"), ["rm"]);
-        assert_eq!(programs("xargs"), ["echo"]);
         assert_eq!(programs("command -v git"), ["command"]);
         assert_eq!(programs("command git status"), ["git"]);
-        assert_eq!(programs("FOO=1"), Vec::<String>::new());
+        assert_eq!(programs("nohup"), ["nohup"]);
+        let seg = &segments("nice -n 5 nohup make")[0];
+        assert_eq!(seg.wrappers, ["nice", "nohup"]);
+    }
+
+    #[test]
+    fn new_wrappers_are_stripped() {
+        for (cmd, expected) in [
+            ("setsid -f sudo id", vec!["sudo"]),
+            ("stdbuf -oL -e 0 sudo id", vec!["sudo"]),
+            ("caffeinate -i -t 10 sudo id", vec!["sudo"]),
+            ("chronic -e sudo id", vec!["sudo"]),
+            ("unbuffer -p sudo id", vec!["sudo"]),
+            ("ionice -c 3 sudo id", vec!["sudo"]),
+            ("ionice -p 42", vec!["ionice"]),
+            ("taskset 0x1 sudo id", vec!["sudo"]),
+            ("taskset -c 0-3 sudo id", vec!["sudo"]),
+            ("taskset -p 0x1 42", vec!["taskset"]),
+            ("flock /tmp/lock sudo id", vec!["sudo"]),
+            ("flock -w 5 /tmp/lock -c 'sudo id'", vec!["flock", "sudo"]),
+            ("watch -n 1 sudo id", vec!["watch", "sudo"]),
+            ("watch -x sudo id", vec!["sudo"]),
+            ("strace -f -o log sudo id", vec!["sudo"]),
+            ("ltrace -e malloc sudo id", vec!["sudo"]),
+            ("script -q -c 'sudo id' /dev/null", vec!["script", "sudo"]),
+            ("script -q out.log sudo id", vec!["script", "sudo"]),
+            (
+                "script -t 0 out.log sudo id",
+                vec!["script", "out.log", "sudo"],
+            ),
+            ("busybox reboot", vec!["reboot"]),
+            ("toybox reboot", vec!["reboot"]),
+            ("busybox --list", vec!["busybox"]),
+        ] {
+            assert_eq!(programs(cmd), expected, "{cmd}");
+        }
+    }
+
+    #[test]
+    fn xargs_rules() {
+        assert!(parse_command("xargs").is_err());
+        assert!(parse_command("ls | xargs -0").is_err());
+        assert!(parse_command("xargs -I CMD CMD x").is_err());
+        assert!(parse_command("xargs -ICMD CMD x").is_err());
+        assert!(parse_command("xargs --process-slot-var=X sh").is_err());
+        assert_eq!(programs("xargs -I{} cp {} dst/"), ["cp"]);
+        let seg = &segments("ls | xargs -0 rm -f")[1];
+        assert_eq!(seg.program, "rm");
+        assert_eq!(seg.wrappers, ["xargs"]);
+        assert!(seg.piped_input);
     }
 
     #[test]
@@ -928,5 +1499,6 @@ mod tests {
     fn args_accessor() {
         let seg = &parse_command("git status -s").unwrap()[0];
         assert_eq!(seg.args(), ["status", "-s"]);
+        assert!(CommandSegment::default().args().is_empty());
     }
 }

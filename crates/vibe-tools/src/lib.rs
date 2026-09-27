@@ -39,7 +39,8 @@ use vibe_core::ToolRegistry;
 use vibe_core::config::SecurityConfig;
 
 pub use security::{
-    CommandSegment, ParseError, SecurityPolicy, is_probably_binary, parse_command, truncate_output,
+    CommandSegment, ParseError, Redirection, SecurityPolicy, is_probably_binary, parse_command,
+    truncate_output,
 };
 pub use tools::{
     BashTool, EditFileTool, GlobTool, GrepTool, ListDirTool, ReadFileTool, WriteFileTool,
