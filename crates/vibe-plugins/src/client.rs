@@ -2,8 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, Weak};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -11,7 +10,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinHandle;
 use vibe_core::config::PluginConfig;
 use vibe_core::{AgentSpec, Error, Result};
 
@@ -34,8 +34,30 @@ pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 /// Upper bound on `tools/list` pages, to survive a plugin that loops.
 const MAX_TOOL_PAGES: usize = 100;
 
+/// Framed lines queued for the writer task before senders wait.
+const OUTBOX_CAPACITY: usize = 64;
+
 type BoxWriter = Box<dyn AsyncWrite + Send + Unpin>;
 type PendingMap = HashMap<u64, oneshot::Sender<Result<Value>>>;
+
+/// Work for the writer task.
+enum Outgoing {
+    /// A complete framed line, and where to report whether it was written.
+    Line {
+        bytes: Vec<u8>,
+        ack: oneshot::Sender<Result<()>>,
+    },
+    /// Close the plugin's stdin, then report back and stop.
+    Close(oneshot::Sender<()>),
+}
+
+/// Lock a std mutex, ignoring poisoning: a panic elsewhere while holding it
+/// leaves the guarded data consistent for our uses.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 #[derive(Default)]
 struct PendingState {
@@ -45,48 +67,88 @@ struct PendingState {
 
 struct Shared {
     name: String,
-    writer: tokio::sync::Mutex<Option<BoxWriter>>,
+    /// Queue of the writer task, the only owner of the plugin's stdin.
+    /// `None` once [`PluginProcess::shutdown`] closed it.
+    outbox: Mutex<Option<mpsc::Sender<Outgoing>>>,
     state: Mutex<PendingState>,
 }
 
 impl Shared {
-    fn state(&self) -> std::sync::MutexGuard<'_, PendingState> {
-        // A poisoned lock only means another task panicked while holding it;
-        // the map itself is still consistent.
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    fn state(&self) -> MutexGuard<'_, PendingState> {
+        lock(&self.state)
     }
 
+    fn closed_error(&self) -> Error {
+        Error::plugin(format!("plugin `{}` is closed", self.name))
+    }
+
+    /// Queue `message` as one complete line and wait until the writer task
+    /// has written it. Dropping this future never splits a line: the line
+    /// is written whole or, if its turn has not come yet, not at all.
     async fn write_message(&self, message: &Message) -> Result<()> {
         let mut line = message.to_line()?;
         line.push('\n');
-        let mut guard = self.writer.lock().await;
-        let writer = guard
-            .as_mut()
-            .ok_or_else(|| Error::plugin(format!("plugin `{}` is closed", self.name)))?;
-        let io = async {
-            writer.write_all(line.as_bytes()).await?;
-            writer.flush().await
-        };
-        io.await.map_err(|e| {
-            Error::plugin(format!("cannot write to plugin `{}`: {e}", self.name)).with_source(e)
-        })
+        let outbox = lock(&self.outbox).clone();
+        let outbox = outbox.ok_or_else(|| self.closed_error())?;
+        let (ack, written) = oneshot::channel();
+        let bytes = line.into_bytes();
+        outbox
+            .send(Outgoing::Line { bytes, ack })
+            .await
+            .map_err(|_| self.closed_error())?;
+        drop(outbox);
+        // No answer means the writer task has stopped.
+        written.await.map_err(|_| self.closed_error())?
     }
 
-    fn close(&self) {
+    /// Mark the connection dead and fail every pending call with `why`.
+    fn close(&self, why: &str) {
         let drained: Vec<_> = {
             let mut st = self.state();
             st.closed = true;
             st.pending.drain().map(|(_, tx)| tx).collect()
         };
         for tx in drained {
-            let _ = tx.send(Err(Error::plugin(format!(
-                "plugin `{}` closed its output",
-                self.name
-            ))));
+            let _ = tx.send(Err(Error::plugin(format!("plugin `{}` {why}", self.name))));
         }
     }
+}
+
+/// Owns the plugin's stdin and writes queued lines one at a time, so a
+/// cancelled caller can never leave a partial line behind. It holds only a
+/// weak reference to `shared`, and ends once every sender is gone.
+async fn write_loop(shared: Weak<Shared>, mut writer: BoxWriter, mut rx: mpsc::Receiver<Outgoing>) {
+    while let Some(item) = rx.recv().await {
+        match item {
+            Outgoing::Line { bytes, ack } => {
+                if ack.is_closed() {
+                    // The caller gave up before its turn: send nothing.
+                    continue;
+                }
+                let io = async {
+                    writer.write_all(&bytes).await?;
+                    writer.flush().await
+                };
+                if let Err(e) = io.await {
+                    let name = shared.upgrade().map_or_else(String::new, |s| {
+                        s.close("stopped accepting input");
+                        s.name.clone()
+                    });
+                    let err = Error::plugin(format!("cannot write to plugin `{name}`: {e}"));
+                    let _ = ack.send(Err(err.with_source(e)));
+                    // Dropping `rx` fails every queued and later write.
+                    return;
+                }
+                let _ = ack.send(Ok(()));
+            }
+            Outgoing::Close(done) => {
+                let _ = writer.shutdown().await;
+                let _ = done.send(());
+                return;
+            }
+        }
+    }
+    let _ = writer.shutdown().await;
 }
 
 /// Removes a request from the pending map when dropped.
@@ -110,6 +172,7 @@ pub struct PluginProcess {
     shared: Arc<Shared>,
     ids: IdCounter,
     child: tokio::sync::Mutex<Option<Child>>,
+    writer_task: Mutex<Option<JoinHandle<()>>>,
     info: OnceLock<InitializeResult>,
 }
 
@@ -189,16 +252,19 @@ impl PluginProcess {
         R: AsyncRead + Send + Unpin + 'static,
         W: AsyncWrite + Send + Unpin + 'static,
     {
+        let (outbox, rx) = mpsc::channel(OUTBOX_CAPACITY);
         let shared = Arc::new(Shared {
             name: name.into(),
-            writer: tokio::sync::Mutex::new(Some(Box::new(writer))),
+            outbox: Mutex::new(Some(outbox)),
             state: Mutex::new(PendingState::default()),
         });
+        let writer_task = tokio::spawn(write_loop(Arc::downgrade(&shared), Box::new(writer), rx));
         tokio::spawn(read_loop(Arc::clone(&shared), reader));
         Self {
             shared,
             ids: IdCounter::new(),
             child: tokio::sync::Mutex::new(None),
+            writer_task: Mutex::new(Some(writer_task)),
             info: OnceLock::new(),
         }
     }
@@ -258,12 +324,11 @@ impl PluginProcess {
         let params = (!params.is_null()).then_some(params);
         let request = Message::Request(Request::new(id, method, params));
         // The write is covered by the timeout too: a plugin that stops
-        // reading its stdin must not block the caller (or the writer lock)
-        // forever once the pipe buffer is full.
-        let written = AtomicBool::new(false);
+        // reading its stdin must not block the caller forever once the pipe
+        // buffer is full. Giving up mid-write is safe: the writer task
+        // finishes the line on its own.
         let exchange = async {
             self.shared.write_message(&request).await?;
-            written.store(true, Ordering::Relaxed);
             rx.await.map_err(|_| {
                 Error::plugin(format!(
                     "plugin `{}` dropped request `{method}`",
@@ -273,21 +338,11 @@ impl PluginProcess {
         };
         match tokio::time::timeout(timeout, exchange).await {
             Ok(result) => result,
-            Err(_) => {
-                if !written.load(Ordering::Relaxed) {
-                    // A partial line may have been written: the stream can no
-                    // longer be trusted, so fail everything fast from now on.
-                    self.shared.close();
-                    if let Ok(mut writer) = self.shared.writer.try_lock() {
-                        writer.take();
-                    }
-                }
-                Err(Error::plugin(format!(
-                    "plugin `{}` did not answer `{method}` within {}s",
-                    self.name(),
-                    timeout.as_secs_f32()
-                )))
-            }
+            Err(_) => Err(Error::plugin(format!(
+                "plugin `{}` did not answer `{method}` within {}s",
+                self.name(),
+                timeout.as_secs_f32()
+            ))),
         }
     }
 
@@ -380,8 +435,10 @@ impl PluginProcess {
     }
 
     /// Stop the plugin gracefully: send `shutdown` and wait up to
-    /// [`SHUTDOWN_GRACE`] for the answer, close its stdin, wait up to
-    /// [`SHUTDOWN_GRACE`] for the process to exit, then kill it.
+    /// [`SHUTDOWN_GRACE`] for the answer, close its stdin once the lines
+    /// already queued are written (waiting up to [`SHUTDOWN_GRACE`]), wait
+    /// up to [`SHUTDOWN_GRACE`] for the process to exit, then kill it.
+    /// Later requests and notifications fail.
     pub async fn shutdown(&self) {
         let answered = if self.is_closed() {
             Ok(Value::Null)
@@ -392,10 +449,23 @@ impl PluginProcess {
         if let Err(e) = answered {
             tracing::debug!(plugin = %self.name(), "shutdown request failed: {e}");
         }
-        // Dropping the writer closes the plugin's stdin, so a plugin blocked
-        // reading it sees end-of-file and can exit.
-        if let Some(mut writer) = self.shared.writer.lock().await.take() {
-            let _ = writer.shutdown().await;
+        // Closing the plugin's stdin lets a plugin blocked reading it see
+        // end-of-file and exit.
+        let outbox = lock(&self.shared.outbox).take();
+        if let Some(outbox) = outbox {
+            let (done, closed) = oneshot::channel();
+            let close = async move {
+                if outbox.send(Outgoing::Close(done)).await.is_ok() {
+                    let _ = closed.await;
+                }
+            };
+            if tokio::time::timeout(SHUTDOWN_GRACE, close).await.is_err() {
+                // The writer is stuck on a plugin that stopped reading:
+                // stopping the task drops the writer, which closes stdin.
+                if let Some(task) = lock(&self.writer_task).take() {
+                    task.abort();
+                }
+            }
         }
         if let Some(mut child) = self.child.lock().await.take() {
             match tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await {
@@ -449,7 +519,7 @@ async fn read_loop<R: AsyncRead + Unpin>(shared: Arc<Shared>, reader: R) {
             }
         }
     }
-    shared.close();
+    shared.close("closed its output");
 }
 
 fn dispatch(shared: &Arc<Shared>, message: Message) {
@@ -624,9 +694,211 @@ mod tests {
         assert!(err.message.contains("did not answer"));
         assert!(started.elapsed() < Duration::from_secs(2));
         assert!(p.shared.state().pending.is_empty());
-        // The stream may hold a partial line: later calls fail fast.
+        // The writer task still owns the line, so the stream stays usable;
+        // later calls time out too instead of hanging.
+        assert!(!p.is_closed());
+        let err = p
+            .call_with_timeout("next", Value::Null, Duration::from_millis(50))
+            .await
+            .unwrap_err();
+        assert!(err.message.contains("did not answer"));
+    }
+
+    /// Plugin side of a slow pipe: reads a few bytes at a time (pausing
+    /// while `slow` is set), checks every line is a whole JSON-RPC message,
+    /// echoes requests' params back and reports each message it received.
+    fn slow_reader(
+        plugin_side: tokio::io::DuplexStream,
+        slow: Arc<std::sync::atomic::AtomicBool>,
+        received: Arc<std::sync::atomic::AtomicUsize>,
+    ) -> tokio::sync::mpsc::UnboundedReceiver<Message> {
+        use std::sync::atomic::Ordering;
+        use tokio::io::AsyncReadExt;
+        let (seen_tx, seen_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (mut plugin_read, mut plugin_write) = tokio::io::split(plugin_side);
+        tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 8];
+            loop {
+                let n = plugin_read.read(&mut chunk).await.unwrap();
+                if n == 0 {
+                    break;
+                }
+                received.fetch_add(n, Ordering::SeqCst);
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(end) = buf.iter().position(|&b| b == b'\n') {
+                    let line: Vec<u8> = buf.drain(..=end).collect();
+                    let text = std::str::from_utf8(&line).unwrap();
+                    let message = Message::parse(text.trim_end())
+                        .unwrap_or_else(|e| panic!("partial or corrupt line {text:?}: {e}"));
+                    if let Message::Request(req) = &message {
+                        let result = req.params.clone().unwrap_or(Value::Null);
+                        let out = Response::success(req.id.clone(), result);
+                        let mut reply = Message::Response(out).to_line().unwrap();
+                        reply.push('\n');
+                        plugin_write.write_all(reply.as_bytes()).await.unwrap();
+                    }
+                    let _ = seen_tx.send(message);
+                }
+                if slow.load(Ordering::SeqCst) {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            }
+        });
+        seen_rx
+    }
+
+    #[tokio::test]
+    async fn cancelled_request_never_leaves_a_partial_line() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        // A 16-byte pipe drained 8 bytes every 5 ms keeps the writer busy.
+        let (host_side, plugin_side) = duplex(16);
+        let (r, w) = tokio::io::split(host_side);
+        let p = PluginProcess::from_streams("slow", r, w);
+        let slow = Arc::new(AtomicBool::new(true));
+        let received = Arc::new(AtomicUsize::new(0));
+        let mut seen = slow_reader(plugin_side, Arc::clone(&slow), Arc::clone(&received));
+
+        let blob = "x".repeat(4096);
+        let cancelled = tokio::time::timeout(
+            Duration::from_millis(50),
+            p.call("big", json!({ "blob": blob })),
+        )
+        .await;
+        assert!(cancelled.is_err(), "the call must be cancelled mid-write");
+        let sent = received.load(Ordering::SeqCst);
+        assert!(
+            sent > 0 && sent < blob.len(),
+            "cancelled after {sent} bytes"
+        );
+        assert!(p.shared.state().pending.is_empty());
+        assert!(!p.is_closed(), "cancelling a caller must not break framing");
+
+        // The plugin gets the whole cancelled line, then the next request,
+        // which is answered normally.
+        slow.store(false, Ordering::SeqCst);
+        let answer = p
+            .call_with_timeout("small", json!({ "n": 1 }), Duration::from_secs(5))
+            .await
+            .unwrap();
+        assert_eq!(answer, json!({ "n": 1 }));
+        let methods: Vec<String> = [seen.recv().await, seen.recv().await]
+            .into_iter()
+            .map(|m| match m {
+                Some(Message::Request(req)) => req.method,
+                other => panic!("expected a request, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(methods, ["big", "small"]);
+    }
+
+    #[tokio::test]
+    async fn caller_cancelled_before_its_turn_sends_nothing() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        let (host_side, plugin_side) = duplex(16);
+        let (r, w) = tokio::io::split(host_side);
+        let p = PluginProcess::from_streams("queued", r, w);
+        let slow = Arc::new(AtomicBool::new(true));
+        let received = Arc::new(AtomicUsize::new(0));
+        let mut seen = slow_reader(plugin_side, Arc::clone(&slow), Arc::clone(&received));
+
+        // `first` (polled first, so queued first) keeps the writer busy
+        // while `second` waits in the queue until its caller gives up.
+        let first = tokio::time::timeout(
+            Duration::from_secs(10),
+            p.notify("first", json!({ "blob": "x".repeat(2048) })),
+        );
+        let second = async {
+            let second =
+                tokio::time::timeout(Duration::from_millis(30), p.call("second", Value::Null))
+                    .await;
+            slow.store(false, Ordering::SeqCst);
+            second
+        };
+        let (first, second) = tokio::join!(first, second);
+        assert!(second.is_err());
+        first.unwrap().unwrap();
+        let answer = p
+            .call_with_timeout("third", Value::Null, Duration::from_secs(5))
+            .await
+            .unwrap();
+        assert_eq!(answer, Value::Null);
+        let mut methods = Vec::new();
+        for _ in 0..2 {
+            match seen.recv().await.unwrap() {
+                Message::Request(req) => methods.push(req.method),
+                Message::Notification(n) => methods.push(n.method),
+                Message::Response(_) => panic!("unexpected response"),
+            }
+        }
+        assert_eq!(methods, ["first", "third"]);
+    }
+
+    #[tokio::test]
+    async fn writes_fail_after_shutdown() {
+        let (host_side, plugin_side) = duplex(1024);
+        let (r, w) = tokio::io::split(host_side);
+        let p = PluginProcess::from_streams("bye", r, w);
+        let (plugin_read, mut plugin_write) = tokio::io::split(plugin_side);
+        let (eof_tx, eof_rx) = oneshot::channel();
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(plugin_read).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                if let Ok(Message::Request(req)) = Message::parse(&line) {
+                    let out = Response::success(req.id, json!({}));
+                    let mut reply = Message::Response(out).to_line().unwrap();
+                    reply.push('\n');
+                    plugin_write.write_all(reply.as_bytes()).await.unwrap();
+                }
+            }
+            // Keep the host's reader open: only stdin is closed.
+            let _ = eof_tx.send(());
+            std::future::pending::<()>().await;
+        });
+
+        let started = std::time::Instant::now();
+        p.shutdown().await;
+        assert!(started.elapsed() < SHUTDOWN_GRACE);
+        // The plugin saw end-of-file on its stdin.
+        tokio::time::timeout(Duration::from_secs(1), eof_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        let limit = Duration::from_secs(1);
+        let notified = tokio::time::timeout(limit, p.notify("late", Value::Null)).await;
+        assert!(notified.expect("notify must not hang").is_err());
+        let called = tokio::time::timeout(limit, p.call("late", Value::Null)).await;
+        let err = called.expect("call must not hang").unwrap_err();
+        assert!(err.message.contains("closed"));
+    }
+
+    #[tokio::test]
+    async fn write_failure_breaks_the_client() {
+        // The reader stays open, so only the writer can notice the failure.
+        let (r, _keep_reader) = duplex(64);
+        let (w, plugin_stdin) = duplex(1024);
+        let p = PluginProcess::from_streams("broken", r, w);
+        let waiting = p.call("waiting", Value::Null);
+        let breaker = async {
+            // Let `waiting` be written, then make the next write fail.
+            while p.shared.state().pending.is_empty() {
+                tokio::task::yield_now().await;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            drop(plugin_stdin);
+            p.notify("next", Value::Null).await
+        };
+        let (waiting, next) = tokio::join!(waiting, breaker);
+        assert!(next.unwrap_err().message.contains("cannot write"));
+        assert!(
+            waiting
+                .unwrap_err()
+                .message
+                .contains("stopped accepting input")
+        );
         assert!(p.is_closed());
-        assert!(p.call("next", Value::Null).await.is_err());
+        let later = tokio::time::timeout(Duration::from_secs(1), p.notify("later", Value::Null));
+        assert!(later.await.expect("must not hang").is_err());
     }
 
     #[tokio::test]

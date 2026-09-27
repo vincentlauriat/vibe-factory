@@ -58,8 +58,11 @@ host                                          plugin
 
 If the handshake or a listing fails, the process is shut down and the plugin counts as not
 started. The host only calls `tools/*`, `agents/list` and `hooks/before_tool` when the
-matching capability was advertised. When a request times out before it was fully written,
-the host closes the stream and fails every later call fast.
+matching capability was advertised. All host writes go through one writer task that owns
+the plugin's stdin and writes whole queued lines one at a time, so a caller that times out or
+is cancelled never leaves a partial line: its line is written whole, or skipped if its turn had
+not come yet. A failed write marks the connection dead and fails every pending and later
+call fast; after `shutdown` closed stdin, writes fail with ``plugin `<name>` is closed``.
 
 | Constant | Value | Applies to |
 |----------|-------|-----------|
