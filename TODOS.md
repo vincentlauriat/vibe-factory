@@ -18,7 +18,8 @@ then a terminal UI on top of it.
 - [x] Publish `summary.md` with the framework commit, toolchain and model
       (`evals/baselines/2026-09-27-claude-sonnet-5.md`)
 - [x] Finish the suite: `lru`, `money`, `semver`, `slug` and two more `inventory` runs (30/30)
-- [ ] Review a sample of runs by hand (tests added, shared code in refactoring cases)
+- [x] Review a sample of runs by hand (tests added, shared code in refactoring cases)
+- [ ] Tighten the `catalog` task: `search` must be built on the helper `find` uses (2/3 runs wrote two helpers)
 - [x] `run_suite.py --jobs N` to run cases in parallel (a full suite takes about 2 hours)
 
 ### 2. Streaming completions

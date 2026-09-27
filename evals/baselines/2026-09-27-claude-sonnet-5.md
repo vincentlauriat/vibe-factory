@@ -32,5 +32,19 @@ Every run passed its oracle, with one required validation run each. A run takes 
 minutes and 130 000 tokens on average; `boundary` is the cheapest case, `inventory` the most
 expensive. The runs made with three jobs at once took no longer than the sequential ones.
 
-Not yet done: the review by hand of a sample of runs (whether the requested tests were
-added, whether the refactoring cases really share code), which the oracles do not check.
+## Review by hand
+
+The oracles check behaviour only. The final workspace of every run was compared with its
+baseline commit for what they miss:
+
+* Tests: every run added tests (7 to 24 `#[test]` functions, 13 on average) and none
+  removed or rewrote an existing one. `inventory` runs also added an integration test file.
+* `money`: in the three runs, `invoice_line` and `refund_line` are one line each, a call to
+  `crate::money::format_cents`; no formatting code is left in either module.
+* `catalog`: the three runs moved the comparison into a separate module used by both `find`
+  and `search`, but only one has a single helper. In the two others the module holds two
+  functions, an equality for `find` and a substring test for `search`, with the same ASCII
+  semantics but independent code (one uses `to_ascii_lowercase`, the other byte windows).
+  The task asks for "the same comparison helper", so these two runs meet the letter of the
+  oracle, not quite the intent. The case could say that `search` must be built on the
+  helper `find` uses.
