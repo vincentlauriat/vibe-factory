@@ -12,7 +12,7 @@ use vibe_agents::test_support::{
 };
 use vibe_agents::{
     AgentRunner, CONTEXT_WARNING_MESSAGE, CONTINUE_NUDGE, CONVERGE_MESSAGE, ContinuationPolicy,
-    run_structured, run_with_continuation,
+    MAX_RETRY_DELAY, TRUNCATED_TWICE_MESSAGE, run_structured, run_with_continuation,
 };
 use vibe_core::agent::ThinkingLevel;
 use vibe_core::{
@@ -654,9 +654,70 @@ async fn retryable_provider_errors_are_retried() {
 }
 
 #[tokio::test]
-async fn max_tokens_without_tool_use_nudges_once() {
+async fn long_retry_wait_is_capped_and_interrupted_by_cancellation() {
+    let provider = Arc::new(ScriptedProvider::with_results(vec![
+        Err(Error::new(ErrorKind::RateLimited, "quota")
+            .with_retry_after(Duration::from_secs(3_600))),
+        Ok(text_response("never")),
+    ]));
+    let (tx, rx) = tokio::sync::watch::channel(false);
+    let r = runner(provider.clone(), ToolRegistry::new()).cancel_token(rx);
+    let mut events = r.events().subscribe();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        let _ = tx.send(true);
+    });
+    let started = std::time::Instant::now();
+    let out = tokio::time::timeout(Duration::from_secs(5), r.run(&spec(), "go".into()))
+        .await
+        .expect("cancellation must interrupt the retry wait")
+        .unwrap();
+    assert_eq!(out.stop, AgentStop::Cancelled);
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert_eq!(provider.request_count(), 1, "no call after cancellation");
+
+    let mut delays = Vec::new();
+    while let Ok(env) = events.try_recv() {
+        if let Event::Retrying { delay_ms, .. } = env.event {
+            delays.push(delay_ms);
+        }
+    }
+    assert_eq!(
+        delays,
+        vec![60_000],
+        "the 1 h hint is capped at MAX_RETRY_DELAY"
+    );
+    assert_eq!(MAX_RETRY_DELAY, Duration::from_secs(60));
+}
+
+#[tokio::test]
+async fn max_tokens_continuation_stitches_the_cut_answer() {
     let provider = Arc::new(ScriptedProvider::new(vec![
-        response_with_stop("part one", StopReason::MaxTokens),
+        response_with_stop("{\"status\": \"do", StopReason::MaxTokens),
+        text_response("ne\", \"files_changed\": [\"a.rs\"]}"),
+        text_response("never"),
+    ]));
+    let r = runner(provider.clone(), ToolRegistry::new());
+    let (report, out): (Report, _) = run_structured(&r, &spec(), "write a lot".into())
+        .await
+        .unwrap();
+    assert_eq!(out.stop, AgentStop::Completed);
+    assert_eq!(out.steps, 2);
+    assert_eq!(
+        out.final_text,
+        "{\"status\": \"done\", \"files_changed\": [\"a.rs\"]}"
+    );
+    assert_eq!(report.status, "done");
+    assert_eq!(report.files_changed, vec!["a.rs"]);
+    let reqs = provider.requests();
+    assert_eq!(reqs.len(), 2, "no repair call: the stitched text parses");
+    assert_eq!(last_user_text(&reqs[1]), CONTINUE_NUDGE);
+}
+
+#[tokio::test]
+async fn max_tokens_twice_in_a_row_is_an_error() {
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        response_with_stop("part one ", StopReason::MaxTokens),
         response_with_stop("part two", StopReason::MaxTokens),
         text_response("never"),
     ]));
@@ -664,12 +725,39 @@ async fn max_tokens_without_tool_use_nudges_once() {
         .run(&spec(), "write a lot".into())
         .await
         .unwrap();
-    assert_eq!(out.stop, AgentStop::Completed);
+    assert_eq!(
+        out.stop,
+        AgentStop::Error {
+            kind: ErrorKind::Other,
+            message: TRUNCATED_TWICE_MESSAGE.into(),
+        }
+    );
+    assert!(!out.is_success());
     assert_eq!(out.steps, 2);
-    assert_eq!(out.final_text, "part two");
-    let reqs = provider.requests();
-    assert_eq!(reqs.len(), 2);
-    assert_eq!(last_user_text(&reqs[1]), CONTINUE_NUDGE);
+    assert_eq!(out.final_text, "part one part two");
+    assert_eq!(provider.request_count(), 2);
+}
+
+#[tokio::test]
+async fn tool_use_resets_the_truncation_chain() {
+    let tools = ToolRegistry::new().with(Arc::new(EchoTool::new()));
+    let provider = Arc::new(ScriptedProvider::new(vec![
+        response_with_stop("draft", StopReason::MaxTokens),
+        tool_use_response(vec![("c1", "echo", json!({"text": "x"}))]),
+        response_with_stop("{\"status\": ", StopReason::MaxTokens),
+        text_response("\"done\", \"files_changed\": []}"),
+    ]));
+    let out = runner(provider.clone(), tools)
+        .run(&spec(), "go".into())
+        .await
+        .unwrap();
+    assert_eq!(out.stop, AgentStop::Completed);
+    assert_eq!(out.steps, 4);
+    // Only the pieces after the last cut are stitched, not the earlier draft.
+    assert_eq!(
+        out.final_text,
+        "{\"status\": \"done\", \"files_changed\": []}"
+    );
 }
 
 #[tokio::test]

@@ -40,11 +40,20 @@ pub const CONTEXT_WARNING_MESSAGE: &str =
     "You are near the context limit: finish now, write your final output.";
 /// Message injected once for converging agents at 75% of their step budget.
 pub const CONVERGE_MESSAGE: &str = "Converge now: produce your final structured answer.";
-/// Message sent once when the model ran out of output tokens mid-answer.
+/// Message sent when the model ran out of output tokens mid-answer (a
+/// second cut in a row stops the run with [`TRUNCATED_TWICE_MESSAGE`]).
 pub const CONTINUE_NUDGE: &str = "continue (your previous answer was cut off by the output limit; resume exactly where it stopped)";
 
 /// Number of characters of a tool output kept in [`Event::ToolReturned`].
 const PREVIEW_CHARS: usize = 200;
+
+/// Upper bound of the wait before retrying a provider call, whatever the
+/// provider's `retry_after` hint says.
+pub const MAX_RETRY_DELAY: Duration = Duration::from_secs(60);
+
+/// Stop message used when the model is cut by the output limit twice in a
+/// row.
+pub const TRUNCATED_TWICE_MESSAGE: &str = "output truncated twice";
 
 /// Runs an [`AgentSpec`] against a [`ModelProvider`] with a set of tools.
 ///
@@ -409,7 +418,9 @@ impl AgentRunner {
         let mut usage = Usage::default();
         let mut warned_context = false;
         let mut converged = false;
-        let mut nudged = false;
+        // Index of the assistant message cut by the output limit, while the
+        // model is continuing it after a nudge.
+        let mut cut_from: Option<usize> = None;
 
         let stop = loop {
             if self.is_cancelled() {
@@ -481,6 +492,8 @@ impl AgentRunner {
             messages.push(assistant);
 
             if !calls.is_empty() {
+                // Tool use ends any continuation of a cut answer.
+                cut_from = None;
                 tool_calls += u32::try_from(calls.len()).unwrap_or(u32::MAX);
                 let results = self.execute_tools(&role, &tools, &ctx, calls).await;
                 messages.push(Message::tool_results(results));
@@ -488,20 +501,30 @@ impl AgentRunner {
             }
 
             match response.stop_reason {
-                StopReason::MaxTokens if !nudged => {
-                    nudged = true;
+                StopReason::MaxTokens if cut_from.is_some() => {
+                    break AgentStop::Error {
+                        kind: ErrorKind::Other,
+                        message: TRUNCATED_TWICE_MESSAGE.to_string(),
+                    };
+                }
+                StopReason::MaxTokens => {
+                    cut_from = Some(messages.len() - 1);
                     messages.push(Message::user(CONTINUE_NUDGE));
                 }
                 _ => break AgentStop::Completed,
             }
         };
 
-        let final_text = messages
-            .iter()
-            .rev()
-            .find(|m| m.role == Role::Assistant)
-            .map(Message::text)
-            .unwrap_or_default();
+        let final_text = match cut_from {
+            // The answer was cut and continued: stitch the pieces together.
+            Some(start) => concat_assistant_text(&messages[start..]),
+            None => messages
+                .iter()
+                .rev()
+                .find(|m| m.role == Role::Assistant)
+                .map(Message::text)
+                .unwrap_or_default(),
+        };
 
         self.events
             .publish(Event::AgentFinished {
@@ -532,10 +555,13 @@ impl AgentRunner {
                 Ok(r) => return Ok(r),
                 Err(e) if e.is_retryable() && attempt < self.max_provider_retries => {
                     attempt += 1;
-                    let delay = e.retry_after.unwrap_or_else(|| {
-                        self.retry_base_delay
-                            .saturating_mul(2u32.saturating_pow(attempt - 1))
-                    });
+                    let delay = e
+                        .retry_after
+                        .unwrap_or_else(|| {
+                            self.retry_base_delay
+                                .saturating_mul(2u32.saturating_pow(attempt - 1))
+                        })
+                        .min(MAX_RETRY_DELAY);
                     self.events
                         .publish(Event::Retrying {
                             run: self.run_id,
@@ -544,15 +570,35 @@ impl AgentRunner {
                             delay_ms: u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
                         })
                         .await;
-                    if !delay.is_zero() {
-                        tokio::time::sleep(delay).await;
-                    }
+                    self.sleep_unless_cancelled(delay).await;
                     if self.is_cancelled() {
                         return Err(Error::new(ErrorKind::Cancelled, "cancelled during retry"));
                     }
                 }
                 Err(e) => return Err(e),
             }
+        }
+    }
+
+    /// Sleep for `delay`, waking up early when the cancel token flips.
+    async fn sleep_unless_cancelled(&self, delay: Duration) {
+        if delay.is_zero() {
+            return;
+        }
+        let Some(rx) = &self.cancel else {
+            tokio::time::sleep(delay).await;
+            return;
+        };
+        let mut rx = rx.clone();
+        let cancelled = async move {
+            // A dropped sender can never cancel: wait out the full delay.
+            if rx.wait_for(|c| *c).await.is_err() {
+                std::future::pending::<()>().await;
+            }
+        };
+        tokio::select! {
+            () = tokio::time::sleep(delay) => {}
+            () = cancelled => {}
         }
     }
 
@@ -704,6 +750,21 @@ fn effective_max_tokens(max_tokens: u32, thinking: ThinkingLevel) -> u32 {
         Some(budget) => max_tokens.max(budget.saturating_add(4096)),
         None => max_tokens,
     }
+}
+
+/// Every text block of the assistant messages in `messages`, concatenated in
+/// order without separator (used to stitch an answer cut by the output
+/// limit back together).
+fn concat_assistant_text(messages: &[Message]) -> String {
+    messages
+        .iter()
+        .filter(|m| m.role == Role::Assistant)
+        .flat_map(|m| &m.content)
+        .filter_map(|b| match b {
+            ContentBlock::Text { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Token estimate of a prompt (system + messages).

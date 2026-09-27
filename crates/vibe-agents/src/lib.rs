@@ -32,7 +32,8 @@
 //!             after_tool hooks, truncate long outputs
 //!           append assistant message + one user message holding every
 //!           tool result (same order as the calls), then loop
-//!      no:  MaxTokens (first time)     -> append "continue", loop
+//!      no:  MaxTokens                  -> append "continue", loop
+//!           MaxTokens twice in a row   -> stop: Error ("output truncated twice")
 //!           otherwise                  -> stop: Completed
 //! ```
 //!
@@ -40,6 +41,12 @@
 //! [`vibe_core::AgentStop::Error`] and the transcript is kept in the
 //! [`vibe_core::AgentOutcome`]. Tool failures (unknown tool, `Err`, panic,
 //! hook veto) are sent back to the model as error results so it can adapt.
+//! Retryable provider errors are retried after at most
+//! [`runtime::MAX_RETRY_DELAY`]; the wait is interrupted by cancellation.
+//!
+//! When an answer is cut by the output limit and continued, the outcome's
+//! `final_text` is the concatenation of every piece, from the cut message to
+//! the last one, so a JSON document split across two turns still parses.
 //!
 //! Tool outputs longer than the configured limit (default 100 000
 //! characters, see [`AgentRunner::max_tool_output_chars`]) are truncated; the
@@ -136,7 +143,7 @@ pub use continuation::{
 pub use prompts::{builtin_prompt, documented_variables, strip_doc_comment};
 pub use runtime::{
     AgentRunner, CONTEXT_WARNING_MESSAGE, CONTINUE_NUDGE, CONVERGE_MESSAGE, DEFAULT_CONTEXT_WINDOW,
-    DEFAULT_MAX_TOOL_OUTPUT_CHARS,
+    DEFAULT_MAX_TOOL_OUTPUT_CHARS, MAX_RETRY_DELAY, TRUNCATED_TWICE_MESSAGE,
 };
 pub use structured::{
     extract_json, invalid_json_message, parse_structured, repair_json, run_structured,
