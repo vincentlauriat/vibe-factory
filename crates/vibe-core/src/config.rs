@@ -256,6 +256,15 @@ pub struct SecurityConfig {
     /// Paths outside the project agents may read.
     #[serde(default)]
     pub extra_read_paths: Vec<PathBuf>,
+    /// Domains `web_fetch` may reach (and their subdomains); empty means any
+    /// public host. Network access must be allowed as well.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub web_allowed_domains: Vec<String>,
+    /// SearXNG-compatible search URL with a `{query}` placeholder, e.g.
+    /// `https://searx.example/search?q={query}&format=json`. Registers the
+    /// `web_search` tool.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_url: Option<String>,
 }
 
 fn default_timeout() -> u64 {
@@ -270,6 +279,8 @@ impl Default for SecurityConfig {
             command_timeout_secs: default_timeout(),
             allow_network: false,
             extra_read_paths: Vec::new(),
+            web_allowed_domains: Vec::new(),
+            search_url: None,
         }
     }
 }

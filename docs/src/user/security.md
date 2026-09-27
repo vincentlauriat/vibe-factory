@@ -14,6 +14,11 @@ workspace and governed by a security policy you control from `.vibe/config.toml`
 | `glob` | Find files by pattern (`**/*.rs`), newest first, at most 2000 results. | read |
 | `grep` | Regex search in text files (`content`, `files` or `count` mode, context lines, case-insensitive). | read |
 | `bash` | Run a shell command inside the workspace with a timeout (default 120 s, max 600 s). Background jobs are killed when the command finishes. | execute |
+| `web_fetch` | Fetch a public http(s) page and return its text (HTML converted, 2 MB read at most, 30 000 characters returned). Hosts resolving to loopback, private, link-local or other internal addresses are refused, and each redirect is checked again; `security.web_allowed_domains` narrows it to some domains. | network |
+| `web_search` | Search through the SearXNG-compatible endpoint of `security.search_url` and list the first 10 results. Only registered when that key is set. | network |
+
+The web tools refuse to run unless `security.allow_network = true`. They are read-only
+tools, so read-only agents such as the researcher and the reviewers get them too.
 
 Which tools an agent may use is decided per role (see [Customising agents](agents.md)):
 the planner and the reviewers of the spec phase are read-only, the coder and the QA agents

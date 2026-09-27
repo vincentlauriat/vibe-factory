@@ -16,6 +16,7 @@ async-trait.workspace = true
 globset.workspace = true
 ignore.workspace = true
 regex.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 similar.workspace = true
@@ -26,6 +27,7 @@ vibe-core.workspace = true
 [dev-dependencies]
 pretty_assertions.workspace = true
 tempfile.workspace = true
+wiremock.workspace = true
 
 [lints]
 workspace = true

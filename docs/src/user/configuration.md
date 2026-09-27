@@ -251,6 +251,8 @@ See [Container workspace](workspaces.md#container-workspace) for what each setti
 | `command_timeout_secs` | integer | `120` | default timeout of a shell command; an agent may ask for up to 600 |
 | `allow_network` | bool | `false` | grant the network permission (`curl`, `wget`, `ssh`, … and network-using tools) |
 | `extra_read_paths` | list of paths | `[]` | directories outside the workspace that agents may read, never write |
+| `web_allowed_domains` | list of strings | `[]` | domains (and subdomains) `web_fetch` may reach; empty means any public host |
+| `search_url` | string | none | SearXNG-compatible search URL with `{query}`, e.g. `https://searx.example/search?q={query}&format=json`; registers `web_search` |
 
 The rules behind these keys are in [Tools and security](security.md).
 
