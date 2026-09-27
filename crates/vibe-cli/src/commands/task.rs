@@ -25,6 +25,7 @@ pub async fn run(root: &Path, cmd: TaskCommand, ui: Ui) -> Result<u8> {
             labels,
         } => add(&store, title, description, description_file, labels, ui).await,
         TaskCommand::List { status, all } => list(&store, status.map(Into::into), all, ui).await,
+        TaskCommand::Import { issue, forge } => import(root, &store, &issue, &forge, ui).await,
         TaskCommand::Show { reference } => show(root, &store, &reference, ui).await,
         TaskCommand::Discard { reference, yes } => discard(root, &store, &reference, yes, ui).await,
     }
@@ -371,6 +372,58 @@ async fn discard(
         }));
     } else {
         println!("{} discarded {label}", style::ok().apply_to("✓"));
+    }
+    Ok(0)
+}
+
+/// `vibe task import`: create a task from an issue, once per issue.
+async fn import(
+    root: &Path,
+    store: &Arc<FileTaskStore>,
+    issue: &str,
+    forge: &str,
+    ui: Ui,
+) -> Result<u8> {
+    use crate::forge::{Forge, ForgeKind, parse_issue_ref};
+    let issue_ref = parse_issue_ref(issue, ForgeKind::parse(forge)?)?;
+    let source = vibe_core::TaskSource::Issue {
+        provider: issue_ref.forge.name().to_string(),
+        reference: issue_ref.to_string(),
+    };
+    for existing in store.list_tasks().await? {
+        if existing.source == source {
+            let number = task_number(store, &existing).await;
+            anyhow::bail!(
+                "{issue_ref} is already imported as {}",
+                crate::util::task_label(number, &existing)
+            );
+        }
+    }
+    let config = load_config(root)?;
+    let found = Forge::from_config(issue_ref.forge, &config)
+        .issue(&issue_ref)
+        .await?;
+    if found.title.is_empty() {
+        anyhow::bail!("{issue_ref} has no title");
+    }
+    let mut description = found.body.clone();
+    if !description.is_empty() {
+        description.push_str("\n\n");
+    }
+    description.push_str(&format!("Imported from {issue_ref} ({})", found.url));
+    let mut task = Task::new(found.title, description);
+    task.labels = found.labels;
+    task.source = source;
+    store.save_task(&task).await?;
+    let number = task_number(store, &task).await;
+    if ui.json {
+        ui.print_json(&json!({"task": task, "number": number, "issue": found.url}));
+    } else {
+        println!(
+            "{} created {} from {issue_ref}",
+            style::ok().apply_to("✓"),
+            crate::util::task_label(number, &task)
+        );
     }
     Ok(0)
 }

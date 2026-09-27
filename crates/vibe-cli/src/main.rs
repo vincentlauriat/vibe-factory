@@ -38,6 +38,7 @@
 mod app;
 mod cli;
 mod commands;
+mod forge;
 mod mock;
 mod render;
 mod server;

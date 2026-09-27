@@ -106,6 +106,21 @@ with subtask statuses, the latest QA verdict and issues, the state of the last r
 (`run.json`) and the workspace branch and directory. The files it reads are listed in
 [Persistence layout](../design/persistence.md).
 
+### `vibe task import`
+
+```sh
+vibe task import octo/app#12
+vibe task import https://gitlab.com/group/project/-/issues/5
+vibe task import gitlab:group/project#5
+```
+
+Creates a task from a GitHub or GitLab issue: its title, its body (followed by a link back)
+and its labels. The task remembers the issue (`source`), so importing it twice fails with
+`already imported as …`, and `vibe pr` closes it. Private repositories need a token in
+`GITHUB_TOKEN` (or `GH_TOKEN`) or `GITLAB_TOKEN`; see [`[integrations]`](configuration.md#integrations)
+for GitHub Enterprise and self-managed GitLab. `--forge gitlab` makes the short form refer to
+GitLab.
+
 ### `vibe task discard`
 
 ```sh
@@ -216,6 +231,20 @@ Asks the process that runs the task (a `vibe run` in another terminal, for examp
 after its current step, as `Ctrl-C` would. `--wait` returns once the run has stopped. It
 fails when no process runs the task. Only one process at a time can run a given task: a
 second `vibe run` fails with `already being run by another process`.
+
+## `vibe pr`
+
+```sh
+vibe pr <REF> [--repo OWNER/REPO] [--forge github|gitlab] [--remote origin] [--base BRANCH] [--draft] [--no-push]
+```
+
+For a task in `ready` with the `git_worktree` or `container` workspace: pushes its branch to
+the remote and opens a pull request (a merge request on GitLab) into the branch the task was
+forked from. The description summarises the spec (or the task), lists the subtasks, gives the
+last QA verdict and the required checks, and ends with `Closes #N` when the task was imported
+from an issue of the same repository. The repository is read from the remote URL unless
+`--repo` is given; the forge from the remote host (or the imported issue), else GitHub. A
+token is required (`GITHUB_TOKEN` or `GITLAB_TOKEN`). The URL is added to `progress.md`.
 
 ## `vibe memory`
 

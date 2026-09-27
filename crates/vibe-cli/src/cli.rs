@@ -83,6 +83,8 @@ pub enum Command {
         #[arg(long)]
         wait: bool,
     },
+    /// Push a ready task's branch and open a pull request (or GitLab merge request).
+    Pr(PrArgs),
     /// Show or clear the project memory (`.vibe/memory.jsonl`).
     #[command(subcommand)]
     Memory(MemoryCommand),
@@ -137,6 +139,15 @@ pub enum TaskCommand {
         /// Include done and cancelled tasks.
         #[arg(long)]
         all: bool,
+    },
+    /// Create a task from a GitHub or GitLab issue.
+    Import {
+        /// `owner/repo#12`, `gitlab:group/project#5`, or an issue URL.
+        #[arg(value_name = "ISSUE")]
+        issue: String,
+        /// Forge of the short form (`github` by default).
+        #[arg(long, value_name = "FORGE", default_value = "github")]
+        forge: String,
     },
     /// Show a task: spec, plan, QA verdict, run state and workspace.
     Show {
@@ -222,6 +233,32 @@ pub fn parse_duration_secs(text: &str) -> Result<u64, String> {
     value
         .checked_mul(factor)
         .ok_or_else(|| format!("duration `{text}` is too large"))
+}
+
+/// `vibe pr …`
+#[derive(Debug, Args)]
+pub struct PrArgs {
+    /// Task number, `NNN-slug` directory name, or id prefix.
+    #[arg(value_name = "REF")]
+    pub reference: String,
+    /// Repository (`owner/repo`); default: read from the remote URL.
+    #[arg(long, value_name = "OWNER/REPO")]
+    pub repo: Option<String>,
+    /// `github` or `gitlab`; default: from the remote host, else github.
+    #[arg(long, value_name = "FORGE")]
+    pub forge: Option<String>,
+    /// Remote to push to.
+    #[arg(long, default_value = "origin")]
+    pub remote: String,
+    /// Target branch; default: the branch the task was forked from.
+    #[arg(long)]
+    pub base: Option<String>,
+    /// Open it as a draft.
+    #[arg(long)]
+    pub draft: bool,
+    /// Do not push the branch (it is already on the remote).
+    #[arg(long)]
+    pub no_push: bool,
 }
 
 /// `vibe memory …`

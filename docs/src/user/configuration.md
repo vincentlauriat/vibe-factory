@@ -257,6 +257,21 @@ See [Container workspace](workspaces.md#container-workspace) for what each setti
 
 The rules behind these keys are in [Tools and security](security.md).
 
+## `[integrations]`
+
+```toml
+[integrations.github]
+api_url = "https://github.example.com/api/v3"   # GitHub Enterprise; default https://api.github.com
+token_env = "GHE_TOKEN"                         # default GITHUB_TOKEN, then GH_TOKEN
+
+[integrations.gitlab]
+api_url = "https://gitlab.example.com/api/v4"   # default https://gitlab.com/api/v4
+token_env = "GITLAB_TOKEN"
+```
+
+Used by `vibe task import` and `vibe pr`. Tokens are read from the environment only, never
+from the configuration file.
+
 ## `[[plugins]]`
 
 | Key | Type | Default | Meaning |

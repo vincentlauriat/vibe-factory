@@ -346,6 +346,42 @@ pub struct VibeConfig {
     /// Workspace provider settings (`[workspace.container]`).
     #[serde(default, skip_serializing_if = "WorkspaceConfig::is_empty")]
     pub workspace: WorkspaceConfig,
+    /// Issue trackers and code forges (`[integrations.github]`, …).
+    #[serde(default, skip_serializing_if = "IntegrationsConfig::is_empty")]
+    pub integrations: IntegrationsConfig,
+}
+
+/// Issue trackers and code forges.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct IntegrationsConfig {
+    /// GitHub or GitHub Enterprise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github: Option<ForgeConfig>,
+    /// GitLab (gitlab.com or self-managed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gitlab: Option<ForgeConfig>,
+}
+
+impl IntegrationsConfig {
+    /// Whether nothing is configured (the table is then not serialised).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.github.is_none() && self.gitlab.is_none()
+    }
+}
+
+/// How to reach one forge.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ForgeConfig {
+    /// API base URL (default `https://api.github.com` or
+    /// `https://gitlab.com/api/v4`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_url: Option<String>,
+    /// Environment variable holding the token (default `GITHUB_TOKEN` or
+    /// `GITLAB_TOKEN`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_env: Option<String>,
 }
 
 fn default_provider() -> String {
@@ -400,6 +436,7 @@ impl Default for VibeConfig {
             plugins: Vec::new(),
             base_branch: None,
             workspace: WorkspaceConfig::default(),
+            integrations: IntegrationsConfig::default(),
         }
     }
 }
