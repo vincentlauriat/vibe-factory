@@ -8,7 +8,7 @@ use std::time::Duration;
 use common::*;
 use serde_json::json;
 use tokio::sync::watch;
-use vibe_core::{Complexity, Event, Phase, SubtaskStatus, TaskStatus, TaskStore};
+use vibe_core::{Complexity, Event, MemoryStore, Phase, SubtaskStatus, TaskStatus, TaskStore};
 use vibe_pipeline::{MemoryFile, PipelineStore, RunOptions, RunStatus};
 
 fn phases(report: &vibe_pipeline::RunReport) -> Vec<Phase> {
@@ -1741,4 +1741,62 @@ async fn one_process_at_a_time_and_cancel_requests_from_another() {
     );
     // The lock is free again.
     assert!(other.lock_run(task.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn lessons_of_one_task_are_recalled_in_the_next() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.max_subtask_attempts = 1;
+    let memory = Arc::new(vibe_pipeline::FileMemoryStore::for_project(&h.root()));
+    h.registry.add_memory("project", memory.clone());
+    let first = h.task("Add export command", "Export tasks as CSV").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![
+            plan_json(json!([{"name": "Only", "subtasks": [
+                {"title": "Write the exporter", "description": "csv"}
+            ]}])),
+            one_subtask_plan(),
+        ],
+    );
+    h.router.route(
+        CODER,
+        None,
+        vec![coder_failed("the csv crate is not vendored offline")],
+    );
+    let failed = h
+        .pipeline()
+        .run(
+            first.id,
+            RunOptions {
+                complexity_override: Some(Complexity::Trivial),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(failed.final_status, TaskStatus::Failed);
+    let lessons = memory.all().await.unwrap();
+    assert_eq!(lessons.len(), 1);
+    assert!(lessons[0].content.contains("not vendored offline"));
+    assert_eq!(lessons[0].task_id, Some(first.id));
+
+    let second = h.task("Add export to JSON", "Export tasks as JSON").await;
+    h.router.route(CODER, None, vec![coder_done("done")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    h.pipeline()
+        .run(
+            second.id,
+            RunOptions {
+                complexity_override: Some(Complexity::Trivial),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    let planner = &h.router.calls_for("planner")[1];
+    let prompt = format!("{}{}", planner.system, planner.user);
+    assert!(prompt.contains("Recalled from `project`"), "{prompt}");
+    assert!(prompt.contains("not vendored offline"));
 }

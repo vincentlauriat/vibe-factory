@@ -694,13 +694,11 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
                             "Subtask {n} `{title}` FAILED after {attempt} attempt(s): {why}"
                         ))
                         .await?;
-                        ctx.store
-                            .append_memory(
-                                ctx.task.id,
-                                MemoryFile::Gotchas,
-                                &format!("Subtask `{title}` failed repeatedly: {why}"),
-                            )
-                            .await?;
+                        ctx.remember(
+                            MemoryFile::Gotchas,
+                            &format!("Subtask `{title}` failed repeatedly: {why}"),
+                        )
+                        .await?;
                     } else {
                         publish_status(ctx, id, SubtaskStatus::Pending).await;
                         ctx.note(&format!(

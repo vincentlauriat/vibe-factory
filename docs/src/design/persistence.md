@@ -13,6 +13,8 @@ and which ones you may edit.
 ├── config.toml                     project configuration
 ├── agents/*.toml                   agent overrides and custom agents (+ prompt files)
 ├── plugins/<name>/vibe-plugin.toml plugin manifests
+├── memory.jsonl                    project memory: one lesson per line, shared by tasks
+├── server.token                    token of a running `vibe serve` (owner-only)
 ├── worktrees/                      one git worktree per task (git_worktree workspace)
 │   ├── .gitignore                  "*"
 │   └── <slug>-<id8>/               the task's workspace

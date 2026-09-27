@@ -217,6 +217,21 @@ after its current step, as `Ctrl-C` would. `--wait` returns once the run has sto
 fails when no process runs the task. Only one process at a time can run a given task: a
 second `vibe run` fails with `already being run by another process`.
 
+## `vibe memory`
+
+```sh
+vibe memory list [--query TEXT]
+vibe memory clear [--yes]
+```
+
+The project memory holds lessons learnt by earlier tasks: findings of the spec phase
+(conventions), subtasks that failed repeatedly and QA issues that fixes could not solve
+(pitfalls). They are kept in `.vibe/memory.jsonl`, once each, and the ones sharing words with
+a new task's title and description are given to its agents as "Recalled from `project`".
+`list` shows them newest first, or the ones relevant to `--query`; `clear` forgets them.
+Set `pipeline.project_memory = false` to turn the memory off; plugins can register other
+memory stores.
+
 ## `vibe tui`
 
 ```sh

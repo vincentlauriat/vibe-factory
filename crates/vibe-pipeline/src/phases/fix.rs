@@ -73,13 +73,11 @@ pub async fn run_fix(ctx: &mut RunContext) -> Result<PhaseResult> {
             "issue `{title}` was reported in {ESCALATION_ROUNDS} consecutive QA rounds; escalating to a human"
         );
         ctx.note(&reason).await?;
-        ctx.store
-            .append_memory(
-                ctx.task.id,
-                MemoryFile::Gotchas,
-                &format!("Recurring QA issue that automated fixes did not solve: {title}"),
-            )
-            .await?;
+        ctx.remember(
+            MemoryFile::Gotchas,
+            &format!("Recurring QA issue that automated fixes did not solve: {title}"),
+        )
+        .await?;
         return Ok(PhaseResult::ok(Phase::Fix, reason.clone())
             .with_success(false)
             .then(Transition::Stop {

@@ -6,6 +6,7 @@ pub mod config;
 pub mod doctor;
 pub mod events;
 pub mod init;
+pub mod memory;
 pub mod plugins;
 pub mod run;
 pub mod status;
@@ -50,6 +51,7 @@ pub async fn dispatch(cli: Cli) -> Result<u8> {
         Command::Cancel { reference, wait } => {
             approval::cancel(&find_project_root(project)?, &reference, wait, ui).await
         }
+        Command::Memory(cmd) => memory::run(&find_project_root(project)?, cmd, ui).await,
         Command::Tui => crate::tui::run(&find_project_root(project)?).await,
         Command::Serve(args) => crate::server::run(&find_project_root(project)?, args, ui).await,
         Command::Events(args) => events::run(&find_project_root(project)?, args, ui).await,

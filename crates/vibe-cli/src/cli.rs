@@ -83,6 +83,9 @@ pub enum Command {
         #[arg(long)]
         wait: bool,
     },
+    /// Show or clear the project memory (`.vibe/memory.jsonl`).
+    #[command(subcommand)]
+    Memory(MemoryCommand),
     /// Open the terminal UI: task board, live run view, approvals.
     Tui,
     /// Serve the HTTP API and the web UI on this machine.
@@ -219,6 +222,23 @@ pub fn parse_duration_secs(text: &str) -> Result<u64, String> {
     value
         .checked_mul(factor)
         .ok_or_else(|| format!("duration `{text}` is too large"))
+}
+
+/// `vibe memory …`
+#[derive(Debug, Subcommand)]
+pub enum MemoryCommand {
+    /// List the lessons, newest first, or the ones relevant to a query.
+    List {
+        /// Only entries sharing words with this text, most relevant first.
+        #[arg(long)]
+        query: Option<String>,
+    },
+    /// Forget everything.
+    Clear {
+        /// Do not ask for confirmation (required when stdin is not a terminal).
+        #[arg(short, long)]
+        yes: bool,
+    },
 }
 
 /// `vibe serve …`

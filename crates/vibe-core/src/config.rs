@@ -125,6 +125,10 @@ pub struct PipelineConfig {
     /// workspace.
     #[serde(default = "default_true")]
     pub isolate_subtasks: bool,
+    /// Keep lessons (pitfalls, conventions) in `.vibe/memory.jsonl` and
+    /// recall the relevant ones in later tasks.
+    #[serde(default = "default_true")]
+    pub project_memory: bool,
     /// Points where the run waits for a human decision (`vibe approve` or
     /// `vibe reject`): after the spec, after the plan, before merging.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -231,6 +235,7 @@ impl Default for PipelineConfig {
             max_validation_fix_attempts: default_validation_fix_attempts(),
             merge_strategy: MergeStrategy::Manual,
             isolate_subtasks: true,
+            project_memory: true,
             approvals: Vec::new(),
             max_tokens: None,
             max_duration_secs: None,

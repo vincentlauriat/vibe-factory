@@ -255,6 +255,12 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
     plugins
         .register_all(&mut registry)
         .context("cannot register plugins")?;
+    if config.pipeline.project_memory && !registry.memories.contains_key("project") {
+        registry.add_memory(
+            "project",
+            Arc::new(vibe_pipeline::FileMemoryStore::for_project(root)),
+        );
+    }
     let registry = Arc::new(registry);
     let resolver = CliResolver {
         providers,

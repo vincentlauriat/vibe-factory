@@ -1325,3 +1325,31 @@ fn cancel_stops_a_run_in_another_process() {
     assert_eq!(status.code(), Some(130));
     assert_eq!(p.task_json(1)["status"], "cancelled");
 }
+
+#[test]
+fn memory_list_query_and_clear() {
+    let p = Project::new();
+    p.init();
+    p.vibe()
+        .args(["memory", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("empty"));
+    let lines = [
+        json!({"kind": "gotcha", "content": "Integration tests need DATABASE_URL", "recorded_at": "2026-09-01T10:00:00Z"}),
+        json!({"kind": "pattern", "content": "Errors use anyhow", "recorded_at": "2026-09-02T10:00:00Z"}),
+    ];
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    std::fs::write(p.root().join(".vibe").join("memory.jsonl"), text).unwrap();
+    let all = p.json(&["memory", "list"]);
+    assert_eq!(all.as_array().unwrap().len(), 2);
+    assert_eq!(all[0]["content"], "Errors use anyhow", "newest first");
+    let hits = p.json(&["memory", "list", "--query", "flaky integration tests"]);
+    assert_eq!(hits.as_array().unwrap().len(), 1);
+    p.vibe().args(["memory", "clear"]).assert().failure();
+    p.vibe()
+        .args(["memory", "clear", "--yes"])
+        .assert()
+        .success();
+    assert_eq!(p.json(&["memory", "list"]).as_array().unwrap().len(), 0);
+}

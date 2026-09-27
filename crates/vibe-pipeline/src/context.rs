@@ -459,6 +459,25 @@ impl RunContext {
             .await;
     }
 
+    /// Record a lesson: in the task's memory file, and in every registered
+    /// memory store (the project memory among them) so later tasks recall
+    /// it. A store that fails is logged, never fatal.
+    pub async fn remember(&self, file: crate::store::MemoryFile, note: &str) -> Result<()> {
+        self.store.append_memory(self.task.id, file, note).await?;
+        let kind = match file {
+            crate::store::MemoryFile::Gotchas => vibe_core::MemoryKind::Gotcha,
+            crate::store::MemoryFile::Patterns => vibe_core::MemoryKind::Pattern,
+        };
+        let mut entry = vibe_core::MemoryEntry::new(kind, note);
+        entry.task_id = Some(self.task.id);
+        for (name, memory) in &self.registry.memories {
+            if let Err(e) = memory.remember(entry.clone()).await {
+                tracing::warn!(memory = %name, error = %e, "cannot remember");
+            }
+        }
+        Ok(())
+    }
+
     /// Append a progress note.
     pub async fn note(&self, text: &str) -> Result<()> {
         self.store.append_progress(self.task.id, text).await

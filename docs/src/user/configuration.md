@@ -104,6 +104,7 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in [Providers and models](pro
 | `max_validation_fix_attempts` | integer | `2` | automatic validation fixes over the whole run, including resumes; `0` disables them |
 | `merge_strategy` | `"manual"` or `"assisted"` | `"manual"` | `manual` reports conflicts for a human; `assisted` lets a model resolve conflict markers first |
 | `isolate_subtasks` | bool | `true` | with `git_worktree`, one worktree per subtask attempt, integrated one at a time; see [Workspaces](workspaces.md#one-worktree-per-subtask-attempt) |
+| `project_memory` | bool | `true` | keep lessons (pitfalls, conventions) in `.vibe/memory.jsonl` and recall the relevant ones in later tasks; see `vibe memory` |
 | `approvals` | list of `"spec"`, `"plan"`, `"merge"` | `[]` | where the run waits for a human decision; see [Human approvals](#human-approvals) |
 | `max_tokens` | integer | none | input plus output tokens of the whole run, including resumes; the run pauses when reached |
 | `max_duration_secs` | integer | none | active time of the whole run in seconds, including resumes; the run pauses when reached |

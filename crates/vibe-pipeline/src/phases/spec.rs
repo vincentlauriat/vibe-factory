@@ -254,9 +254,7 @@ pub async fn run_spec(ctx: &mut RunContext) -> Result<PhaseResult> {
     ctx.store.save_spec(&spec).await?;
     ctx.artefact_written(vibe_core::Artefact::Spec).await;
     for finding in &spec.context.findings {
-        ctx.store
-            .append_memory(ctx.task.id, MemoryFile::Patterns, finding)
-            .await?;
+        ctx.remember(MemoryFile::Patterns, finding).await?;
     }
     let summary = format!(
         "{} requirement(s) via {}{critique}",
