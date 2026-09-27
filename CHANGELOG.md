@@ -30,9 +30,23 @@ All notable changes to this project are documented here. The format follows
   open its pull request or merge request (`[integrations.github|gitlab]`).
 - A VS Code extension in `editors/vscode`, a client of `vibe serve`.
 
+- `ANTHROPIC_WORKSPACE_ID`: sent as the `anthropic-workspace-id` header, required by API keys
+  that are not scoped to a workspace.
+
+### Fixed
+- Anthropic: current models (Claude 4.6 and later, including the default `claude-sonnet-5`)
+  get adaptive thinking with an effort level instead of `budget_tokens`, and no temperature,
+  both of which they reject with HTTP 400. Older models keep the budget form;
+  `extra.thinking` forces either one.
+
 ### Changed
 - Assisted conflict resolution counts against the run budget, and also resolves conflicts
   between subtasks before an attempt is failed.
+- Evaluations: each report records the pipeline error, `summary.md` lists the errors of
+  failed runs, and `run_suite.py` stops after the first run rejected for credentials, the
+  model name or the configuration instead of failing every run the same way.
+- First real-model baseline, partial: Claude Sonnet 5 passed 16/16 runs over six cases
+  (`evals/baselines/`).
 
 ## [0.2.0] — 2026-09-27
 

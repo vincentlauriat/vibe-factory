@@ -124,11 +124,9 @@ pub fn repo_from_remote(url: &str) -> Option<String> {
     let url = url.trim();
     let path = if let Some(rest) = url.strip_prefix("git@") {
         rest.split_once(':')?.1
-    } else if let Some(pos) = url.find("://") {
-        let after = &url[pos + 3..];
-        after.split_once('/')?.1
     } else {
-        return None;
+        let pos = url.find("://")?;
+        url[pos + 3..].split_once('/')?.1
     };
     let path = path.trim_end_matches('/').trim_end_matches(".git");
     valid_repo(path).then(|| path.to_string())

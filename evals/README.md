@@ -53,7 +53,8 @@ point of the oracle.
 
 ## Running a real-model baseline
 
-Each run makes billable model calls. Set the provider's API key, then:
+Each run makes billable model calls. Set the provider's API key (and `ANTHROPIC_WORKSPACE_ID`
+when an Anthropic key is not scoped to a workspace), then:
 
 ```sh
 cargo build --release -p vibe-cli
@@ -76,6 +77,12 @@ The suite writes `summary.md` and `summary.json` next to the per-run directories
 | no usage | runs where the CLI failed before reporting usage (excluded from tokens) |
 | validations | mean number of required validation executions |
 
+Under the table, `summary.md` lists the pipeline errors of the failed runs, most frequent
+first. The suite stops after the first run that fails in a way no other run can avoid
+(`AuthFailed`, `InvalidRequest` or `Config`: a missing or rejected API key, an unknown model,
+an invalid configuration) and exits with 1. Fix the cause and start again in a new
+destination. Runs that last well under a second with 0 tokens never reached the model.
+
 To browse the results, start `vibe serve --evals results` in the project and open the
 **Evaluations** view of the web UI.
 
@@ -84,7 +91,10 @@ the Rust toolchain (`rustc --version`), the exact model, the number of repetitio
 date. Review a sample of runs by hand as well: whether the requested tests were added and
 whether the refactoring cases really share code are not checked by the oracles.
 
-No real-model score has been published yet.
+Published baselines are in [`baselines/`](baselines/):
+
+* [Claude Sonnet 5, 2026-09-27](baselines/2026-09-27-claude-sonnet-5.md) (partial: 16 runs
+  over six cases): 16/16 successful, about four minutes and 150 000 tokens per run.
 
 ## One run
 

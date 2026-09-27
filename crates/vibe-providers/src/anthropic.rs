@@ -13,8 +13,13 @@
 //!   thinking is disabled for that request so it stays valid;
 //! * the system prompt is sent as a single cached block
 //!   (`cache_control: {type: "ephemeral"}`) so repeated agent turns reuse it;
-//! * `thinking_budget` enables extended thinking and raises `max_tokens` above
-//!   the budget when needed (temperature is omitted, as the API requires);
+//! * `thinking_budget` enables thinking. Current models (Claude 4.6 and
+//!   later) take adaptive thinking with an effort level derived from the
+//!   budget and accept no sampling parameters; older ones (Haiku 4.5,
+//!   Claude 4.5 and before) take a token budget. Either way `max_tokens` is
+//!   raised above the budget when needed and temperature is omitted while
+//!   thinking, as the API requires. `extra.thinking = "adaptive"` or
+//!   `"budget"` overrides the choice made from the model name;
 //! * cache read/creation token counts are reported in [`Usage`].
 //!
 //! Authentication uses `x-api-key` by default, or `Authorization: Bearer` plus
@@ -26,7 +31,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use vibe_core::provider::ProviderInfo;
@@ -128,6 +133,52 @@ pub struct AnthropicProvider {
     retry: RetryPolicy,
     thinking_cache: Arc<Mutex<ThinkingCache>>,
     streaming: bool,
+    thinking_mode: Option<ThinkingMode>,
+}
+
+/// How a model is asked to think.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThinkingMode {
+    /// `thinking: {type: "adaptive"}` plus `output_config.effort`; sampling
+    /// parameters are rejected (Claude 4.6 and later).
+    Adaptive,
+    /// `thinking: {type: "enabled", budget_tokens}` (Haiku 4.5, Claude 4.5
+    /// and before).
+    Budget,
+}
+
+impl ThinkingMode {
+    /// The mode a model takes, from its id. Unknown ids (gateways, other
+    /// models behind an Anthropic-compatible endpoint) keep the budget form.
+    #[must_use]
+    pub fn for_model(model: &str) -> Self {
+        let m = model.to_ascii_lowercase();
+        let legacy = [
+            "claude-3",
+            "haiku",
+            "-4-5",
+            "-4-1",
+            "-4-0",
+            "opus-4-2",
+            "sonnet-4-2",
+        ];
+        let current = m.contains("fable") || m.contains("mythos") || m.contains("claude");
+        if current && !legacy.iter().any(|l| m.contains(l)) {
+            Self::Adaptive
+        } else {
+            Self::Budget
+        }
+    }
+}
+
+/// Effort level standing for a thinking budget.
+fn effort(budget: u32) -> &'static str {
+    match budget {
+        0..=2048 => "low",
+        2049..=8192 => "medium",
+        8193..=24576 => "high",
+        _ => "max",
+    }
 }
 
 impl fmt::Debug for AnthropicProvider {
@@ -163,6 +214,7 @@ impl AnthropicProvider {
             retry: RetryPolicy::default(),
             thinking_cache: Arc::new(Mutex::new(ThinkingCache::default())),
             streaming: true,
+            thinking_mode: None,
         }
     }
 
@@ -190,9 +242,20 @@ impl AnthropicProvider {
                 )));
             }
         };
-        let mut provider = Self::with_auth(auth)
-            .with_name(name)
-            .with_headers(headers_from_extra(&config.extra)?);
+        let mut headers = headers_from_extra(&config.extra)?;
+        add_workspace_header(&mut headers, std::env::var(WORKSPACE_ID_ENV).ok())?;
+        let thinking_mode = match config.extra.get("thinking").map(|v| v.as_str()) {
+            None => None,
+            Some(Some("adaptive")) => Some(ThinkingMode::Adaptive),
+            Some(Some("budget")) => Some(ThinkingMode::Budget),
+            Some(_) => {
+                return Err(Error::config(format!(
+                    "provider `{name}`: `extra.thinking` must be \"adaptive\" or \"budget\""
+                )));
+            }
+        };
+        let mut provider = Self::with_auth(auth).with_name(name).with_headers(headers);
+        provider.thinking_mode = thinking_mode;
         if let Some(url) = &config.base_url {
             provider = provider.with_base_url(url);
         }
@@ -227,6 +290,13 @@ impl AnthropicProvider {
     #[must_use]
     pub fn with_default_model(mut self, model: impl AsRef<str>) -> Self {
         self.default_model = expand_model_shorthand(model.as_ref());
+        self
+    }
+
+    /// Force the thinking form instead of choosing it from the model id.
+    #[must_use]
+    pub fn with_thinking_mode(mut self, mode: ThinkingMode) -> Self {
+        self.thinking_mode = Some(mode);
         self
     }
 
@@ -280,7 +350,11 @@ impl AnthropicProvider {
     #[must_use]
     pub fn build_body(&self, request: &CompletionRequest) -> Value {
         let mut body = Map::new();
-        body.insert("model".into(), json!(self.effective_model(request)));
+        let model = self.effective_model(request);
+        let mode = self
+            .thinking_mode
+            .unwrap_or_else(|| ThinkingMode::for_model(&model));
+        body.insert("model".into(), json!(model));
 
         let messages: Vec<Value> = {
             let cache = lock(&self.thinking_cache);
@@ -329,14 +403,20 @@ impl AnthropicProvider {
             body.insert("tools".into(), Value::Array(tools));
         }
 
-        match budget {
-            Some(b) => {
+        match (budget, mode) {
+            (Some(b), ThinkingMode::Adaptive) => {
+                body.insert("thinking".into(), json!({"type": "adaptive"}));
+                body.insert("output_config".into(), json!({"effort": effort(b)}));
+            }
+            (Some(b), ThinkingMode::Budget) => {
                 body.insert(
                     "thinking".into(),
                     json!({"type": "enabled", "budget_tokens": b}),
                 );
             }
-            None => {
+            // Current models reject sampling parameters.
+            (None, ThinkingMode::Adaptive) => {}
+            (None, ThinkingMode::Budget) => {
                 if let Some(t) = request.temperature {
                     body.insert("temperature".into(), json!(t));
                 }
@@ -368,6 +448,27 @@ impl AnthropicProvider {
         };
         rb.json(body)
     }
+}
+
+/// Environment variable holding the workspace of an API key that is not
+/// scoped to one.
+pub const WORKSPACE_ID_ENV: &str = "ANTHROPIC_WORKSPACE_ID";
+
+const WORKSPACE_HEADER: &str = "anthropic-workspace-id";
+
+/// Send `anthropic-workspace-id` when a workspace is given and the
+/// configured headers do not already set it.
+fn add_workspace_header(headers: &mut HeaderMap, workspace: Option<String>) -> Result<()> {
+    let Some(workspace) = workspace.map(|w| w.trim().to_string()) else {
+        return Ok(());
+    };
+    if workspace.is_empty() || headers.contains_key(WORKSPACE_HEADER) {
+        return Ok(());
+    }
+    let value = HeaderValue::from_str(&workspace)
+        .map_err(|e| Error::config(format!("invalid {WORKSPACE_ID_ENV}: {e}")))?;
+    headers.insert(WORKSPACE_HEADER, value);
+    Ok(())
 }
 
 /// Convert one core message into the wire format, or `None` when nothing
@@ -755,6 +856,21 @@ mod tests {
     }
 
     #[test]
+    fn workspace_header() {
+        let mut headers = HeaderMap::new();
+        add_workspace_header(&mut headers, None).unwrap();
+        add_workspace_header(&mut headers, Some("  ".into())).unwrap();
+        assert!(headers.is_empty());
+        add_workspace_header(&mut headers, Some(" wrkspc_01 ".into())).unwrap();
+        assert_eq!(headers[WORKSPACE_HEADER], "wrkspc_01");
+        // A header set in the configuration wins over the environment.
+        add_workspace_header(&mut headers, Some("wrkspc_02".into())).unwrap();
+        assert_eq!(headers[WORKSPACE_HEADER], "wrkspc_01");
+        let error = add_workspace_header(&mut HeaderMap::new(), Some("a\nb".into())).unwrap_err();
+        assert_eq!(error.kind, vibe_core::ErrorKind::Config);
+    }
+
+    #[test]
     fn shorthands() {
         assert_eq!(expand_model_shorthand("opus"), "claude-opus-5");
         assert_eq!(expand_model_shorthand("Sonnet"), "claude-sonnet-5");
@@ -817,7 +933,6 @@ mod tests {
                     ]}
                 ],
                 "tools": [{"name": "read", "description": "Read a file", "input_schema": {"type": "object"}}],
-                "temperature": 0.2f32,
                 "stop_sequences": ["END"],
                 "top_p": 0.9
             })
@@ -825,12 +940,84 @@ mod tests {
     }
 
     #[test]
-    fn thinking_raises_max_tokens_and_drops_temperature() {
+    fn thinking_modes_by_model() {
+        for model in [
+            "claude-sonnet-5",
+            "claude-opus-5-5",
+            "claude-fable-5-1",
+            "claude-opus-4-8",
+            "claude-sonnet-4-6",
+        ] {
+            assert_eq!(
+                ThinkingMode::for_model(model),
+                ThinkingMode::Adaptive,
+                "{model}"
+            );
+        }
+        for model in [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5",
+            "claude-opus-4-1-20250805",
+            "claude-sonnet-4-20250514",
+            "claude-3-7-sonnet-latest",
+            "llama-3",
+            "m",
+        ] {
+            assert_eq!(
+                ThinkingMode::for_model(model),
+                ThinkingMode::Budget,
+                "{model}"
+            );
+        }
+    }
+
+    #[test]
+    fn adaptive_thinking_uses_effort_and_no_sampling() {
         let mut req = CompletionRequest::new("", vec![Message::user("x")]);
         req.thinking_budget = Some(16384);
         req.temperature = Some(1.0);
         let body = provider().build_body(&req);
         assert_eq!(body["model"], DEFAULT_MODEL);
+        assert_eq!(body["thinking"], json!({"type": "adaptive"}));
+        assert_eq!(body["output_config"], json!({"effort": "high"}));
+        assert_eq!(body["max_tokens"], 16384 + 8192);
+        assert!(body.get("temperature").is_none());
+        for (budget, level) in [(1024, "low"), (4096, "medium"), (32768, "max")] {
+            req.thinking_budget = Some(budget);
+            assert_eq!(
+                provider().build_body(&req)["output_config"]["effort"],
+                level
+            );
+        }
+        req.thinking_budget = None;
+        let body = provider().build_body(&req);
+        assert!(body.get("thinking").is_none());
+        assert!(body.get("output_config").is_none());
+        assert!(body.get("temperature").is_none());
+
+        // The configuration can force either form.
+        let mut config = ProviderConfig {
+            kind: "anthropic".into(),
+            ..ProviderConfig::default()
+        };
+        config
+            .extra
+            .insert("thinking".into(), toml::Value::String("budget".into()));
+        req.thinking_budget = Some(4096);
+        let forced = AnthropicProvider::from_config("a", &config).unwrap();
+        assert_eq!(forced.build_body(&req)["thinking"]["type"], "enabled");
+        config
+            .extra
+            .insert("thinking".into(), toml::Value::String("other".into()));
+        assert!(AnthropicProvider::from_config("a", &config).is_err());
+    }
+
+    #[test]
+    fn thinking_raises_max_tokens_and_drops_temperature() {
+        let mut req = CompletionRequest::new("claude-haiku-4-5", vec![Message::user("x")]);
+        req.thinking_budget = Some(16384);
+        req.temperature = Some(1.0);
+        let body = provider().build_body(&req);
         assert_eq!(
             body["thinking"],
             json!({"type": "enabled", "budget_tokens": 16384})
@@ -846,7 +1033,9 @@ mod tests {
         assert_eq!(body["max_tokens"], 4000);
 
         req.thinking_budget = Some(0);
-        assert!(provider().build_body(&req).get("thinking").is_none());
+        let body = provider().build_body(&req);
+        assert!(body.get("thinking").is_none());
+        assert_eq!(body["temperature"], 1.0);
     }
 
     fn tool_loop(thinking: bool) -> CompletionRequest {

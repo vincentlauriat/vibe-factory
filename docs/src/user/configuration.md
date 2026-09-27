@@ -371,6 +371,7 @@ plugins, `.vibe/agents/*.toml` in file-name order; see [Customising agents](agen
 | Variable | Used for |
 |----------|----------|
 | `ANTHROPIC_API_KEY` | key of the built-in `anthropic` provider (`api_key_env`) |
+| `ANTHROPIC_WORKSPACE_ID` | workspace sent as `anthropic-workspace-id` by every `anthropic` provider, for an API key that is not scoped to a workspace; an `extra.headers` entry of the same name wins |
 | `OPENAI_API_KEY` | key of the built-in `openai` provider |
 | any name in an `api_key_env` | key of that provider |
 | `RUST_LOG` | log filter, for example `RUST_LOG=vibe_pipeline=debug,vibe_plugins=debug`; `-v` and `-vv` are shortcuts |

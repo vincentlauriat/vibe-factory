@@ -38,13 +38,16 @@ intersected with what the runner's `ToolRegistry` actually contains and in regis
 
 ### ThinkingLevel
 
-| Level | `budget()` | Anthropic | OpenAI-compatible `reasoning_effort` |
-|-------|-----------|-----------|--------------------------------------|
-| `off` | `None` | thinking disabled | not sent |
-| `low` | 1 024 | `budget_tokens: 1024` | `low` |
-| `medium` | 4 096 | `budget_tokens: 4096` | `medium` |
-| `high` | 16 384 | `budget_tokens: 16384` | `high` |
-| `max` | 32 768 | `budget_tokens: 32768` | `high` |
+| Level | `budget()` | Anthropic (adaptive / budget form) | OpenAI-compatible `reasoning_effort` |
+|-------|-----------|------------------------------------|--------------------------------------|
+| `off` | `None` | thinking not sent | not sent |
+| `low` | 1 024 | effort `low` / `budget_tokens: 1024` | `low` |
+| `medium` | 4 096 | effort `medium` / `budget_tokens: 4096` | `medium` |
+| `high` | 16 384 | effort `high` / `budget_tokens: 16384` | `high` |
+| `max` | 32 768 | effort `max` / `budget_tokens: 32768` | `high` |
+
+The Anthropic provider picks the form from the model id (`ThinkingMode::for_model`): adaptive
+thinking for Claude 4.6 and later, a token budget for older models.
 
 When a level has a budget, the runner raises the step's output budget to at least
 `budget + 4096` (`effective_max_tokens`), because providers with extended thinking require
