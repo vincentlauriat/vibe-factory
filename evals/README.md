@@ -91,7 +91,10 @@ the Rust toolchain (`rustc --version`), the exact model, the number of repetitio
 date. Review a sample of runs by hand as well: whether the requested tests were added and
 whether the refactoring cases really share code are not checked by the oracles.
 
-No real-model score has been published yet.
+Published baselines are in [`baselines/`](baselines/):
+
+* [Claude Sonnet 5, 2026-09-27](baselines/2026-09-27-claude-sonnet-5.md) (partial: 16 runs
+  over six cases): 16/16 successful, about four minutes and 150 000 tokens per run.
 
 ## One run
 
