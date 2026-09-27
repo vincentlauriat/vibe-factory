@@ -6,20 +6,54 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-27
+
+Reliability release. Configurations and runs from 0.1 keep working; see
+[Upgrading from 0.1](docs/src/user/migration.md).
+
 ### Added
-- Required `pipeline.validation_commands`, executed independently of model verdicts before
-  ready/merge. Failures pause for review; results persist in `run.json` and all checks replay
-  on resume. Existing configurations keep their previous behavior with an empty list.
-- Automatic fixes for failed required commands, with fresh QA and full revalidation.
-  `pipeline.max_validation_fix_attempts` (default 2, 0 for manual-only) is retained across
-  resumes; policy/configuration failures still require human review.
-- Validated automatic integration in a detached worktree, including assisted conflict
-  resolution. Reject failing or modified candidates and stale targets before updating the
-  base branch. Workspace providers can opt in through `merge_validated` / `MergeValidator`.
-- Three dependency-free Rust evaluation cases, an isolated runner and versioned JSON reports.
+- Required `pipeline.validation_commands`, executed by the pipeline itself before ready or
+  merge, independently of model verdicts. Failures pause for review; results persist in
+  `run.json` and every check replays on resume.
+- Automatic fixes of failed required commands, with fresh QA and full revalidation, bounded
+  by `pipeline.max_validation_fix_attempts` (default 2, 0 for manual only) over the whole
+  run, resumes included. Policy and configuration failures still need a human.
+- Validated automatic integration in a detached worktree, assisted conflict resolution
+  included: failing or modified candidates and stale targets are rejected before the base
+  branch moves. Workspace providers opt in through `merge_validated` / `MergeValidator`.
+- One git worktree per subtask attempt (`pipeline.isolate_subtasks`, on by default with
+  `git_worktree` and `container`). Finished attempts are committed and merged into the task
+  branch one at a time, in plan order when they finish together; a conflict leaves the task
+  branch untouched and the attempt is retried from the updated branch. New
+  `SubtaskWorkspaces` trait, implemented by `GitSubtaskWorkspaces`.
+- Token and duration budgets that hold across resumes: `pipeline.max_tokens`,
+  `pipeline.max_duration_secs`, `vibe run --max-tokens` and `--max-duration`. `run.json`
+  records the tokens and active time of every invocation; a reached limit pauses the run.
+  New `RunBudget`, `BudgetLimits` and `AgentRunner::budget`.
+- `container` workspace: git worktrees with every shell command (and required validation)
+  in a throw-away Docker or Podman container, configured by `[workspace.container]` with an
+  explicit image, network (none by default), mounts, CPU, memory and process limits. Fixed
+  hardening flags, no raw flag passthrough, validated settings; `vibe doctor` checks the
+  runtime. New `CommandRunner` seam used by the `bash` tool.
+- Evaluation suite: ten dependency-free Rust cases with independent oracles and reference
+  solutions, `check_cases.py`, `run_suite.py` and `summarize.py` (success rate, wall time,
+  tokens, validation attempts). Reports record the `vibe` version and framework commit.
+- Migration guide, and release and MSRV (Rust 1.88) workflows in
+  `.github/pending-workflows/` to be installed by a maintainer.
 
 ### Changed
-- Prioritize reliability work for v0.2 and clarify that the shell policy is not a sandbox.
+- Subtasks of a `git_worktree` task are committed one by one (`vibe: complete subtask N -
+  …`), with merge commits when parallel subtasks finish out of order, and a
+  `vibe: checkpoint before build` commit when the task worktree had uncommitted work.
+- `vibe run` also exits with 2 when a run budget pauses the run.
+- Plugin writes go through a single writer task: a cancelled or timed-out request never
+  leaves a partial line, so a timeout no longer closes the plugin, and a request cancelled
+  before its turn is not sent.
+- The shell policy is documented as a filter, not a sandbox; use the container workspace
+  for isolation.
+
+### Fixed
+- `clippy::nonminimal_bool` on recent toolchains in the pipeline driver.
 
 ## [0.1.0] — 2026-09-26
 
@@ -45,5 +79,6 @@ Initial public release.
 - `vibe-cli`: `vibe init|task|run|status|config|agents|plugins|doctor`.
 - Documentation: user guide, design book with ADRs, API docs; CI on three platforms.
 
-[Unreleased]: https://github.com/vincentlauriat/vibe-factory/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/vincentlauriat/vibe-factory/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/vincentlauriat/vibe-factory/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vincentlauriat/vibe-factory/releases/tag/v0.1.0
