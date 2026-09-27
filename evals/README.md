@@ -76,6 +76,9 @@ The suite writes `summary.md` and `summary.json` next to the per-run directories
 | no usage | runs where the CLI failed before reporting usage (excluded from tokens) |
 | validations | mean number of required validation executions |
 
+To browse the results, start `vibe serve --evals results` in the project and open the
+**Evaluations** view of the web UI.
+
 Record with a published baseline: the framework commit (in every report and the summary),
 the Rust toolchain (`rustc --version`), the exact model, the number of repetitions and the
 date. Review a sample of runs by hand as well: whether the requested tests were added and

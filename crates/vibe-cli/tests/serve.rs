@@ -49,6 +49,7 @@ fn start_with(extra: &[&str]) -> Server {
         Command::new(&vibe)
             .arg("init")
             .current_dir(root)
+            .stdout(Stdio::null())
             .status()
             .unwrap()
             .success()

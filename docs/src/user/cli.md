@@ -291,14 +291,16 @@ interactive terminal.
 ## `vibe serve`
 
 ```sh
-vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE]
+vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR]
 ```
 
 Serves an HTTP API and a web UI for the project. It prints the address and a link that
 carries the access token (`http://127.0.0.1:7777/#token=…`); open it in a browser. The web
 UI shows the task board, the selected task with its run, budget, a live activity feed with
 the text as the model writes it, the plan, spec, QA reports and workspace changes, and lets
-you create, run, resume and cancel tasks and approve or reject what a run waits for.
+you create, run, resume and cancel tasks and approve or reject what a run waits for. With
+`--evals DIR`, an **Evaluations** view shows every `summary.json` that
+`evals/run_suite.py` wrote under `DIR` (success rate, time, tokens per case and model).
 
 Security: the server listens on the loopback interface by default and then only accepts its
 own host names (`127.0.0.1`, `localhost`, `[::1]`), which blocks DNS rebinding. Every API
@@ -321,6 +323,7 @@ with the token controls the agents. `Ctrl-C` stops the server and cancels the ru
 | `POST /api/tasks/{ref}/reject` `{"reason"}` | reject it |
 | `GET /api/tasks/{ref}/changes` | workspace changes summary |
 | `GET /api/tasks/{ref}/events?after=SEQ&all=bool` | logged events |
+| `GET /api/evals` | evaluation summaries found under `--evals` |
 | `GET /api/tasks/{ref}/stream?after=SEQ` | server-sent events: logged events after `SEQ`, then new ones and streamed text; each SSE event is named by its type and carries the envelope, with the sequence number as id |
 
 `{ref}` is a task number, directory name or id prefix, as on the command line. Errors are
