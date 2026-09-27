@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 - A run that fails before its first phase (workspace, storage) now always ends with a
   `run_finished` event.
+- The run lock is released explicitly when a run ends. It was only released when its file
+  closed, and a child process started meanwhile by another thread (git, a validation
+  command) kept a copy of the descriptor open until its `exec`, so an immediate resume
+  could be refused with "already being run by another process" naming the caller's own pid.
 
 ## [0.4.0] — 2026-09-27
 

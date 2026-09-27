@@ -60,6 +60,16 @@ pub struct FileLock {
     _file: std::fs::File,
 }
 
+impl Drop for FileLock {
+    fn drop(&mut self) {
+        // Closing the file is not enough: the lock belongs to the open file,
+        // which a child process being spawned by another thread shares until
+        // it execs, so the lock would outlive this value. Unlocking releases
+        // it for every copy at once.
+        let _ = fs4::fs_std::FileExt::unlock(&self._file);
+    }
+}
+
 impl FileLock {
     /// Take the lock on `path` (created if needed), waiting for it.
     pub async fn acquire(path: PathBuf) -> Result<Self> {
@@ -783,6 +793,19 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use vibe_core::{Event, Phase, PlanPhase, QaVerdict, Subtask};
+
+    #[test]
+    fn dropping_a_lock_releases_it_even_while_its_descriptor_is_shared() {
+        // A child process spawned by another thread holds a copy of every
+        // descriptor until it execs; the lock must not wait for it.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(RUN_LOCK_FILE);
+        let lock = FileLock::try_acquire(&path).unwrap().unwrap();
+        let shared = lock._file.try_clone().unwrap();
+        drop(lock);
+        assert!(FileLock::try_acquire(&path).unwrap().is_some());
+        drop(shared);
+    }
 
     fn store() -> (tempfile::TempDir, FileTaskStore) {
         let dir = tempfile::tempdir().unwrap();
