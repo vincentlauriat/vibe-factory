@@ -15,8 +15,8 @@ use vibe_core::agent::ThinkingLevel;
 use vibe_core::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, CompletionRequest, CompletionResponse,
     ContentBlock, Error, ErrorKind, Event, EventBus, HookDecision, Message, ModelProvider,
-    Permissions, PromptTemplate, Registry, Result, Role, RunBudget, RunId, StopReason, SubtaskId,
-    Task, ToolContext, ToolOutput, ToolRegistry, Usage,
+    Permissions, PromptTemplate, Registry, Result, Role, RunBudget, RunId, StopReason, StreamDelta,
+    SubtaskId, Task, ToolContext, ToolOutput, ToolRegistry, Usage,
 };
 
 use crate::prompts::strip_doc_comment;
@@ -43,6 +43,21 @@ pub const CONVERGE_MESSAGE: &str = "Converge now: produce your final structured 
 /// Message sent when the model ran out of output tokens mid-answer (a
 /// second cut in a row stops the run with [`TRUNCATED_TWICE_MESSAGE`]).
 pub const CONTINUE_NUDGE: &str = "continue (your previous answer was cut off by the output limit; resume exactly where it stopped)";
+
+/// Merge consecutive deltas of the same kind.
+fn merge_deltas(deltas: Vec<StreamDelta>) -> Vec<StreamDelta> {
+    let mut out: Vec<StreamDelta> = Vec::new();
+    for delta in deltas {
+        match (out.last_mut(), delta) {
+            (Some(StreamDelta::Text { text }), StreamDelta::Text { text: more })
+            | (Some(StreamDelta::Thinking { text }), StreamDelta::Thinking { text: more }) => {
+                text.push_str(&more);
+            }
+            (_, delta) => out.push(delta),
+        }
+    }
+    out
+}
 
 /// Number of characters of a tool output kept in [`Event::ToolReturned`].
 const PREVIEW_CHARS: usize = 200;
@@ -476,7 +491,7 @@ impl AgentRunner {
                 thinking_budget,
                 ..CompletionRequest::new(self.model.clone(), messages.clone())
             };
-            let response = match self.complete_with_retry(request).await {
+            let response = match self.complete_with_retry(&role, request).await {
                 Ok(r) => r,
                 Err(e) if e.kind == ErrorKind::ContextTooLong => break AgentStop::ContextWindow,
                 Err(e) if e.kind == ErrorKind::Cancelled => break AgentStop::Cancelled,
@@ -572,10 +587,52 @@ impl AgentRunner {
         })
     }
 
-    async fn complete_with_retry(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+    /// One model call, publishing its text as [`Event::AgentDelta`] events
+    /// while it streams. Deltas that arrive together are merged, so a fast
+    /// stream does not flood the bus.
+    async fn complete_streaming(
+        &self,
+        role: &AgentRole,
+        request: CompletionRequest,
+    ) -> Result<CompletionResponse> {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<StreamDelta>();
+        let call = async move {
+            let sink = move |delta: StreamDelta| {
+                // A closed channel only means nobody forwards any more.
+                let _ = tx.send(delta);
+            };
+            self.provider.complete_streaming(request, &sink).await
+        };
+        let forward = async {
+            while let Some(first) = rx.recv().await {
+                let mut pending = vec![first];
+                while let Ok(next) = rx.try_recv() {
+                    pending.push(next);
+                }
+                for delta in merge_deltas(pending) {
+                    self.events
+                        .publish(Event::AgentDelta {
+                            run: self.run_id,
+                            role: role.clone(),
+                            subtask: self.subtask,
+                            delta,
+                        })
+                        .await;
+                }
+            }
+        };
+        let (result, ()) = tokio::join!(call, forward);
+        result
+    }
+
+    async fn complete_with_retry(
+        &self,
+        role: &AgentRole,
+        request: CompletionRequest,
+    ) -> Result<CompletionResponse> {
         let mut attempt: u32 = 0;
         loop {
-            match self.provider.complete(request.clone()).await {
+            match self.complete_streaming(role, request.clone()).await {
                 Ok(r) => return Ok(r),
                 Err(e) if e.is_retryable() && attempt < self.max_provider_retries => {
                     attempt += 1;

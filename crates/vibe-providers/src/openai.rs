@@ -19,20 +19,22 @@
 //! `role: "tool"` message.
 
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use reqwest::header::HeaderMap;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use vibe_core::provider::ProviderInfo;
 use vibe_core::{
-    CompletionRequest, CompletionResponse, ContentBlock, Error, Message, ModelProvider,
-    ProviderConfig, Result, Role, StopReason, Usage,
+    CompletionRequest, CompletionResponse, ContentBlock, DeltaSink, Error, ErrorKind, Message,
+    ModelProvider, ProviderConfig, Result, Role, StopReason, StreamDelta, Usage,
 };
 
 use crate::http::{
     headers_from_extra, malformed, missing_key_error, normalize_base_url, send_json, shared_client,
 };
 use crate::retry::{RetryPolicy, with_retry};
+use crate::sse::{Flow, send_sse};
 
 /// Official OpenAI endpoint.
 pub const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
@@ -66,6 +68,7 @@ pub struct OpenAiCompatibleProvider {
     client: reqwest::Client,
     headers: HeaderMap,
     retry: RetryPolicy,
+    streaming: bool,
 }
 
 impl fmt::Debug for OpenAiCompatibleProvider {
@@ -105,6 +108,7 @@ impl OpenAiCompatibleProvider {
             client: shared_client(),
             headers: HeaderMap::new(),
             retry: RetryPolicy::default(),
+            streaming: true,
         }
     }
 
@@ -161,7 +165,7 @@ impl OpenAiCompatibleProvider {
         if let Some(model) = &config.default_model {
             provider = provider.with_default_model(model);
         }
-        Ok(provider)
+        Ok(provider.with_streaming(config.stream.unwrap_or(true)))
     }
 
     /// Override the endpoint. Switching away from the official endpoint also
@@ -212,6 +216,14 @@ impl OpenAiCompatibleProvider {
     #[must_use]
     pub fn with_thinking_support(mut self, supported: bool) -> Self {
         self.supports_thinking = supported;
+        self
+    }
+
+    /// Stream answers (default true). When false, `complete_streaming`
+    /// makes a plain request and sends no delta.
+    #[must_use]
+    pub fn with_streaming(mut self, streaming: bool) -> Self {
+        self.streaming = streaming;
         self
     }
 
@@ -438,6 +450,127 @@ struct WirePromptDetails {
     cached_tokens: u64,
 }
 
+/// A chat completion rebuilt from its stream of chunks, in the shape of a
+/// non-streamed response so that [`parse_response`] reads both.
+#[derive(Debug, Default)]
+pub struct StreamedChat {
+    model: Option<String>,
+    content: String,
+    reasoning: String,
+    /// `(id, name, arguments)` by tool call index.
+    tool_calls: Vec<(String, String, String)>,
+    finish_reason: Option<String>,
+    usage: Option<Value>,
+    done: bool,
+    chunks: usize,
+}
+
+impl StreamedChat {
+    /// Apply the `data` of one event, reporting new text through `on_delta`.
+    pub fn apply(&mut self, data: &str, on_delta: &mut dyn FnMut(StreamDelta)) -> Result<Flow> {
+        let data = data.trim();
+        if data.is_empty() {
+            return Ok(Flow::Continue);
+        }
+        if data == "[DONE]" {
+            self.done = true;
+            return Ok(Flow::Stop);
+        }
+        let chunk: Value = serde_json::from_str(data).map_err(malformed)?;
+        if let Some(message) = chunk["error"]["message"].as_str() {
+            return Err(Error::new(
+                ErrorKind::ServerError,
+                format!("stream error: {message}"),
+            ));
+        }
+        self.chunks += 1;
+        if let Some(model) = chunk["model"].as_str().filter(|m| !m.is_empty()) {
+            self.model = Some(model.to_string());
+        }
+        if chunk["usage"].is_object() {
+            self.usage = Some(chunk["usage"].clone());
+        }
+        let Some(choice) = chunk["choices"].as_array().and_then(|c| c.first()) else {
+            return Ok(Flow::Continue);
+        };
+        let delta = &choice["delta"];
+        for key in ["reasoning_content", "reasoning"] {
+            if let Some(text) = delta[key].as_str().filter(|t| !t.is_empty()) {
+                self.reasoning.push_str(text);
+                on_delta(StreamDelta::Thinking { text: text.into() });
+            }
+        }
+        if let Some(text) = delta["content"].as_str().filter(|t| !t.is_empty()) {
+            self.content.push_str(text);
+            on_delta(StreamDelta::Text { text: text.into() });
+        }
+        if let Some(calls) = delta["tool_calls"].as_array() {
+            for (position, call) in calls.iter().enumerate() {
+                let index = call["index"]
+                    .as_u64()
+                    .and_then(|i| usize::try_from(i).ok())
+                    .unwrap_or(position);
+                if self.tool_calls.len() <= index {
+                    self.tool_calls.resize(index + 1, Default::default());
+                }
+                let slot = &mut self.tool_calls[index];
+                if let Some(id) = call["id"].as_str() {
+                    slot.0.push_str(id);
+                }
+                if let Some(name) = call["function"]["name"].as_str() {
+                    slot.1.push_str(name);
+                }
+                if let Some(arguments) = call["function"]["arguments"].as_str() {
+                    slot.2.push_str(arguments);
+                }
+            }
+        }
+        if let Some(reason) = choice["finish_reason"].as_str() {
+            self.finish_reason = Some(reason.to_string());
+        }
+        Ok(Flow::Continue)
+    }
+
+    /// The complete response; an error if nothing usable arrived.
+    pub fn finish(self) -> Result<Value> {
+        if !self.done && self.finish_reason.is_none() {
+            return Err(Error::new(
+                ErrorKind::Network,
+                "the stream ended before the completion finished",
+            ));
+        }
+        if self.chunks == 0 {
+            return Err(malformed("empty stream"));
+        }
+        let tool_calls: Vec<Value> = self
+            .tool_calls
+            .into_iter()
+            .filter(|(_, name, _)| !name.is_empty())
+            .map(|(id, name, arguments)| {
+                json!({"id": id, "type": "function",
+                       "function": {"name": name, "arguments": arguments}})
+            })
+            .collect();
+        let mut message = json!({"role": "assistant", "content": self.content});
+        if !self.reasoning.is_empty() {
+            message["reasoning_content"] = json!(self.reasoning);
+        }
+        if !tool_calls.is_empty() {
+            message["tool_calls"] = Value::Array(tool_calls);
+        }
+        let mut value = json!({
+            "choices": [{"message": message, "finish_reason": self.finish_reason}],
+        });
+        if let Some(model) = self.model {
+            value["model"] = json!(model);
+        }
+        if let Some(usage) = self.usage {
+            value["usage"] = usage;
+        }
+        Ok(value)
+    }
+}
+
 /// Map a `finish_reason` onto [`StopReason`].
 ///
 /// `length` always yields [`StopReason::MaxTokens`], even with tool calls
@@ -554,6 +687,54 @@ impl ModelProvider for OpenAiCompatibleProvider {
         let body = self.build_body(&request);
         let value = with_retry(&self.retry, || send_json(self.request_builder(&body))).await?;
         parse_response(value, &model)
+    }
+
+    async fn complete_streaming(
+        &self,
+        request: CompletionRequest,
+        on_delta: DeltaSink<'_>,
+    ) -> Result<CompletionResponse> {
+        if !self.streaming {
+            return self.complete(request).await;
+        }
+        if self.api_key.is_none() && !self.allow_missing_key {
+            return Err(missing_key_error(&self.name));
+        }
+        let model = self.effective_model(&request);
+        let mut body = self.build_body(&request);
+        body["stream"] = json!(true);
+        body["stream_options"] = json!({"include_usage": true});
+        let emitted = AtomicBool::new(false);
+        let streamed = with_retry(&self.retry, || async {
+            let mut stream = StreamedChat::default();
+            let result = send_sse(self.request_builder(&body), |event| {
+                stream.apply(&event.data, &mut |delta| {
+                    emitted.store(true, Ordering::Relaxed);
+                    on_delta(delta);
+                })
+            })
+            .await
+            .and_then(|()| stream.finish());
+            match result {
+                Ok(value) => Ok(value),
+                Err(e) if emitted.load(Ordering::Relaxed) => Err(Error::new(
+                    ErrorKind::Other,
+                    format!("the stream broke after output started: {}", e.message),
+                )),
+                Err(e) => Err(e),
+            }
+        })
+        .await;
+        match streamed {
+            Ok(value) => parse_response(value, &model),
+            // Some compatible servers refuse `stream` or `stream_options`:
+            // answer without streaming rather than failing.
+            Err(e) if e.kind == ErrorKind::InvalidRequest && !emitted.load(Ordering::Relaxed) => {
+                tracing::debug!(error = %e.message, "streaming refused, completing without it");
+                self.complete(request).await
+            }
+            Err(e) => Err(e),
+        }
     }
 
     async fn health_check(&self) -> Result<()> {

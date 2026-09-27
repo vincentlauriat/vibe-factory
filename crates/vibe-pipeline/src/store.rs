@@ -505,6 +505,9 @@ impl FileEventSink {
 #[async_trait::async_trait]
 impl EventSink for FileEventSink {
     async fn on_event(&self, envelope: &Envelope) {
+        if envelope.event.is_ephemeral() {
+            return;
+        }
         if let Some(run) = self.run
             && envelope.event.run_id() != Some(run)
         {

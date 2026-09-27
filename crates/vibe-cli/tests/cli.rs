@@ -1148,3 +1148,25 @@ fn container_workspace_requires_a_valid_configuration() {
         .code(1)
         .stderr(predicate::str::contains("namespace"));
 }
+
+#[test]
+fn streamed_deltas_reach_json_output_but_not_the_event_log() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    let out = p
+        .vibe()
+        .args(["--json", "run", "1", "--provider", "mock", "--dry-run"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"agent_delta\""), "{stdout}");
+    let log = std::fs::read_to_string(p.task_dir(1).join("events.jsonl")).unwrap();
+    assert!(!log.contains("agent_delta"));
+    assert!(log.contains("\"agent_text\""));
+}

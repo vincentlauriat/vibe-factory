@@ -36,6 +36,10 @@ pub struct ProviderConfig {
     /// Used to warn agents near the limit and stop before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u32>,
+    /// Stream answers as they are generated (default true). Set it to
+    /// false for a gateway that mishandles server-sent events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
     /// Extra provider-specific settings.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra: BTreeMap<String, toml::Value>,

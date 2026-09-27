@@ -64,8 +64,8 @@ pub use plan::{Plan, PlanPhase, Subtask, SubtaskStatus};
 pub use plugin::{Hook, HookDecision, Plugin, Registry, SharedHook};
 pub use prompt::PromptTemplate;
 pub use provider::{
-    CompletionRequest, CompletionResponse, ModelProvider, ModelRef, ProviderInfo, SharedProvider,
-    StopReason, ToolSpec, Usage,
+    CompletionRequest, CompletionResponse, DeltaSink, ModelProvider, ModelRef, ProviderInfo,
+    SharedProvider, StopReason, StreamDelta, ToolSpec, Usage,
 };
 pub use qa::{QaIssue, QaReport, QaVerdict, Severity};
 pub use sandbox::{CommandRequest, CommandRunner, PreparedCommand, SharedCommandRunner};

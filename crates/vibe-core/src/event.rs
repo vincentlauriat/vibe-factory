@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use crate::agent::AgentRole;
 use crate::ids::{RunId, SubtaskId, TaskId};
 use crate::phase::Phase;
-use crate::provider::Usage;
+use crate::provider::{StreamDelta, Usage};
 
 /// Something that happened.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -55,6 +55,19 @@ pub enum Event {
         role: AgentRole,
         /// Text chunk.
         text: String,
+    },
+    /// Part of a model answer, while it is being generated. Ephemeral: not
+    /// written to the run's event log, since the complete text follows in
+    /// [`Event::AgentText`].
+    AgentDelta {
+        /// Run id.
+        run: RunId,
+        /// Role.
+        role: AgentRole,
+        /// Subtask being worked on, if any.
+        subtask: Option<SubtaskId>,
+        /// The new text.
+        delta: StreamDelta,
     },
     /// The model requested a tool.
     ToolCalled {
@@ -152,6 +165,7 @@ impl Event {
             | Event::PhaseFinished { run, .. }
             | Event::AgentStarted { run, .. }
             | Event::AgentText { run, .. }
+            | Event::AgentDelta { run, .. }
             | Event::ToolCalled { run, .. }
             | Event::ToolReturned { run, .. }
             | Event::AgentFinished { run, .. }
@@ -161,6 +175,15 @@ impl Event {
             | Event::RunFinished { run, .. } => Some(*run),
             Event::Log { run, .. } => *run,
         }
+    }
+}
+
+impl Event {
+    /// Whether the event is only meaningful live (streamed text) and is not
+    /// kept in persistent logs.
+    #[must_use]
+    pub fn is_ephemeral(&self) -> bool {
+        matches!(self, Event::AgentDelta { .. })
     }
 }
 

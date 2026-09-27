@@ -212,3 +212,82 @@ async fn local_server_without_key_sends_no_authorization() {
     let received = server.received_requests().await.unwrap();
     assert!(received[0].headers.get("authorization").is_none());
 }
+
+fn chunks(items: &[serde_json::Value]) -> String {
+    let mut out: String = items.iter().map(|c| format!("data: {c}\n\n")).collect();
+    out.push_str("data: [DONE]\n\n");
+    out
+}
+
+#[tokio::test]
+async fn streaming_rebuilds_text_and_tool_calls() {
+    let server = MockServer::start().await;
+    let body = chunks(&[
+        json!({"model": "gpt-5", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Read"}}]}),
+        json!({"choices": [{"index": 0, "delta": {"content": "ing."}}]}),
+        json!({"choices": [{"index": 0, "delta": {"tool_calls": [
+            {"index": 0, "id": "call_a", "type": "function", "function": {"name": "read_file", "arguments": "{\"pa"}}]}}]}),
+        json!({"choices": [{"index": 0, "delta": {"tool_calls": [
+            {"index": 0, "function": {"arguments": "th\":\"main.rs\"}"}}]}}]}),
+        json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}),
+        json!({"choices": [], "usage": {"prompt_tokens": 12, "completion_tokens": 7}}),
+    ]);
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(body_partial_json(
+            json!({"stream": true, "stream_options": {"include_usage": true}}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_string(body))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = {
+        let seen = seen.clone();
+        move |d| seen.lock().unwrap().push(d)
+    };
+    let response = provider(&server, 2)
+        .complete_streaming(request(), &sink)
+        .await
+        .unwrap();
+    assert_eq!(response.stop_reason, StopReason::ToolUse);
+    assert_eq!(response.usage.input_tokens, 12);
+    assert_eq!(response.usage.output_tokens, 7);
+    assert_eq!(response.message.text(), "Reading.");
+    let calls: Vec<_> = response
+        .message
+        .tool_uses()
+        .map(|(id, n, i)| (id.to_string(), n.to_string(), i.clone()))
+        .collect();
+    assert_eq!(
+        calls,
+        vec![(
+            "call_a".to_string(),
+            "read_file".to_string(),
+            json!({"path": "main.rs"})
+        )]
+    );
+    assert_eq!(seen.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn servers_refusing_streaming_fall_back_to_a_plain_completion() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(json!({"stream": true})))
+        .respond_with(ResponseTemplate::new(400).set_body_string("unknown field stream_options"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(ok_body()))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let sink = |_d: vibe_core::StreamDelta| {};
+    let response = provider(&server, 2)
+        .complete_streaming(request(), &sink)
+        .await
+        .unwrap();
+    assert_eq!(response.message.text(), "done");
+}

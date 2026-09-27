@@ -950,3 +950,80 @@ async fn builtin_agents_run_with_the_loop() {
     assert!(!system.contains("<!--"));
     assert!(!system.contains("{{"));
 }
+
+/// Provider streaming its answer in three pieces, the last two back to back.
+struct StreamingProvider;
+
+#[async_trait::async_trait]
+impl vibe_core::ModelProvider for StreamingProvider {
+    fn info(&self) -> vibe_core::ProviderInfo {
+        vibe_core::ProviderInfo {
+            name: "streaming".into(),
+            supports_tools: true,
+            supports_thinking: true,
+            default_model: "m".into(),
+        }
+    }
+
+    async fn complete(
+        &self,
+        _request: CompletionRequest,
+    ) -> vibe_core::Result<vibe_core::CompletionResponse> {
+        Ok(text_response("Hello world!"))
+    }
+
+    async fn complete_streaming(
+        &self,
+        request: CompletionRequest,
+        on_delta: vibe_core::DeltaSink<'_>,
+    ) -> vibe_core::Result<vibe_core::CompletionResponse> {
+        on_delta(vibe_core::StreamDelta::Thinking {
+            text: "plan".into(),
+        });
+        on_delta(vibe_core::StreamDelta::Text {
+            text: "Hello ".into(),
+        });
+        on_delta(vibe_core::StreamDelta::Text {
+            text: "world!".into(),
+        });
+        self.complete(request).await
+    }
+}
+
+#[tokio::test]
+async fn streamed_text_is_published_as_deltas() {
+    let events = EventBus::default();
+    let mut rx = events.subscribe();
+    let runner = AgentRunner::new(
+        Arc::new(StreamingProvider),
+        "m".into(),
+        ToolRegistry::new(),
+        Arc::new(Registry::new()),
+        events,
+    );
+    let outcome = runner.run(&spec(), "Say hello".into()).await.unwrap();
+    assert_eq!(outcome.final_text, "Hello world!");
+    let mut text = String::new();
+    let mut thinking = String::new();
+    let mut saw_final = false;
+    while let Ok(envelope) = rx.try_recv() {
+        match envelope.event {
+            Event::AgentDelta { delta, subtask, .. } => {
+                assert!(!saw_final, "deltas come before the complete text");
+                assert_eq!(subtask, None);
+                match delta {
+                    vibe_core::StreamDelta::Text { text: t } => text.push_str(&t),
+                    vibe_core::StreamDelta::Thinking { text: t } => thinking.push_str(&t),
+                }
+            }
+            Event::AgentText { text: t, .. } => {
+                assert_eq!(t, "Hello world!");
+                saw_final = true;
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(text, "Hello world!");
+    assert_eq!(thinking, "plan");
+    assert!(saw_final);
+}

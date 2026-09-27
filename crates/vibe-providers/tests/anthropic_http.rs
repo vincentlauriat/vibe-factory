@@ -296,3 +296,161 @@ async fn signed_thinking_is_replayed_on_the_next_tool_turn() {
     let second = provider.complete(req).await.unwrap();
     assert_eq!(second.message.text(), "done");
 }
+
+fn sse(events: &[serde_json::Value]) -> String {
+    events
+        .iter()
+        .map(|e| format!("event: {}\ndata: {e}\n\n", e["type"].as_str().unwrap()))
+        .collect()
+}
+
+fn collect_deltas() -> (
+    std::sync::Arc<std::sync::Mutex<Vec<vibe_core::StreamDelta>>>,
+    impl Fn(vibe_core::StreamDelta) + Send + Sync,
+) {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = {
+        let seen = seen.clone();
+        move |d| seen.lock().unwrap().push(d)
+    };
+    (seen, sink)
+}
+
+#[tokio::test]
+async fn streaming_rebuilds_text_thinking_and_tool_use() {
+    let server = MockServer::start().await;
+    let body = sse(&[
+        json!({"type": "message_start", "message": {"id": "msg_1", "model": "claude-sonnet-5",
+               "content": [], "usage": {"input_tokens": 50, "output_tokens": 1}}}),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "Hmm"}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "sig"}}),
+        json!({"type": "content_block_stop", "index": 0}),
+        json!({"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "Let me "}}),
+        json!({"type": "ping"}),
+        json!({"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "look."}}),
+        json!({"type": "content_block_stop", "index": 1}),
+        json!({"type": "content_block_start", "index": 2, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "list_dir", "input": {}}}),
+        json!({"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": "{\"path\": "}}),
+        json!({"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": "\".\"}"}}),
+        json!({"type": "content_block_stop", "index": 2}),
+        json!({"type": "message_delta", "delta": {"stop_reason": "tool_use"}, "usage": {"output_tokens": 42}}),
+        json!({"type": "message_stop"}),
+    ]);
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .and(body_partial_json(json!({"stream": true})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(body),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let (seen, sink) = collect_deltas();
+    let response = provider(&server, 3)
+        .complete_streaming(request(), &sink)
+        .await
+        .unwrap();
+    assert_eq!(response.stop_reason, StopReason::ToolUse);
+    assert_eq!(response.usage.input_tokens, 50);
+    assert_eq!(response.usage.output_tokens, 42);
+    assert_eq!(
+        response.message.content,
+        vec![
+            ContentBlock::Thinking { text: "Hmm".into() },
+            ContentBlock::Text {
+                text: "Let me look.".into()
+            },
+            ContentBlock::ToolUse {
+                id: "toolu_1".into(),
+                name: "list_dir".into(),
+                input: json!({"path": "."})
+            },
+        ]
+    );
+    assert_eq!(
+        seen.lock().unwrap().clone(),
+        vec![
+            vibe_core::StreamDelta::Thinking { text: "Hmm".into() },
+            vibe_core::StreamDelta::Text {
+                text: "Let me ".into()
+            },
+            vibe_core::StreamDelta::Text {
+                text: "look.".into()
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn streaming_retries_before_output_but_not_after() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(529).set_body_string("overloaded"))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    let complete = sse(&[
+        json!({"type": "message_start", "message": {"model": "m", "content": [], "usage": {"input_tokens": 1}}}),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}}),
+        json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}}),
+        json!({"type": "message_stop"}),
+    ]);
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(complete))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    // A stream that ends without message_stop, after text was sent.
+    let cut = sse(&[
+        json!({"type": "message_start", "message": {"model": "m", "content": [], "usage": {"input_tokens": 1}}}),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "partial"}}),
+    ]);
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(cut))
+        .mount(&server)
+        .await;
+
+    let p = provider(&server, 3);
+    let (seen, sink) = collect_deltas();
+    let first = p.complete_streaming(request(), &sink).await.unwrap();
+    assert_eq!(first.message.text(), "ok");
+    assert_eq!(
+        seen.lock().unwrap().len(),
+        1,
+        "the failed attempt sent nothing"
+    );
+
+    let (seen, sink) = collect_deltas();
+    let err = p.complete_streaming(request(), &sink).await.unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Other);
+    assert!(err.message.contains("after output started"), "{err}");
+    assert_eq!(seen.lock().unwrap().len(), 1, "not retried after output");
+}
+
+#[tokio::test]
+async fn streaming_error_event_is_classified() {
+    let server = MockServer::start().await;
+    let body = sse(&[
+        json!({"type": "message_start", "message": {"model": "m", "content": [], "usage": {}}}),
+        json!({"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}),
+    ]);
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(body))
+        .expect(2)
+        .mount(&server)
+        .await;
+    let (_, sink) = collect_deltas();
+    let err = provider(&server, 2)
+        .complete_streaming(request(), &sink)
+        .await
+        .unwrap_err();
+    assert_eq!(err.kind, ErrorKind::ServerError);
+    assert!(err.message.contains("Overloaded"));
+}

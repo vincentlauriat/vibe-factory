@@ -132,6 +132,9 @@ impl Renderer {
                 };
                 format!("  {} {role}{target}", style::bold().apply_to("●"))
             }
+            // Streamed text is for live interfaces and `--json`; the complete
+            // text follows as `AgentText`.
+            Event::AgentDelta { .. } => return None,
             Event::AgentText { text, .. } => {
                 if self.verbose == 0 || text.trim().is_empty() {
                     return None;

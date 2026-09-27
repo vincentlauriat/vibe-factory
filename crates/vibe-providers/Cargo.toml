@@ -14,6 +14,7 @@ categories.workspace = true
 [dependencies]
 vibe-core.workspace = true
 async-trait.workspace = true
+futures.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 serde.workspace = true

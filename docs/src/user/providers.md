@@ -47,6 +47,7 @@ Every `[providers.<name>]` table accepts:
 | `api_key_env` | string | environment variable holding the key (an empty value counts as missing) |
 | `base_url` | string | endpoint override (gateway, proxy, self-hosted server); trailing `/` is ignored |
 | `default_model` | string | model used when a reference names no model, or names `default` |
+| `stream` | bool | stream answers as they are generated (default `true`); set `false` for a gateway that mishandles server-sent events |
 | `extra` | table | kind-specific settings, below |
 
 `api_key` wins over `api_key_env` when both are set.
@@ -213,6 +214,19 @@ default_model = "fake/any"
 kind = "mock"
 extra = { reply = "Nothing to do." }
 ```
+
+## Streaming
+
+Anthropic and OpenAI-compatible providers stream their answers: the text and, when the
+model exposes it, the reasoning arrive as `agent_delta` events while a step is being
+generated (`vibe --json run` prints them; the terminal output shows the complete text at
+the end of each step, as before). The final answer is identical to a non-streamed one.
+
+A request that fails before any text arrived is retried as usual. A stream that breaks after
+text was sent is not retried by the provider (the text would be repeated): the step fails
+and the agent runtime's own retry policy applies. An OpenAI-compatible server that refuses
+`stream` or `stream_options` with a 4xx error gets the same request without streaming.
+`agent_delta` events are not written to `events.jsonl`.
 
 ## Retries and errors
 
