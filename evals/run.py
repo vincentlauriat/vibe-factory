@@ -138,6 +138,7 @@ def main():
         "success": exit_code == 0 and acceptance == 0,
         "human_interventions": 0, "estimated_cost": None,
         "usage": summary.get("usage") if summary else None,
+        "error": summary.get("last_error") if summary else None,
         "pipeline_summary": summary, "validations": state.get("validations", []),
         "validation_attempts": len(state.get("validations", [])),
         "framework": framework_info(vibe),

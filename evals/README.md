@@ -76,6 +76,12 @@ The suite writes `summary.md` and `summary.json` next to the per-run directories
 | no usage | runs where the CLI failed before reporting usage (excluded from tokens) |
 | validations | mean number of required validation executions |
 
+Under the table, `summary.md` lists the pipeline errors of the failed runs, most frequent
+first. The suite stops after the first run that fails in a way no other run can avoid
+(`AuthFailed`, `InvalidRequest` or `Config`: a missing or rejected API key, an unknown model,
+an invalid configuration) and exits with 1. Fix the cause and start again in a new
+destination. Runs that last well under a second with 0 tokens never reached the model.
+
 To browse the results, start `vibe serve --evals results` in the project and open the
 **Evaluations** view of the web UI.
 

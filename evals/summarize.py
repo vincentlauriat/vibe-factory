@@ -4,7 +4,8 @@
 Standard library only. Pass report.json files or directories (searched
 recursively). Groups by provider, model and case, plus one total row per
 provider/model. Missing usage (the CLI failed before its summary) is counted
-separately and excluded from token statistics.
+separately and excluded from token statistics. Pipeline errors of failed runs
+are listed after the table, most frequent first.
 """
 
 import argparse
@@ -73,8 +74,14 @@ def summarize(reports):
     rows += [row({"provider": p, "model": m, "case": "ALL"}, rs)
              for (p, m), rs in sorted(totals.items(), key=lambda kv: tuple(str(x) for x in kv[0]))]
     commits = sorted({(r.get("framework") or {}).get("commit") or "unknown" for r in reports})
+    errors = {}
+    for r in reports:
+        if not r.get("success") and r.get("error"):
+            errors[r["error"]] = errors.get(r["error"], 0) + 1
     return {"schema_version": 1, "reports": len(reports), "framework_commits": commits,
-            "rows": rows}
+            "rows": rows,
+            "errors": [{"error": e, "runs": n}
+                       for e, n in sorted(errors.items(), key=lambda kv: (-kv[1], kv[0]))]}
 
 
 def fmt(value):
@@ -94,6 +101,12 @@ def to_markdown(summary):
     lines.append("")
     lines.append(f"{summary['reports']} report(s); framework commit(s): "
                  + ", ".join(summary["framework_commits"]))
+    if summary.get("errors"):
+        lines.append("")
+        lines.append("Pipeline errors:")
+        lines.append("")
+        for e in summary["errors"]:
+            lines.append(f"* {e['runs']} run(s): {e['error']}")
     return "\n".join(lines) + "\n"
 
 

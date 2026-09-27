@@ -33,6 +33,9 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 - Assisted conflict resolution counts against the run budget, and also resolves conflicts
   between subtasks before an attempt is failed.
+- Evaluations: each report records the pipeline error, `summary.md` lists the errors of
+  failed runs, and `run_suite.py` stops after the first run rejected for credentials, the
+  model name or the configuration instead of failing every run the same way.
 
 ## [0.2.0] — 2026-09-27
 
