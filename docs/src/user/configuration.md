@@ -23,6 +23,7 @@ vibe config show --default   # the built-in defaults only
 | `[pipeline]` | table | see below | pipeline tuning |
 | `[security]` | table | see below | tool security policy |
 | `[[plugins]]` | array of tables | none | out-of-process plugins to start |
+| `[pricing."<provider>/<model>"]` | table | none | model prices, to show what a task cost |
 
 Unknown keys are ignored by the TOML reader, so check spelling with `vibe config show`: a
 key that does not appear there had no effect.
@@ -273,6 +274,42 @@ token_env = "GITLAB_TOKEN"
 
 Used by `vibe task import` and `vibe pr`. Tokens are read from the environment only, never
 from the configuration file.
+
+## `[pricing]`
+
+```toml
+[pricing."anthropic/claude-sonnet-5"]
+input = 3.0          # USD per million prompt tokens
+output = 15.0        # USD per million completion tokens
+cache_read = 0.3     # optional: prompt tokens served from cache
+cache_write = 3.75   # optional: prompt tokens written to cache
+```
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `input` | number, required | none | USD per million prompt tokens |
+| `output` | number, required | none | USD per million completion tokens |
+| `cache_read` | number | unset | USD per million prompt tokens read from the cache |
+| `cache_write` | number | unset | USD per million prompt tokens written to the cache |
+
+There are no built-in prices: without this table no cost is shown. Every price must be a
+finite number, zero or more; `vibe` refuses a configuration with any other value.
+
+Events name a model by the provider's model id, without the provider. A model id is
+matched first against a key equal to it, then against every key `"<provider>/<model id>"`,
+the provider being the part of the key before its first `/`. So `claude-sonnet-5` in a log
+matches `"claude-sonnet-5"`, else `"anthropic/claude-sonnet-5"`; a model id that contains a
+`/` itself, such as `meta-llama/llama-3` served by `openrouter`, matches
+`"openrouter/meta-llama/llama-3"`. When two providers price the same model id differently,
+the model counts as unpriced.
+
+A task's cost is shown only when every agent session it ran has a price that covers the
+tokens it used: one model without a price, cache tokens without a `cache_read` or
+`cache_write` price, or a session logged before 0.5 (whose model is not recorded) and the
+cost is left out rather than estimated. The cost is marked incomplete, a lower bound, when
+a session started but never finished (a crash: its tokens were not logged) or when a run
+used more tokens than its sessions account for (a call outside any agent session, such as
+the repair of an invalid structured answer, whose model is not logged).
 
 ## `[[plugins]]`
 

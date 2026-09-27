@@ -24,6 +24,7 @@ tracing.workspace = true
 uuid.workspace = true
 vibe-agents.workspace = true
 vibe-core.workspace = true
+vibe-workspace.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

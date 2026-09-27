@@ -181,6 +181,18 @@ pub trait PipelineStore: TaskStore {
         let _ = id;
         Ok(None)
     }
+
+    /// Sequence number of every task (`3` for `003-add-login`). Default:
+    /// none (interfaces then show no number).
+    async fn task_numbers(&self) -> Result<BTreeMap<TaskId, u32>> {
+        Ok(BTreeMap::new())
+    }
+
+    /// Whether a process currently runs the task. Default: never known.
+    async fn is_running(&self, id: TaskId) -> Result<bool> {
+        let _ = id;
+        Ok(false)
+    }
 }
 
 /// Shared handle to a pipeline store.
@@ -225,6 +237,15 @@ impl FileTaskStore {
         })
     }
 
+    /// Store at `root` (`<project>/.vibe/tasks`), without creating it.
+    pub(crate) fn at_root(root: PathBuf) -> Self {
+        Self {
+            root,
+            index_lock: Mutex::new(()),
+            append_lock: Mutex::new(()),
+        }
+    }
+
     /// Directory holding every task (`<project>/.vibe/tasks`).
     #[must_use]
     pub fn root(&self) -> &Path {
@@ -266,6 +287,11 @@ impl FileTaskStore {
 
     async fn write_index(&self, index: &Index) -> Result<()> {
         write_json(&self.root.join(INDEX_FILE), index).await
+    }
+
+    /// Every task of the index with its location, by task id.
+    pub async fn entries(&self) -> Result<BTreeMap<TaskId, IndexEntry>> {
+        Ok(self.read_index().await?.tasks)
     }
 
     /// Index entry of a task, if it exists.
@@ -613,6 +639,19 @@ impl PipelineStore for FileTaskStore {
 
     async fn task_dir_name(&self, id: TaskId) -> Result<Option<String>> {
         Ok(self.entry(id).await?.map(|e| e.dir))
+    }
+
+    async fn task_numbers(&self) -> Result<BTreeMap<TaskId, u32>> {
+        Ok(self
+            .entries()
+            .await?
+            .into_iter()
+            .map(|(id, e)| (id, e.number))
+            .collect())
+    }
+
+    async fn is_running(&self, id: TaskId) -> Result<bool> {
+        FileTaskStore::is_running(self, id).await
     }
 
     async fn load_events(&self, id: TaskId) -> Result<Vec<Envelope>> {

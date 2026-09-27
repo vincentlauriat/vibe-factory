@@ -16,6 +16,12 @@ All notable changes to this project are documented here. The format follows
   `.vibe/tool-output/<task>/<run>/<call>.txt` (`pipeline.trace_outputs`, default on;
   `pipeline.trace_max_chars`, default 100 000), removed by `vibe task discard`.
 - The task record keeps its `branch`; `vibe pr`, `task show` and `task discard` use it.
+- A read layer in `vibe-pipeline` for interfaces: incremental and all-tasks event reading
+  with a stable cursor (`events_log`), the history of finished work rebuilt from events and
+  git (`history`: runs, commits, changed files, validations, QA, tokens, active time) and
+  the trace of a run's tool calls (`trace`).
+- `[pricing."<provider>/<model>"]` in `config.toml`: prices per million tokens, used to
+  show a cost in the history when every model of a task has one.
 
 ### Fixed
 - A run that fails before its first phase (workspace, storage) now always ends with a

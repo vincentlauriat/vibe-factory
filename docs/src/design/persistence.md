@@ -223,6 +223,76 @@ to `.vibe/.gitignore` if the noise bothers you. To keep all task data local, add
 worktree is created, so worktrees never show up in your `git status` even without these
 entries.
 
+## Reading the store: the read layer
+
+Interfaces never parse these files themselves; `vibe-pipeline` gives them a read layer on
+the same files ([ADR-007](adr/007-one-seam-many-interfaces.md)):
+
+| API | Reads | For |
+|-----|-------|-----|
+| `EventReader` (`events_log`) | one `events.jsonl`, from a byte offset | following a task without re-reading its whole log |
+| `FileTaskStore::all_events(after)`, `AllEventsFollower` | every task's `events.jsonl`, tagged with the task id and number | one stream for the whole project, ordered by time |
+| `history::project_history`, `history::task_history` | `task.json`, `events.jsonl`, `run.json`, `qa_report_*.json`, git | what finished tasks did, cost and changed |
+| `trace::run_trace`, `trace::read_output` | `events.jsonl`, `.vibe/tool-output/` | the tool calls of a run with their complete outputs |
+
+**Reading a log while it grows.** A writer appends whole lines, but a reader can see one
+half written: `EventReader` keeps an incomplete last line until its end arrives, and
+starts over when the file shrinks or is replaced. Complete lines that do not parse are
+skipped, as when a log is loaded whole.
+
+**All tasks at once.** Each event is tagged `{task, number}` and serialised flat, the
+envelope's fields next to them: `{"task":"…","number":3,"schema":2,"seq":17,"at":"…","event":{…}}`.
+Events are ordered by `at`, then task number, then `seq`: that triple is the event's
+`EventCursor`, written `<nanoseconds>-<number>-<seq>` so it can serve as an SSE id. A client
+resumes after the cursor of the last event it saw, which does not lose events of other tasks
+published at the same instant. `AllEventsFollower` re-reads `index.json` at each poll, so
+tasks created later are followed too; a log that cannot be read is reported with the poll's
+result and retried at the next poll, without losing the events of the other logs.
+
+**Runs.** A run and its resumes share one id: a run is summarised from its first
+`run_started` to its last `run_finished`, whose totals already cover the resumes. A
+`run_finished` logged before 0.5 has no totals; `run.json` supplies them for the last run,
+and older runs report their totals as unknown rather than as zeros. `run.json` also
+supplies the totals of a resumed run that has not finished again. A run without a
+`run_finished` since its last start is `running` when a process holds the task's run lock,
+`interrupted` otherwise.
+
+**Changed files**, from the most to the least exact source, one or two git commands per
+task after three or four for the whole project:
+
+1. a `merged` event. A true merge commit is compared with its first parent: exact. A
+   fast-forward (one parent, or a merged commit that is one of the task's own commits,
+   such as the merge commit of a subtask integration at the tip of the task branch) is
+   compared from the parent of the task's oldest recorded commit that the merged commit
+   contains. That is exact when the recorded commits reach back to where the task branch
+   forked, and it has limits: commits discarded by a reset and a relaunch are skipped, so
+   the diff starts at the relaunched work; commits git makes without an event (the
+   checkpoint before merging) are covered only if an older recorded commit precedes them;
+   and when no recorded commit is contained, only the merged commit itself is compared
+   with its parent. That last case sets `approximate`. A merged branch that still exists
+   diffs as empty against its base, so the merge goes first;
+2. the task branch still exists: `git diff --name-status <base>...<branch>`, with the base
+   resolved as `vibe pr` does (`branch.<b>.vibebase`, then `base_branch`, then the default
+   branch); an empty diff is skipped;
+3. the `files` of the `committed` events (statuses unknown);
+4. the paths written by `write_file` and `edit_file` calls (approximate: files written by
+   commands are missing);
+5. nothing.
+
+`approximate` means the list may miss files or list files the task did not change in the
+end; it is set for sources 3 and 4 and for a fast-forward without a contained commit.
+Revisions read from the log or the configuration are passed to git after
+`--end-of-options`, so a value that starts with `-` is never read as an option.
+
+A git error on one task, or a task file that does not parse (`run.json`, a QA report), is
+recorded on that task; only an unreadable index fails the whole history. Git runs with the same neutralised configuration as every other
+framework command (no hooks, no external diff).
+
+**Tool calls** pair by `call` id; calls logged before 0.5 pair in order per role, tool and
+subtask, and are marked as such. A trace file is only read under `.vibe/tool-output/`: a
+recorded path that is absolute or climbs out with `..` is ignored, and `read_output`
+resolves symbolic links and refuses a file that resolves outside the trace store.
+
 ## How a resume reads the state
 
 `Pipeline::resume` needs only the task directory:

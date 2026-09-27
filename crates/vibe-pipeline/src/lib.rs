@@ -2,9 +2,19 @@
 //!
 //! Task store and multi-agent pipeline orchestration for **Vibe Factory**.
 //!
-//! This crate depends only on `vibe-core` and `vibe-agents`: model
+//! The pipeline depends only on `vibe-core` and `vibe-agents`: model
 //! providers, tools, workspaces and commits are injected through
-//! [`PipelineDeps`] (and the plugins of a [`vibe_core::Registry`]).
+//! [`PipelineDeps`] (and the plugins of a [`vibe_core::Registry`]). The read
+//! layer for interfaces ([`history`]) also uses `vibe-workspace`'s git
+//! wrapper, read-only, to list the files a task changed.
+//!
+//! ## Read layer
+//!
+//! Interfaces read what the engine did through [`events_log`] (one log
+//! incrementally, every task's log merged by time, every log followed as
+//! it grows), [`history`] (runs, totals, commits, changed files and cost
+//! of finished tasks) and [`trace`] (the tool calls of a run, paired, with
+//! their complete outputs).
 //!
 //! ## Phases
 //!
@@ -100,6 +110,8 @@
 
 pub mod complexity;
 pub mod context;
+pub mod events_log;
+pub mod history;
 pub mod kickoff;
 pub mod manager;
 pub mod memory;
@@ -107,6 +119,7 @@ pub mod phases;
 pub mod pipeline;
 pub mod state;
 pub mod store;
+pub mod trace;
 
 pub use complexity::{
     AssessmentOutput, Profile, heuristic_complexity, parse_complexity, profile_for,
@@ -114,6 +127,11 @@ pub use complexity::{
 pub use context::{
     Committer, PhaseResult, ProviderResolver, RegistryResolver, Resetter, RunContext, Transition,
     context_window_for, permissions_for,
+};
+pub use events_log::{AllEventsFollower, EventCursor, EventReader, PollResult, TaggedEnvelope};
+pub use history::{
+    ChangedFiles, ChangedFilesSource, Cost, FileChange, FileStatus, HistoryFilter, RunSummary,
+    RunSummaryState, TaskHistory, project_history, task_history,
 };
 pub use kickoff::{Kickoff, KickoffData, kickoff_for};
 pub use manager::{RunHandle, RunManager};
@@ -124,3 +142,4 @@ pub use store::{
     FileEventSink, FileTaskStore, MemoryFile, PipelineStore, SharedPipelineStore, parse_event_log,
     plan_to_markdown,
 };
+pub use trace::{Call, PairedBy, RunTrace, pair_all_calls, read_output, run_trace};

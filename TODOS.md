@@ -85,15 +85,15 @@ then a terminal UI on top of it.
 ## 0.5 — visibility: history, global activity, full trace, macOS app (in progress, see PLAN.md)
 
 ### 1. Events and persistence
-- [ ] Call ids, subtask, exit code, output size and output file on tool events; full outputs under `.vibe/tool-output/<task>/<run>/`
-- [ ] `Committed` and `Merged` events; `RunFinished` carries usage and active time; `AgentStarted` carries the model
-- [ ] `Task.branch` persisted and used by `pr`, `task show`, `task discard`
-- [ ] `events.md` and schema tests updated (schema stays 2)
+- [x] Call ids, subtask, exit code, output size and output file on tool events; full outputs under `.vibe/tool-output/<task>/<run>/`
+- [x] `Committed` and `Merged` events; `RunFinished` carries usage and active time; `AgentStarted` carries the model
+- [x] `Task.branch` persisted and used by `pr`, `task show`, `task discard`
+- [x] `events.md` and schema tests updated (schema stays 2)
 
 ### 2. Read layer
-- [ ] Incremental event reader (byte offsets) and all-tasks reader with task tags
-- [ ] `TaskHistory` (runs, commits, changed files from git, validations, QA, tokens, time, optional cost)
-- [ ] `run_trace` pairing calls and returns (by id, by order for old logs)
+- [x] Incremental event reader (byte offsets) and all-tasks reader with task tags
+- [x] `TaskHistory` (runs, commits, changed files from git, validations, QA, tokens, time, optional cost)
+- [x] `run_trace` pairing calls and returns (by id, by order for old logs)
 
 ### 3. CLI
 - [ ] `vibe events` without a task: global feed with `--since`, `--type`, `--task`
@@ -107,8 +107,11 @@ then a terminal UI on top of it.
 ### 5. TUI
 - [ ] Activity and History screens, Trace tab
 
-### 6. Docs
-- [ ] User guide pages, CLI/API reference, configuration, CHANGELOG, roadmap, README
+### 6. Docs and landing pages (Vincent: "update all the documentation, the landing pages, etc.")
+- [ ] User guide: history.md, trace.md, cli.md, configuration.md, quickstart.md, migration.md (0.4 → 0.5), troubleshooting.md
+- [ ] Reference and design: events.md, roadmap.md, persistence, agent runtime, ADR note on trace store / read layer, book introduction page
+- [ ] Landing pages: README.md (features, install, layout, roadmap, visuals), GitHub Pages front page, repo description/topics, editors/vscode README, apps/macos README, evals README
+- [ ] CHANGELOG grouped and complete, TODOS ticked, ARCHITECTURE.md / ARCHITECTURE_EN.md
 
 ### 7. macOS app (`apps/macos/VibeFactory`)
 - [ ] `VibeAPI` Swift package: models, REST client, SSE stream with reconnection, fixtures tests
