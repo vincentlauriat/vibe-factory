@@ -82,6 +82,40 @@ then a terminal UI on top of it.
 - [x] Persistent memory across tasks (`.vibe/memory.jsonl`), deduplicated, `vibe memory`
 - [x] VS Code extension on the server API (editors/vscode)
 
+## 0.5 — visibility: history, global activity, full trace, macOS app (in progress, see PLAN.md)
+
+### 1. Events and persistence
+- [ ] Call ids, subtask, exit code, output size and output file on tool events; full outputs under `.vibe/tool-output/<task>/<run>/`
+- [ ] `Committed` and `Merged` events; `RunFinished` carries usage and active time; `AgentStarted` carries the model
+- [ ] `Task.branch` persisted and used by `pr`, `task show`, `task discard`
+- [ ] `events.md` and schema tests updated (schema stays 2)
+
+### 2. Read layer
+- [ ] Incremental event reader (byte offsets) and all-tasks reader with task tags
+- [ ] `TaskHistory` (runs, commits, changed files from git, validations, QA, tokens, time, optional cost)
+- [ ] `run_trace` pairing calls and returns (by id, by order for old logs)
+
+### 3. CLI
+- [ ] `vibe events` without a task: global feed with `--since`, `--type`, `--task`
+- [ ] `vibe history [REF] [--all]`
+- [ ] `vibe trace <REF> [--run|--all] [--tool] [--full]`
+
+### 4. Server and web UI
+- [ ] Global `/api/events` and `/api/stream`, `/api/history`, `/api/tasks/{t}/trace` routes
+- [ ] Web views Activity and History, Trace tab
+
+### 5. TUI
+- [ ] Activity and History screens, Trace tab
+
+### 6. Docs
+- [ ] User guide pages, CLI/API reference, configuration, CHANGELOG, roadmap, README
+
+### 7. macOS app (`apps/macos/VibeFactory`)
+- [ ] `VibeAPI` Swift package: models, REST client, SSE stream with reconnection, fixtures tests
+- [ ] SwiftUI app: open a project, start/stop `vibe serve`, board, detail tabs, approvals, activity, trace, history
+- [ ] Menu bar item and notifications (approval requested, run finished, paused)
+- [ ] `project.yml` (xcodegen), CI job on macos-latest, release script (sign, notarise, DMG under `release/`)
+
 ## Ideas
 - Semantic merge assistance for parallel tasks touching the same files
 - Prompt caching statistics and optimisation hints
