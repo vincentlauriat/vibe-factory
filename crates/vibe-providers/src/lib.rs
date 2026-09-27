@@ -91,6 +91,7 @@ pub mod mock;
 pub mod openai;
 pub mod registry;
 pub mod retry;
+pub mod sse;
 
 pub use anthropic::{AnthropicAuth, AnthropicProvider, expand_model_shorthand};
 pub use classify::{classify_http_error, scrub_secrets};

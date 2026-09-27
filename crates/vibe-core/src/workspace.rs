@@ -99,6 +99,57 @@ pub trait WorkspaceProvider: Send + Sync {
 /// Shared handle to a workspace provider.
 pub type SharedWorkspaceProvider = Arc<dyn WorkspaceProvider>;
 
+/// Result of integrating a subtask's workspace into its task's workspace.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case", tag = "outcome")]
+pub enum SubtaskIntegration {
+    /// The subtask's work is now part of the task workspace.
+    Integrated {
+        /// Resulting commit of the task workspace, `None` when the subtask
+        /// changed nothing.
+        commit: Option<String>,
+    },
+    /// The subtask's work conflicts with work integrated since it started.
+    /// The task workspace is left exactly as it was.
+    Conflict {
+        /// Conflicting files.
+        files: Vec<String>,
+    },
+}
+
+/// Gives every subtask attempt its own workspace, forked from the current
+/// state of the task workspace, and integrates finished subtasks back one
+/// at a time. Parallel coder sessions then never see each other's
+/// half-finished edits, and a failed attempt is thrown away without
+/// touching the task workspace.
+#[async_trait::async_trait]
+pub trait SubtaskWorkspaces: Send + Sync {
+    /// Create a workspace for one attempt, forked from the current state of
+    /// `task`. `label` is unique per attempt within the task (for example
+    /// `s2-a1`); leftovers of an earlier process with the same label are
+    /// replaced.
+    async fn open(&self, task: &Workspace, label: &str) -> Result<Workspace>;
+
+    /// Record everything left in `subtask` with `message` and merge it into
+    /// `task`. On conflict `task` must be left unchanged.
+    async fn integrate(
+        &self,
+        task: &Workspace,
+        subtask: &Workspace,
+        message: &str,
+    ) -> Result<SubtaskIntegration>;
+
+    /// Remove a subtask workspace and its resources. Already-missing
+    /// resources are not an error.
+    async fn discard(&self, subtask: &Workspace) -> Result<()>;
+
+    /// Remove every subtask workspace of `task`, including leftovers of a
+    /// process that died mid-build. Default: nothing to do.
+    async fn discard_all(&self, _task: &Workspace) -> Result<()> {
+        Ok(())
+    }
+}
+
 /// Provider that works in place, without any isolation.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct InPlaceWorkspace;

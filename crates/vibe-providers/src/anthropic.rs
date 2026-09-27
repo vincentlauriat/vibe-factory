@@ -23,6 +23,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use reqwest::header::HeaderMap;
@@ -30,14 +31,16 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use vibe_core::provider::ProviderInfo;
 use vibe_core::{
-    CompletionRequest, CompletionResponse, ContentBlock, Error, Message, ModelProvider,
-    ProviderConfig, Result, Role, StopReason, Usage,
+    CompletionRequest, CompletionResponse, ContentBlock, DeltaSink, Error, ErrorKind, Message,
+    ModelProvider, ProviderConfig, Result, Role, StopReason, StreamDelta, Usage,
 };
 
 use crate::http::{
     headers_from_extra, malformed, missing_key_error, normalize_base_url, send_json, shared_client,
 };
+use crate::openai::RAW_ARGUMENTS_KEY;
 use crate::retry::{RetryPolicy, with_retry};
+use crate::sse::{Flow, send_sse};
 
 /// Public API endpoint.
 pub const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
@@ -124,6 +127,7 @@ pub struct AnthropicProvider {
     headers: HeaderMap,
     retry: RetryPolicy,
     thinking_cache: Arc<Mutex<ThinkingCache>>,
+    streaming: bool,
 }
 
 impl fmt::Debug for AnthropicProvider {
@@ -158,6 +162,7 @@ impl AnthropicProvider {
             headers: HeaderMap::new(),
             retry: RetryPolicy::default(),
             thinking_cache: Arc::new(Mutex::new(ThinkingCache::default())),
+            streaming: true,
         }
     }
 
@@ -194,7 +199,7 @@ impl AnthropicProvider {
         if let Some(model) = &config.default_model {
             provider = provider.with_default_model(model);
         }
-        Ok(provider)
+        Ok(provider.with_streaming(config.stream.unwrap_or(true)))
     }
 
     /// Switch to OAuth bearer authentication with `token`.
@@ -222,6 +227,14 @@ impl AnthropicProvider {
     #[must_use]
     pub fn with_default_model(mut self, model: impl AsRef<str>) -> Self {
         self.default_model = expand_model_shorthand(model.as_ref());
+        self
+    }
+
+    /// Stream answers (default true). When false, `complete_streaming`
+    /// makes a plain request and sends no delta.
+    #[must_use]
+    pub fn with_streaming(mut self, streaming: bool) -> Self {
+        self.streaming = streaming;
         self
     }
 
@@ -478,6 +491,136 @@ struct WireUsage {
     cache_creation_input_tokens: Option<u64>,
 }
 
+/// A Messages API response rebuilt from its stream of events, in the shape
+/// of a non-streamed response so that [`parse_response`] reads both.
+#[derive(Debug, Default)]
+pub struct StreamedMessage {
+    message: Option<Value>,
+    blocks: Vec<Value>,
+    tool_json: Vec<String>,
+    stopped: bool,
+}
+
+impl StreamedMessage {
+    /// Apply the `data` of one event, reporting new text through `on_delta`.
+    pub fn apply(&mut self, data: &str, on_delta: &mut dyn FnMut(StreamDelta)) -> Result<Flow> {
+        if data.trim().is_empty() {
+            return Ok(Flow::Continue);
+        }
+        let event: Value = serde_json::from_str(data).map_err(malformed)?;
+        let index = event["index"]
+            .as_u64()
+            .and_then(|i| usize::try_from(i).ok());
+        match event["type"].as_str().unwrap_or_default() {
+            "message_start" => self.message = Some(event["message"].clone()),
+            "content_block_start" => {
+                let i = index.ok_or_else(|| malformed("content block without index"))?;
+                if self.blocks.len() <= i {
+                    self.blocks.resize(i + 1, Value::Null);
+                    self.tool_json.resize(i + 1, String::new());
+                }
+                self.blocks[i] = event["content_block"].clone();
+            }
+            "content_block_delta" => {
+                let i = index.ok_or_else(|| malformed("content block delta without index"))?;
+                let block = self
+                    .blocks
+                    .get_mut(i)
+                    .ok_or_else(|| malformed("delta for an unknown content block"))?;
+                let delta = &event["delta"];
+                match delta["type"].as_str().unwrap_or_default() {
+                    "text_delta" => {
+                        let text = delta["text"].as_str().unwrap_or_default();
+                        append(block, "text", text);
+                        on_delta(StreamDelta::Text { text: text.into() });
+                    }
+                    "thinking_delta" => {
+                        let text = delta["thinking"].as_str().unwrap_or_default();
+                        append(block, "thinking", text);
+                        on_delta(StreamDelta::Thinking { text: text.into() });
+                    }
+                    "signature_delta" => {
+                        append(
+                            block,
+                            "signature",
+                            delta["signature"].as_str().unwrap_or(""),
+                        );
+                    }
+                    "input_json_delta" => {
+                        self.tool_json[i].push_str(delta["partial_json"].as_str().unwrap_or(""));
+                    }
+                    _ => {}
+                }
+            }
+            "message_delta" => {
+                let message = self.message.get_or_insert_with(|| json!({}));
+                if let Some(reason) = event["delta"]["stop_reason"].as_str() {
+                    message["stop_reason"] = json!(reason);
+                }
+                if let Some(usage) = event["usage"].as_object() {
+                    for (key, value) in usage {
+                        message["usage"][key] = value.clone();
+                    }
+                }
+            }
+            "message_stop" => {
+                self.stopped = true;
+                return Ok(Flow::Stop);
+            }
+            "error" => {
+                let error = &event["error"];
+                let kind = match error["type"].as_str().unwrap_or_default() {
+                    "overloaded_error" | "api_error" => ErrorKind::ServerError,
+                    "rate_limit_error" => ErrorKind::RateLimited,
+                    _ => ErrorKind::Other,
+                };
+                return Err(Error::new(
+                    kind,
+                    format!(
+                        "stream error: {}",
+                        error["message"].as_str().unwrap_or("unknown error")
+                    ),
+                ));
+            }
+            _ => {}
+        }
+        Ok(Flow::Continue)
+    }
+
+    /// The complete response; an error if the stream ended early.
+    pub fn finish(self) -> Result<Value> {
+        if !self.stopped {
+            return Err(Error::new(
+                ErrorKind::Network,
+                "the stream ended before message_stop",
+            ));
+        }
+        let mut message = self
+            .message
+            .ok_or_else(|| malformed("stream without message_start"))?;
+        let content: Vec<Value> = self
+            .blocks
+            .into_iter()
+            .zip(self.tool_json)
+            .filter(|(block, _)| !block.is_null())
+            .map(|(mut block, json)| {
+                if block["type"] == "tool_use" && !json.trim().is_empty() {
+                    block["input"] = serde_json::from_str(&json)
+                        .unwrap_or_else(|_| json!({ RAW_ARGUMENTS_KEY: json }));
+                }
+                block
+            })
+            .collect();
+        message["content"] = Value::Array(content);
+        Ok(message)
+    }
+}
+
+fn append(block: &mut Value, field: &str, text: &str) {
+    let current = block[field].as_str().unwrap_or_default().to_string();
+    block[field] = json!(current + text);
+}
+
 /// Map the API `stop_reason` string onto [`StopReason`].
 #[must_use]
 pub fn map_stop_reason(reason: Option<&str>) -> StopReason {
@@ -544,6 +687,49 @@ impl ModelProvider for AnthropicProvider {
         let body = self.build_body(&request);
         let value =
             with_retry(&self.retry, || send_json(self.request_builder(auth, &body))).await?;
+        if let Some((tool_id, blocks)) = signed_thinking(&value) {
+            lock(&self.thinking_cache).insert(tool_id, blocks);
+        }
+        parse_response(value, &model)
+    }
+
+    async fn complete_streaming(
+        &self,
+        request: CompletionRequest,
+        on_delta: DeltaSink<'_>,
+    ) -> Result<CompletionResponse> {
+        if !self.streaming {
+            return self.complete(request).await;
+        }
+        let auth = self
+            .auth
+            .as_ref()
+            .ok_or_else(|| missing_key_error(&self.name))?;
+        let model = self.effective_model(&request);
+        let mut body = self.build_body(&request);
+        body["stream"] = json!(true);
+        let emitted = AtomicBool::new(false);
+        let value = with_retry(&self.retry, || async {
+            let mut stream = StreamedMessage::default();
+            let result = send_sse(self.request_builder(auth, &body), |event| {
+                stream.apply(&event.data, &mut |delta| {
+                    emitted.store(true, Ordering::Relaxed);
+                    on_delta(delta);
+                })
+            })
+            .await
+            .and_then(|()| stream.finish());
+            match result {
+                Ok(value) => Ok(value),
+                // Retrying after text reached the caller would repeat it.
+                Err(e) if emitted.load(Ordering::Relaxed) => Err(Error::new(
+                    ErrorKind::Other,
+                    format!("the stream broke after output started: {}", e.message),
+                )),
+                Err(e) => Err(e),
+            }
+        })
+        .await?;
         if let Some((tool_id, blocks)) = signed_thinking(&value) {
             lock(&self.thinking_cache).insert(tool_id, blocks);
         }

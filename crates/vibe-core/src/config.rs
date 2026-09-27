@@ -7,6 +7,7 @@ use crate::agent::ThinkingLevel;
 use crate::error::Result;
 use crate::phase::Phase;
 use crate::provider::ModelRef;
+pub use crate::sandbox::{ContainerConfig, ContainerMount, WorkspaceConfig};
 
 /// Name of the directory holding framework data inside a project.
 pub const VIBE_DIR: &str = ".vibe";
@@ -35,6 +36,10 @@ pub struct ProviderConfig {
     /// Used to warn agents near the limit and stop before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u32>,
+    /// Stream answers as they are generated (default true). Set it to
+    /// false for a gateway that mishandles server-sent events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
     /// Extra provider-specific settings.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra: BTreeMap<String, toml::Value>,
@@ -96,7 +101,8 @@ pub struct PipelineConfig {
     /// Retries per phase when the agent produced no usable output.
     #[serde(default = "default_phase_retries")]
     pub max_phase_retries: u32,
-    /// Workspace provider name (`git_worktree`, `in_place`, or a plugin).
+    /// Workspace provider name (`git_worktree`, `in_place`, `container`, or
+    /// a plugin).
     #[serde(default = "default_workspace")]
     pub workspace: String,
     /// Whether to merge automatically after QA approval.
@@ -113,6 +119,70 @@ pub struct PipelineConfig {
     /// `assisted` (let the `merge_resolver` agent's model try first).
     #[serde(default)]
     pub merge_strategy: MergeStrategy,
+    /// Give every subtask attempt its own workspace when the workspace
+    /// provider supports it (`git_worktree`), and integrate finished
+    /// subtasks one at a time. When false, parallel subtasks share the task
+    /// workspace.
+    #[serde(default = "default_true")]
+    pub isolate_subtasks: bool,
+    /// Keep lessons (pitfalls, conventions) in `.vibe/memory.jsonl` and
+    /// recall the relevant ones in later tasks.
+    #[serde(default = "default_true")]
+    pub project_memory: bool,
+    /// Points where the run waits for a human decision (`vibe approve` or
+    /// `vibe reject`): after the spec, after the plan, before merging.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub approvals: Vec<ApprovalGate>,
+    /// Maximum input plus output tokens of a run, counted across resumes.
+    /// When reached the run pauses; raise the limit and resume to continue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
+    /// Maximum active time of a run in seconds, counted across resumes
+    /// (time spent paused is not counted). When reached the run pauses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_duration_secs: Option<u64>,
+}
+
+impl PipelineConfig {
+    /// Budget limits of a run.
+    #[must_use]
+    pub fn budget_limits(&self) -> crate::BudgetLimits {
+        crate::BudgetLimits {
+            max_tokens: self.max_tokens,
+            max_duration: self.max_duration_secs.map(std::time::Duration::from_secs),
+        }
+    }
+}
+
+/// A point where a run waits for a human decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalGate {
+    /// The specification, before planning.
+    Spec,
+    /// The plan, before building.
+    Plan,
+    /// The reviewed result, before the merge phase (validation, integration
+    /// or marking the task ready).
+    Merge,
+}
+
+impl ApprovalGate {
+    /// Lower-case name, as in the configuration.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Spec => "spec",
+            Self::Plan => "plan",
+            Self::Merge => "merge",
+        }
+    }
+}
+
+impl std::fmt::Display for ApprovalGate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// Conflict handling strategy at merge time.
@@ -126,6 +196,10 @@ pub enum MergeStrategy {
     Manual,
     /// A model attempts to resolve conflicts; unresolved files go to a human.
     Assisted,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_validation_fix_attempts() -> u32 {
@@ -160,6 +234,11 @@ impl Default for PipelineConfig {
             validation_commands: Vec::new(),
             max_validation_fix_attempts: default_validation_fix_attempts(),
             merge_strategy: MergeStrategy::Manual,
+            isolate_subtasks: true,
+            project_memory: true,
+            approvals: Vec::new(),
+            max_tokens: None,
+            max_duration_secs: None,
         }
     }
 }
@@ -182,6 +261,15 @@ pub struct SecurityConfig {
     /// Paths outside the project agents may read.
     #[serde(default)]
     pub extra_read_paths: Vec<PathBuf>,
+    /// Domains `web_fetch` may reach (and their subdomains); empty means any
+    /// public host. Network access must be allowed as well.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub web_allowed_domains: Vec<String>,
+    /// SearXNG-compatible search URL with a `{query}` placeholder, e.g.
+    /// `https://searx.example/search?q={query}&format=json`. Registers the
+    /// `web_search` tool.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_url: Option<String>,
 }
 
 fn default_timeout() -> u64 {
@@ -196,6 +284,8 @@ impl Default for SecurityConfig {
             command_timeout_secs: default_timeout(),
             allow_network: false,
             extra_read_paths: Vec::new(),
+            web_allowed_domains: Vec::new(),
+            search_url: None,
         }
     }
 }
@@ -253,6 +343,45 @@ pub struct VibeConfig {
     /// Base branch for worktrees (default: current branch).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_branch: Option<String>,
+    /// Workspace provider settings (`[workspace.container]`).
+    #[serde(default, skip_serializing_if = "WorkspaceConfig::is_empty")]
+    pub workspace: WorkspaceConfig,
+    /// Issue trackers and code forges (`[integrations.github]`, …).
+    #[serde(default, skip_serializing_if = "IntegrationsConfig::is_empty")]
+    pub integrations: IntegrationsConfig,
+}
+
+/// Issue trackers and code forges.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct IntegrationsConfig {
+    /// GitHub or GitHub Enterprise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github: Option<ForgeConfig>,
+    /// GitLab (gitlab.com or self-managed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gitlab: Option<ForgeConfig>,
+}
+
+impl IntegrationsConfig {
+    /// Whether nothing is configured (the table is then not serialised).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.github.is_none() && self.gitlab.is_none()
+    }
+}
+
+/// How to reach one forge.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ForgeConfig {
+    /// API base URL (default `https://api.github.com` or
+    /// `https://gitlab.com/api/v4`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_url: Option<String>,
+    /// Environment variable holding the token (default `GITHUB_TOKEN` or
+    /// `GITLAB_TOKEN`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_env: Option<String>,
 }
 
 fn default_provider() -> String {
@@ -306,6 +435,8 @@ impl Default for VibeConfig {
             security: SecurityConfig::default(),
             plugins: Vec::new(),
             base_branch: None,
+            workspace: WorkspaceConfig::default(),
+            integrations: IntegrationsConfig::default(),
         }
     }
 }

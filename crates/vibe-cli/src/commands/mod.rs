@@ -1,10 +1,14 @@
 //! Implementation of every subcommand.
 
 pub mod agents;
+pub mod approval;
 pub mod config;
 pub mod doctor;
+pub mod events;
 pub mod init;
+pub mod memory;
 pub mod plugins;
+pub mod pr;
 pub mod run;
 pub mod status;
 pub mod task;
@@ -32,6 +36,27 @@ pub async fn dispatch(cli: Cli) -> Result<u8> {
         Command::Init { force } => init::run(&init_root(project)?, force, ui).await,
         Command::Task(cmd) => task::run(&find_project_root(project)?, cmd, ui).await,
         Command::Run(args) => run::run(&find_project_root(project)?, args, ui).await,
+        Command::Approve { reference, comment } => {
+            approval::run(
+                &find_project_root(project)?,
+                &reference,
+                true,
+                comment.unwrap_or_default(),
+                ui,
+            )
+            .await
+        }
+        Command::Reject { reference, reason } => {
+            approval::run(&find_project_root(project)?, &reference, false, reason, ui).await
+        }
+        Command::Cancel { reference, wait } => {
+            approval::cancel(&find_project_root(project)?, &reference, wait, ui).await
+        }
+        Command::Pr(args) => pr::run(&find_project_root(project)?, args, ui).await,
+        Command::Memory(cmd) => memory::run(&find_project_root(project)?, cmd, ui).await,
+        Command::Tui => crate::tui::run(&find_project_root(project)?).await,
+        Command::Serve(args) => crate::server::run(&find_project_root(project)?, args, ui).await,
+        Command::Events(args) => events::run(&find_project_root(project)?, args, ui).await,
         Command::Status => status::run(&find_project_root(project)?, ui).await,
         Command::Config(cmd) => config::run(&find_project_root(project)?, cmd, ui),
         Command::Agents(cmd) => agents::run(&find_project_root(project)?, cmd, ui),

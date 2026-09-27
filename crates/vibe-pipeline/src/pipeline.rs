@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{OnceCell, watch};
 use vibe_core::{
-    Complexity, Envelope, Error, ErrorKind, Event, EventBus, EventSink, HookDecision, Phase,
-    Registry, Result, RunId, SubtaskStatus, Task, TaskId, TaskStatus, ToolRegistry, Usage,
-    VibeConfig, WorkspaceProvider,
+    ApprovalGate, Complexity, Envelope, Error, ErrorKind, Event, EventBus, EventSink, HookDecision,
+    Phase, QaIssue, QaReport, QaVerdict, Registry, Result, RunBudget, RunId, Severity,
+    SubtaskStatus, Task, TaskId, TaskStatus, ToolRegistry, Usage, VibeConfig, WorkspaceProvider,
 };
 
 use crate::complexity::{Profile, heuristic_complexity, profile_for};
@@ -43,6 +43,11 @@ pub struct PipelineDeps {
     pub committer: Option<Committer>,
     /// Discards the changes of a failed subtask attempt (see [`Resetter`]).
     pub resetter: Option<Resetter>,
+    /// Gives every subtask attempt its own workspace (see
+    /// [`vibe_core::SubtaskWorkspaces`]); used when
+    /// `pipeline.isolate_subtasks` is true. `None` shares the task
+    /// workspace between parallel subtasks.
+    pub subtask_workspaces: Option<Arc<dyn vibe_core::SubtaskWorkspaces>>,
 }
 
 impl std::fmt::Debug for PipelineDeps {
@@ -143,6 +148,146 @@ fn status_for(phase: Phase) -> TaskStatus {
         Phase::Build => TaskStatus::Building,
         Phase::Qa | Phase::Fix | Phase::Merge => TaskStatus::Review,
     }
+}
+
+/// Fold the usage and active time of this invocation into the persisted
+/// totals of the run, which started the invocation at `base`.
+fn sync_accounting(ctx: &mut RunContext, base: (Usage, u64), started: Instant) {
+    ctx.state.usage = base.0.combined(ctx.usage);
+    let now = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    ctx.state.active_ms = base.1.saturating_add(now);
+}
+
+/// How often a run checks for a cancellation requested by another process.
+const CANCEL_POLL: Duration = Duration::from_millis(500);
+
+/// Aborts a background task when dropped.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// The run's cancellation token: flips when the caller's token does or when
+/// another process asks to cancel the task (see
+/// [`PipelineStore::take_cancel_request`]). The watcher stops with the
+/// returned guard.
+fn cancel_token(
+    caller: Option<watch::Receiver<bool>>,
+    store: &Arc<dyn PipelineStore>,
+    task: TaskId,
+) -> (watch::Receiver<bool>, AbortOnDrop) {
+    let (tx, rx) = watch::channel(caller.as_ref().is_some_and(|c| *c.borrow()));
+    let store = Arc::clone(store);
+    let watcher = tokio::spawn(async move {
+        let mut caller = caller;
+        loop {
+            let caller_cancelled = async {
+                match caller.as_mut() {
+                    Some(c) => {
+                        if c.changed().await.is_err() {
+                            // The caller dropped its sender: it can never cancel.
+                            std::future::pending::<()>().await;
+                        }
+                    }
+                    None => std::future::pending::<()>().await,
+                }
+            };
+            tokio::select! {
+                () = caller_cancelled => {
+                    if caller.as_ref().is_some_and(|c| *c.borrow()) {
+                        let _ = tx.send(true);
+                        return;
+                    }
+                }
+                () = tokio::time::sleep(CANCEL_POLL) => {
+                    if store.take_cancel_request(task).await.unwrap_or(false) {
+                        let _ = tx.send(true);
+                        return;
+                    }
+                }
+            }
+        }
+    });
+    (rx, AbortOnDrop(watcher))
+}
+
+/// Whether the fix phase must run although the profile skips it.
+fn fix_forced(phase: Phase, state: &RunState) -> bool {
+    phase == Phase::Fix && (state.pending_validation_fix.is_some() || state.pending_human_fix)
+}
+
+/// The configured gate `phase` must pass before it runs, if any.
+fn gate_before(phase: Phase, ctx: &RunContext) -> Option<ApprovalGate> {
+    let gate = match phase {
+        // Only when there is a spec to approve (quick profiles have none).
+        Phase::Plan if ctx.spec.is_some() => ApprovalGate::Spec,
+        Phase::Build => ApprovalGate::Plan,
+        Phase::Merge => ApprovalGate::Merge,
+        _ => return None,
+    };
+    ctx.config
+        .pipeline
+        .approvals
+        .contains(&gate)
+        .then_some(gate)
+}
+
+/// A phase that regenerates an approved artefact revokes its approval.
+fn revoke_approvals(state: &mut RunState, phase: Phase) {
+    let revoked: &[ApprovalGate] = match phase {
+        Phase::Spec => &[ApprovalGate::Spec, ApprovalGate::Plan],
+        Phase::Plan => &[ApprovalGate::Plan],
+        Phase::Build | Phase::Fix => &[ApprovalGate::Merge],
+        _ => &[],
+    };
+    state.approved_gates.retain(|g| !revoked.contains(g));
+    if phase == Phase::Fix {
+        state.pending_human_fix = false;
+    }
+}
+
+/// Turn a merge rejection into a QA report for the fixer.
+async fn human_review_report(ctx: &mut RunContext, reason: &str) -> Result<()> {
+    ctx.state.qa_round += 1;
+    let report = QaReport {
+        task_id: ctx.task.id,
+        round: ctx.state.qa_round,
+        verdict: QaVerdict::ChangesRequested,
+        summary: "Rejected by a human reviewer before merge.".into(),
+        issues: vec![QaIssue {
+            severity: Severity::High,
+            title: "Human review".into(),
+            detail: reason.to_string(),
+            requirement: None,
+            file: None,
+            line: None,
+            suggested_fix: None,
+        }],
+    };
+    ctx.store.save_qa_report(&report).await?;
+    ctx.artefact_written(vibe_core::Artefact::QaReport {
+        round: report.round,
+    })
+    .await;
+    ctx.state.pending_human_fix = true;
+    ctx.store.save_run_state(&ctx.state).await
+}
+
+/// Pause the run because a budget limit was reached: the run stays
+/// resumable at the current phase once the limit is raised.
+async fn pause_for_budget(ctx: &mut RunContext, reason: String) {
+    let reason = format!("{reason}; raise the limit and resume to continue");
+    ctx.events
+        .publish(Event::Paused {
+            run: ctx.run_id,
+            reason: reason.clone(),
+        })
+        .await;
+    let _ = ctx.note(&format!("Run paused: {reason}.")).await;
+    ctx.state.last_error = Some(reason);
 }
 
 /// Runs tasks through the multi-agent pipeline.
@@ -280,6 +425,10 @@ impl Pipeline {
         let store = Arc::clone(&self.deps.store);
         let events = self.deps.events.clone();
         let run_id = state.run_id;
+        // One process at a time runs a task; the lock lives until the end.
+        let _run_lock = store.lock_run(task.id).await?;
+        let (cancel, _cancel_watch) = cancel_token(options.cancel.take(), &store, task.id);
+        options.cancel = Some(cancel);
 
         self.router_installed
             .get_or_init(|| async {
@@ -289,6 +438,16 @@ impl Pipeline {
             .await;
         self.router
             .set(run_id, store.event_sink(task.id, run_id).await?);
+        // A resumed run continues its numbering.
+        let last_seq = store
+            .load_events(task.id)
+            .await?
+            .iter()
+            .filter(|e| e.event.run_id() == Some(run_id))
+            .filter_map(|e| e.seq)
+            .max()
+            .unwrap_or(0);
+        events.resume_sequence(run_id, last_seq);
 
         events
             .publish(Event::RunStarted {
@@ -320,6 +479,12 @@ impl Pipeline {
         let plan = store.load_plan(task.id).await?;
 
         let start = options.from_phase.unwrap_or(Phase::Assess);
+        let base = (state.usage, state.active_ms);
+        let budget = Arc::new(RunBudget::new(
+            self.config.pipeline.budget_limits(),
+            state.usage.total(),
+            Duration::from_millis(state.active_ms),
+        ));
         let profile = state.profile.clone().unwrap_or_else(|| {
             profile_for(
                 options
@@ -344,7 +509,9 @@ impl Pipeline {
             events: events.clone(),
             committer: self.deps.committer.clone(),
             resetter: self.deps.resetter.clone(),
+            subtask_workspaces: self.deps.subtask_workspaces.clone(),
             cancel: options.cancel.clone(),
+            budget,
             complexity_override: options.complexity_override,
             spec,
             plan,
@@ -372,20 +539,72 @@ impl Pipeline {
             let Some(phase) = current else {
                 break (ctx.task.status, RunStatus::Finished);
             };
-            if !ctx.profile.has(phase)
-                && !(phase == Phase::Fix && ctx.state.pending_validation_fix.is_some())
-            {
+            if !(ctx.profile.has(phase) || fix_forced(phase, &ctx.state)) {
                 current = ctx.profile.next_after(phase);
                 continue;
+            }
+            if let Some(exceeded) = ctx.budget.exceeded() {
+                ctx.state.current_phase = phase;
+                pause_for_budget(&mut ctx, exceeded.to_string()).await;
+                break (TaskStatus::Backlog, RunStatus::Paused);
             }
             if ctx.is_cancelled() {
                 ctx.state.current_phase = phase;
                 ctx.state.last_error = Some("cancelled".into());
                 break (TaskStatus::Cancelled, RunStatus::Cancelled);
             }
+            if let Some(gate) = gate_before(phase, &ctx) {
+                if ctx.state.rejection.as_ref().is_some_and(|r| r.gate == gate) {
+                    // Send the work back to the phase that produced it.
+                    let back = match gate {
+                        ApprovalGate::Spec => Phase::Spec,
+                        ApprovalGate::Plan => Phase::Plan,
+                        ApprovalGate::Merge => {
+                            let reason = ctx
+                                .state
+                                .rejection
+                                .take()
+                                .map(|r| r.comment)
+                                .unwrap_or_default();
+                            human_review_report(&mut ctx, &reason).await?;
+                            Phase::Fix
+                        }
+                    };
+                    let _ = ctx
+                        .note(&format!(
+                            "The {gate} was rejected: back to the {back} phase."
+                        ))
+                        .await;
+                    current = Some(back);
+                    continue;
+                }
+                if !ctx.state.approved_gates.contains(&gate) {
+                    ctx.state.current_phase = phase;
+                    if ctx.state.pending_approval != Some(gate) {
+                        ctx.state.pending_approval = Some(gate);
+                        events
+                            .publish(Event::ApprovalRequested { run: run_id, gate })
+                            .await;
+                    }
+                    let reason = format!(
+                        "waiting for approval of the {gate}: `vibe approve` to continue, \
+                         `vibe reject --reason \"…\"` to send it back"
+                    );
+                    events
+                        .publish(Event::Paused {
+                            run: run_id,
+                            reason: reason.clone(),
+                        })
+                        .await;
+                    let _ = ctx.note(&format!("Run paused: {reason}.")).await;
+                    ctx.state.last_error = Some(reason);
+                    break (TaskStatus::Review, RunStatus::Paused);
+                }
+            }
             ctx.phase = phase;
             ctx.state.current_phase = phase;
             ctx.state.status = RunStatus::Running;
+            sync_accounting(&mut ctx, base, started);
             ctx.state.touch();
             ctx.task.set_status(status_for(phase));
             store.save_task(&ctx.task).await?;
@@ -403,16 +622,23 @@ impl Pipeline {
                 .publish(Event::PhaseStarted { run: run_id, phase })
                 .await;
             let before = ctx.usage;
-            let result = match phase {
-                Phase::Assess => phases::run_assess(&mut ctx).await,
-                Phase::Spec => phases::run_spec(&mut ctx).await,
-                Phase::Plan => phases::run_plan(&mut ctx).await,
-                Phase::Build => phases::run_build(&mut ctx).await,
-                Phase::Qa => phases::run_qa(&mut ctx).await,
-                Phase::Fix => phases::run_fix(&mut ctx).await,
-                Phase::Merge => phases::run_merge(&mut ctx).await,
-            };
+            // Model calls made outside agents (assisted conflict resolution)
+            // count against the run budget too.
+            let budget = Arc::clone(&ctx.budget);
+            let result = vibe_core::budget::scope(budget, async {
+                match phase {
+                    Phase::Assess => phases::run_assess(&mut ctx).await,
+                    Phase::Spec => phases::run_spec(&mut ctx).await,
+                    Phase::Plan => phases::run_plan(&mut ctx).await,
+                    Phase::Build => phases::run_build(&mut ctx).await,
+                    Phase::Qa => phases::run_qa(&mut ctx).await,
+                    Phase::Fix => phases::run_fix(&mut ctx).await,
+                    Phase::Merge => phases::run_merge(&mut ctx).await,
+                }
+            })
+            .await;
             let usage = usage_delta(ctx.usage, before);
+            ctx.budget_updated().await;
 
             let flow = match result {
                 Ok(mut r) => {
@@ -427,6 +653,7 @@ impl Pipeline {
                         .await;
                     ctx.registry.after_phase(phase, &ctx.task, r.success).await;
                     ctx.state.completed_phases.push(phase);
+                    revoke_approvals(&mut ctx.state, phase);
                     let next = r.next.clone();
                     phases_run.push(r);
                     match next {
@@ -458,6 +685,35 @@ impl Pipeline {
                             }
                         }
                     }
+                }
+                Err(e) if e.kind == ErrorKind::Cancelled && ctx.budget.exceeded().is_some() => {
+                    let reason = ctx
+                        .budget
+                        .exceeded()
+                        .map(|x| x.to_string())
+                        .unwrap_or_default();
+                    events
+                        .publish(Event::PhaseFinished {
+                            run: run_id,
+                            phase,
+                            success: false,
+                            summary: reason.clone(),
+                        })
+                        .await;
+                    ctx.registry.after_phase(phase, &ctx.task, false).await;
+                    phases_run.push(PhaseResult {
+                        phase,
+                        success: false,
+                        summary: reason.clone(),
+                        usage,
+                        next: Transition::Stop {
+                            status: TaskStatus::Backlog,
+                            reason: reason.clone(),
+                            pause: true,
+                        },
+                    });
+                    pause_for_budget(&mut ctx, reason).await;
+                    Flow::End(TaskStatus::Backlog, RunStatus::Paused)
                 }
                 Err(e) => {
                     let cancelled = e.kind == ErrorKind::Cancelled;
@@ -504,7 +760,7 @@ impl Pipeline {
                     let mut next = next;
                     while let Some(p) = next
                         && !ctx.profile.has(p)
-                        && !(p == Phase::Fix && ctx.state.pending_validation_fix.is_some())
+                        && !fix_forced(p, &ctx.state)
                     {
                         next = ctx.profile.next_after(p);
                     }
@@ -520,6 +776,7 @@ impl Pipeline {
                     if let Some(n) = next {
                         ctx.state.current_phase = n;
                     }
+                    sync_accounting(&mut ctx, base, started);
                     ctx.state.touch();
                     store.save_run_state(&ctx.state).await?;
                     current = next;
@@ -530,6 +787,7 @@ impl Pipeline {
         ctx.task.set_status(final_status);
         store.save_task(&ctx.task).await?;
         ctx.state.status = run_status;
+        sync_accounting(&mut ctx, base, started);
         ctx.state.touch();
         store.save_run_state(&ctx.state).await?;
         events

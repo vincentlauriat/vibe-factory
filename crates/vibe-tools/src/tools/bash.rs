@@ -10,7 +10,10 @@ use serde_json::json;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
 use vibe_core::config::SecurityConfig;
-use vibe_core::{Error, Result, Tool, ToolContext, ToolOutput};
+use vibe_core::{
+    CommandRequest, Error, PreparedCommand, Result, SharedCommandRunner, Tool, ToolContext,
+    ToolOutput,
+};
 
 use super::common::{
     MAX_OUTPUT_CHARS, display_path, parse_input, permission_denied, resolve_inside_workspace,
@@ -29,12 +32,37 @@ const CAPTURE_EDGE_BYTES: usize = 64 * 1024;
 /// background child may keep them open).
 const PIPE_DRAIN_GRACE: Duration = Duration::from_secs(2);
 
+/// How long the cleanup command of a [`vibe_core::CommandRunner`] may take.
+const CLEANUP_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Runs shell commands after checking them against a [`SecurityPolicy`].
+///
+/// By default commands run on the host (`sh -c`, or `cmd /C` on Windows).
+/// With [`BashTool::with_runner`] they run wherever the
+/// [`vibe_core::CommandRunner`] decides, for example in a container; the
+/// policy check, timeout and output handling are unchanged.
 #[derive(Debug, Clone)]
 pub struct BashTool {
     policy: SecurityPolicy,
     default_timeout_secs: u64,
+    runner: Option<SharedCommandRunner>,
+    description: String,
 }
+
+const DESCRIPTION: &str = "Run a shell command in the workspace (through `sh -c`, or `cmd /C` on Windows) and \
+     return its combined stdout and stderr followed by the exit code. Use it for builds, \
+     tests, git and other command-line tools; prefer `read_file`, `grep`, `glob` and \
+     `edit_file` for reading, searching and editing files. Every command is checked by a \
+     security policy: privilege escalation, system administration, force-pushes to \
+     main/master, git configuration changes, overriding PATH-like variables and (unless \
+     network access is granted) network tools are refused with an explanation. Paths \
+     that are removed, written by a redirection or entered with `cd` must be exact \
+     (no `~`, `$VAR` or wildcards) and inside the workspace. `cwd` is a \
+     directory inside the workspace (default: the root). The command is killed after \
+     `timeout_secs` (default from the project configuration, at most 600). Output longer \
+     than 30000 characters keeps its beginning and end. Commands run non-interactively \
+     with no standard input; background processes they start are killed when the \
+     command finishes.";
 
 impl BashTool {
     /// Build the tool from the project's security configuration.
@@ -43,7 +71,29 @@ impl BashTool {
         Self {
             policy: SecurityPolicy::new(config),
             default_timeout_secs: config.command_timeout_secs.clamp(1, MAX_TIMEOUT_SECS),
+            runner: None,
+            description: DESCRIPTION.to_string(),
         }
+    }
+
+    /// Run commands through `runner` instead of on the host. The runner's
+    /// [note](vibe_core::CommandRunner::note) is appended to the tool
+    /// description.
+    #[must_use]
+    pub fn with_runner(mut self, runner: SharedCommandRunner) -> Self {
+        self.description = DESCRIPTION.to_string();
+        if let Some(note) = runner.note() {
+            self.description.push(' ');
+            self.description.push_str(&note);
+        }
+        self.runner = Some(runner);
+        self
+    }
+
+    /// The runner commands go through, if any.
+    #[must_use]
+    pub fn runner(&self) -> Option<&SharedCommandRunner> {
+        self.runner.as_ref()
     }
 
     /// The policy commands are checked against.
@@ -123,6 +173,52 @@ fn shell_command(command: &str) -> Command {
     }
 }
 
+fn prepared_command(prepared: &PreparedCommand) -> Command {
+    let mut cmd = Command::new(&prepared.program);
+    cmd.args(&prepared.args);
+    cmd
+}
+
+/// Runs the cleanup command of a prepared command exactly once: explicitly
+/// after the command ended, or from `Drop` when the tool call is cancelled
+/// (its future dropped) before that.
+struct CleanupGuard(Option<Vec<String>>);
+
+impl CleanupGuard {
+    async fn run(mut self) {
+        if let Some(argv) = self.0.take() {
+            let Some((program, args)) = argv.split_first() else {
+                return;
+            };
+            let mut cmd = Command::new(program);
+            cmd.args(args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .kill_on_drop(true);
+            let _ = tokio::time::timeout(CLEANUP_TIMEOUT, cmd.status()).await;
+        }
+    }
+}
+
+impl Drop for CleanupGuard {
+    fn drop(&mut self) {
+        if let Some(argv) = self.0.take() {
+            // No runtime may be available here: use a detached thread.
+            std::thread::spawn(move || {
+                if let Some((program, args)) = argv.split_first() {
+                    let _ = std::process::Command::new(program)
+                        .args(args)
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .status();
+                }
+            });
+        }
+    }
+}
+
 #[cfg(unix)]
 fn isolate_process_group(cmd: &mut Command) {
     cmd.process_group(0);
@@ -160,20 +256,7 @@ impl Tool for BashTool {
     }
 
     fn description(&self) -> &str {
-        "Run a shell command in the workspace (through `sh -c`, or `cmd /C` on Windows) and \
-         return its combined stdout and stderr followed by the exit code. Use it for builds, \
-         tests, git and other command-line tools; prefer `read_file`, `grep`, `glob` and \
-         `edit_file` for reading, searching and editing files. Every command is checked by a \
-         security policy: privilege escalation, system administration, force-pushes to \
-         main/master, git configuration changes, overriding PATH-like variables and (unless \
-         network access is granted) network tools are refused with an explanation. Paths \
-         that are removed, written by a redirection or entered with `cd` must be exact \
-         (no `~`, `$VAR` or wildcards) and inside the workspace. `cwd` is a \
-         directory inside the workspace (default: the root). The command is killed after \
-         `timeout_secs` (default from the project configuration, at most 600). Output longer \
-         than 30000 characters keeps its beginning and end. Commands run non-interactively \
-         with no standard input; background processes they start are killed when the \
-         command finishes."
+        &self.description
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -223,8 +306,39 @@ impl Tool for BashTool {
             .unwrap_or(self.default_timeout_secs)
             .clamp(1, MAX_TIMEOUT_SECS);
 
-        let mut cmd = shell_command(&input.command);
-        cmd.current_dir(&cwd)
+        let prepared = match &self.runner {
+            Some(runner) => {
+                let request = CommandRequest {
+                    command: &input.command,
+                    workspace_root: &root,
+                    cwd: &cwd,
+                    network: ctx.permissions.network,
+                };
+                match runner.prepare(&request) {
+                    Ok(prepared) => Some(prepared),
+                    Err(e) => {
+                        let mut out = ToolOutput::error(format!(
+                            "Cannot prepare the command for the `{}` runner: {}.",
+                            runner.name(),
+                            e.message
+                        ));
+                        out.metadata = json!({"sandbox_error": true});
+                        return Ok(out);
+                    }
+                }
+            }
+            None => None,
+        };
+        let mut cmd = match &prepared {
+            Some(p) => prepared_command(p),
+            None => shell_command(&input.command),
+        };
+        let current_dir = prepared
+            .as_ref()
+            .and_then(|p| p.current_dir.clone())
+            .unwrap_or_else(|| cwd.clone());
+        let cleanup = CleanupGuard(prepared.as_ref().and_then(|p| p.cleanup.clone()));
+        cmd.current_dir(&current_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -238,7 +352,15 @@ impl Tool for BashTool {
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
-                return Ok(ToolOutput::error(format!("Cannot start the shell: {e}.")));
+                cleanup.run().await;
+                let mut out = match &prepared {
+                    Some(p) => ToolOutput::error(format!("Cannot start `{}`: {e}.", p.program)),
+                    None => ToolOutput::error(format!("Cannot start the shell: {e}.")),
+                };
+                if prepared.is_some() {
+                    out.metadata = json!({"sandbox_error": true});
+                }
+                return Ok(out);
             }
         };
         // Captured now: the id is no longer available once the shell is reaped.
@@ -262,6 +384,7 @@ impl Tool for BashTool {
                 (Some(status), false)
             }
             Ok(Err(e)) => {
+                cleanup.run().await;
                 return Err(Error::tool(format!("waiting for the shell failed: {e}")));
             }
             Err(_) => {
@@ -272,6 +395,9 @@ impl Tool for BashTool {
                 (None, true)
             }
         };
+
+        // Runs before draining: removing a container closes its streams.
+        cleanup.run().await;
 
         let mut pipes_left_open = false;
         for reader in readers {
@@ -297,10 +423,19 @@ impl Tool for BashTool {
             );
         }
         let exit_code = status.and_then(|s| s.code());
+        let sandbox_error = !timed_out
+            && exit_code.is_some()
+            && prepared
+                .as_ref()
+                .and_then(|p| p.runner_error_exit_code)
+                .is_some_and(|c| Some(c) == exit_code);
         let footer = if timed_out {
             format!("Command timed out after {timeout_secs} seconds and was killed.")
         } else {
             match exit_code {
+                Some(code) if sandbox_error => format!(
+                    "Exit code: {code} (the command runner failed; the command may not have run)"
+                ),
                 Some(code) => format!("Exit code: {code}"),
                 None => "Exit code: none (terminated by a signal)".to_string(),
             }
@@ -318,6 +453,12 @@ impl Tool for BashTool {
             "timed_out": timed_out,
             "duration_ms": u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
         });
+        if let Some(runner) = &self.runner {
+            out.metadata["runner"] = json!(runner.name());
+            if sandbox_error {
+                out.metadata["sandbox_error"] = json!(true);
+            }
+        }
         Ok(out)
     }
 }
@@ -547,5 +688,100 @@ mod tests {
             "{}",
             out.content
         );
+    }
+
+    /// Runner wrapping commands in `sh -c` with a marker, recording its
+    /// cleanup in a file of the workspace.
+    #[cfg(unix)]
+    #[derive(Debug)]
+    struct MarkerRunner {
+        fail_prepare: bool,
+    }
+
+    #[cfg(unix)]
+    impl vibe_core::CommandRunner for MarkerRunner {
+        fn name(&self) -> &str {
+            "marker"
+        }
+
+        fn note(&self) -> Option<String> {
+            Some("Commands run behind a marker.".into())
+        }
+
+        fn prepare(&self, request: &CommandRequest<'_>) -> Result<PreparedCommand> {
+            if self.fail_prepare {
+                return Err(Error::config("no runtime"));
+            }
+            let log = request.workspace_root.join("cleanup.log");
+            Ok(PreparedCommand {
+                program: "sh".into(),
+                args: vec![
+                    "-c".into(),
+                    format!("echo RUNNER; cd sub && {}", request.command),
+                ],
+                current_dir: Some(request.workspace_root.to_path_buf()),
+                cleanup: Some(vec![
+                    "sh".into(),
+                    "-c".into(),
+                    format!("echo cleaned >> '{}'", log.display()),
+                ]),
+                runner_error_exit_code: Some(125),
+            })
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn runner_replaces_the_host_shell_and_cleans_up() {
+        let (dir, ctx) = workspace();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        let tool = tool().with_runner(Arc::new(MarkerRunner {
+            fail_prepare: false,
+        }));
+        assert!(
+            tool.description()
+                .ends_with("Commands run behind a marker.")
+        );
+        let out = tool.call(&ctx, json!({"command": "pwd"})).await.unwrap();
+        assert!(!out.is_error, "{}", out.content);
+        assert!(out.content.starts_with("RUNNER\n"), "{}", out.content);
+        assert!(out.content.contains("/sub"), "{}", out.content);
+        assert_eq!(out.metadata["runner"], "marker");
+        assert!(out.metadata.get("sandbox_error").is_none());
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("cleanup.log")).unwrap(),
+            "cleaned\n"
+        );
+
+        // Exit status 125 means the runner itself failed.
+        let out = tool
+            .call(&ctx, json!({"command": "exit 125"}))
+            .await
+            .unwrap();
+        assert_eq!(out.metadata["sandbox_error"], true);
+        assert!(out.content.contains("the command runner failed"));
+
+        // The policy still applies before the runner is asked anything.
+        let out = tool
+            .call(&ctx, json!({"command": "sudo ls"}))
+            .await
+            .unwrap();
+        assert!(out.is_error);
+        assert!(!out.content.contains("RUNNER"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn runner_errors_are_reported_without_running_anything() {
+        let (dir, ctx) = workspace();
+        let tool = tool().with_runner(Arc::new(MarkerRunner { fail_prepare: true }));
+        let out = tool
+            .call(&ctx, json!({"command": "touch created"}))
+            .await
+            .unwrap();
+        assert!(out.is_error);
+        assert_eq!(out.metadata["sandbox_error"], true);
+        assert!(out.content.contains("no runtime"), "{}", out.content);
+        assert!(!dir.path().join("created").exists());
     }
 }

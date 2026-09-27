@@ -300,6 +300,8 @@ pub struct Harness {
     pub config: VibeConfig,
     pub registry: Registry,
     pub tools: ToolRegistry,
+    /// Subtask workspaces handed to the pipeline.
+    pub subtasks: Option<Arc<dyn vibe_core::SubtaskWorkspaces>>,
 }
 
 impl Harness {
@@ -324,6 +326,7 @@ impl Harness {
             config,
             registry: Registry::new(),
             tools: ToolRegistry::new(),
+            subtasks: None,
         }
     }
 
@@ -389,10 +392,68 @@ impl Harness {
             project_root: self.root(),
             committer: Some(self.committer()),
             resetter: self.use_resetter.then(|| self.resetter()),
+            subtask_workspaces: self.subtasks.clone(),
         })
     }
 
     pub async fn task_dir(&self, task: &Task) -> PathBuf {
         self.store.task_dir(task.id).await.unwrap()
+    }
+}
+
+/// Subtask workspaces that only record what the build asks for. Attempts
+/// whose label starts with a prefix in `conflict_once` conflict on their
+/// first integration.
+#[derive(Default)]
+pub struct FakeSubtasks {
+    pub log: Mutex<Vec<String>>,
+    pub conflict_once: Mutex<Vec<String>>,
+}
+
+impl FakeSubtasks {
+    pub fn log(&self) -> Vec<String> {
+        self.log.lock().unwrap().clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl vibe_core::SubtaskWorkspaces for FakeSubtasks {
+    async fn open(&self, task: &vibe_core::Workspace, label: &str) -> Result<vibe_core::Workspace> {
+        self.log.lock().unwrap().push(format!("open {label}"));
+        let mut ws = task.clone();
+        ws.root = task.root.join(format!("attempt-{label}"));
+        ws.branch = Some(label.to_string());
+        Ok(ws)
+    }
+
+    async fn integrate(
+        &self,
+        _task: &vibe_core::Workspace,
+        subtask: &vibe_core::Workspace,
+        _message: &str,
+    ) -> Result<vibe_core::SubtaskIntegration> {
+        let label = subtask.branch.clone().unwrap_or_default();
+        self.log.lock().unwrap().push(format!("integrate {label}"));
+        let mut once = self.conflict_once.lock().unwrap();
+        if let Some(i) = once.iter().position(|p| label.starts_with(p.as_str())) {
+            once.remove(i);
+            return Ok(vibe_core::SubtaskIntegration::Conflict {
+                files: vec!["src/lib.rs".into()],
+            });
+        }
+        Ok(vibe_core::SubtaskIntegration::Integrated {
+            commit: Some(format!("sha-{label}")),
+        })
+    }
+
+    async fn discard(&self, subtask: &vibe_core::Workspace) -> Result<()> {
+        let label = subtask.branch.clone().unwrap_or_default();
+        self.log.lock().unwrap().push(format!("discard {label}"));
+        Ok(())
+    }
+
+    async fn discard_all(&self, _task: &vibe_core::Workspace) -> Result<()> {
+        self.log.lock().unwrap().push("discard_all".into());
+        Ok(())
     }
 }

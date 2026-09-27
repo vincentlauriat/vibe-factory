@@ -132,6 +132,9 @@ impl Renderer {
                 };
                 format!("  {} {role}{target}", style::bold().apply_to("●"))
             }
+            // Streamed text is for live interfaces and `--json`; the complete
+            // text follows as `AgentText`.
+            Event::AgentDelta { .. } => return None,
             Event::AgentText { text, .. } => {
                 if self.verbose == 0 || text.trim().is_empty() {
                     return None;
@@ -190,6 +193,72 @@ impl Renderer {
                     human_duration(Duration::from_millis(*delay_ms))
                 ))
                 .to_string(),
+            Event::ValidationFinished {
+                command,
+                integration,
+                passed,
+                ..
+            } => {
+                let target = if *integration { " (integration)" } else { "" };
+                if *passed {
+                    style::ok()
+                        .apply_to(format!("  ✓ validation{target}: {command}"))
+                        .to_string()
+                } else {
+                    style::warn()
+                        .apply_to(format!("  ✗ validation failed{target}: {command}"))
+                        .to_string()
+                }
+            }
+            Event::SubtaskIntegrated {
+                subtask, conflicts, ..
+            } => {
+                let label = self.subtask_label(*subtask).await;
+                if conflicts.is_empty() {
+                    if self.verbose == 0 {
+                        return None;
+                    }
+                    format!("  ▸ subtask {label}: integrated")
+                } else {
+                    style::warn()
+                        .apply_to(format!(
+                            "  ▸ subtask {label}: conflicts in {}, retrying from the updated branch",
+                            conflicts.join(", ")
+                        ))
+                        .to_string()
+                }
+            }
+            Event::BudgetUpdated { .. } => return None,
+            Event::ApprovalRequested { gate, .. } => style::warn()
+                .apply_to(format!("⏸ approval needed: the {gate}"))
+                .to_string(),
+            Event::ApprovalResolved {
+                gate,
+                approved,
+                comment,
+                ..
+            } => {
+                let verb = if *approved { "approved" } else { "rejected" };
+                let note = if comment.trim().is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", truncate(comment.trim(), 100))
+                };
+                format!("  ✓ {gate} {verb}{note}")
+            }
+            Event::ArtefactWritten { artefact, .. } => {
+                if self.verbose == 0 {
+                    return None;
+                }
+                let name = match artefact {
+                    vibe_core::Artefact::Spec => "spec".to_string(),
+                    vibe_core::Artefact::Plan => "plan".to_string(),
+                    vibe_core::Artefact::QaReport { round } => format!("QA report {round}"),
+                };
+                style::dim()
+                    .apply_to(format!("  · wrote the {name}"))
+                    .to_string()
+            }
             Event::Paused { reason, .. } => style::warn()
                 .apply_to(format!("⏸ paused: {reason}"))
                 .to_string(),
@@ -322,6 +391,15 @@ pub fn summary_text(
         human_tokens(report.usage.input_tokens),
         human_tokens(report.usage.output_tokens)
     ));
+    if report.state.usage != report.usage {
+        // Resumed run: show what the whole run consumed so far.
+        out.push_str(&format!(
+            "run total  {} in / {} out, {} active\n",
+            human_tokens(report.state.usage.input_tokens),
+            human_tokens(report.state.usage.output_tokens),
+            human_duration(std::time::Duration::from_millis(report.state.active_ms))
+        ));
+    }
     if let Some(err) = &report.state.last_error {
         out.push_str(&format!("note       {}\n", truncate(err, 200)));
     }
@@ -349,6 +427,8 @@ pub fn summary_json(report: &RunReport, info: &SummaryInfo, exit_code: u8) -> se
         "exit_code": exit_code,
         "duration_ms": report.duration.as_millis() as u64,
         "usage": report.usage,
+        "run_usage": report.state.usage,
+        "run_active_ms": report.state.active_ms,
         "phases": report.phases,
         "last_error": report.state.last_error,
         "branch": info.branch,

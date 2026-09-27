@@ -192,6 +192,10 @@ pub async fn run_qa(ctx: &mut RunContext) -> Result<PhaseResult> {
         },
     };
     ctx.store.save_qa_report(&report).await?;
+    ctx.artefact_written(vibe_core::Artefact::QaReport {
+        round: report.round,
+    })
+    .await;
     let summary = format!(
         "round {round}: {:?} ({} issue(s))",
         report.verdict,

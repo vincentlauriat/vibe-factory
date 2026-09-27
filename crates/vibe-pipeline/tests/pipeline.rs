@@ -8,7 +8,7 @@ use std::time::Duration;
 use common::*;
 use serde_json::json;
 use tokio::sync::watch;
-use vibe_core::{Complexity, Event, Phase, SubtaskStatus, TaskStatus, TaskStore};
+use vibe_core::{Complexity, Event, MemoryStore, Phase, SubtaskStatus, TaskStatus, TaskStore};
 use vibe_pipeline::{MemoryFile, PipelineStore, RunOptions, RunStatus};
 
 fn phases(report: &vibe_pipeline::RunReport) -> Vec<Phase> {
@@ -808,6 +808,7 @@ async fn auto_merge_conflicts_leave_task_ready() {
         project_root: h.root(),
         committer: None,
         resetter: None,
+        subtask_workspaces: None,
     });
     let report = pipeline.run(task.id, RunOptions::default()).await.unwrap();
     assert_eq!(report.final_status, TaskStatus::Ready);
@@ -1207,4 +1208,595 @@ async fn validation_fix_resumes_after_a_hook_interrupts_the_fix_phase() {
     assert_eq!(resumed.state.validation_fix_attempts, 1);
     assert_eq!(resumed.state.pending_validation_fix, None);
     assert_eq!(h.router.calls_for("fixer").len(), 1);
+}
+
+#[tokio::test]
+async fn token_budget_pauses_and_survives_resume() {
+    let mut h = Harness::new().await;
+    // Every scripted answer costs 15 tokens: planner + first coder = 30.
+    h.config.pipeline.max_tokens = Some(30);
+    let task = h.task("Add export command", "Export tasks as CSV").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "Seq", "parallel": false, "subtasks": [
+                {"title": "First", "description": "a"},
+                {"title": "Second", "description": "b"}
+            ]}
+        ]))],
+    );
+    let first = subtask_key(1, 2, "First");
+    let second = subtask_key(2, 2, "Second");
+    h.router
+        .route(CODER, Some(&first), vec![coder_done("first")]);
+    h.router
+        .route(CODER, Some(&second), vec![coder_done("second")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let options = || RunOptions {
+        complexity_override: Some(Complexity::Trivial),
+        ..RunOptions::default()
+    };
+
+    let paused = h.pipeline().run(task.id, options()).await.unwrap();
+    assert_eq!(paused.final_status, TaskStatus::Backlog);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert_eq!(state.current_phase, Phase::Build);
+    assert_eq!(state.usage.total(), 30);
+    assert!(
+        state
+            .last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("token budget exhausted (30 of 30"))
+    );
+    let plan = h.store.load_plan(task.id).await.unwrap().unwrap();
+    let statuses: Vec<SubtaskStatus> = plan.subtasks().map(|s| s.status).collect();
+    assert_eq!(statuses, vec![SubtaskStatus::Done, SubtaskStatus::Pending]);
+    assert!(h.collector.events().iter().any(|e| matches!(
+        e,
+        Event::Paused { reason, .. } if reason.contains("raise the limit")
+    )));
+
+    // Resuming without raising the limit spends nothing.
+    let again = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(again.final_status, TaskStatus::Backlog);
+    assert!(again.phases.is_empty());
+    assert_eq!(h.router.calls_with_key(&second), 0);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert_eq!(state.usage.total(), 30);
+
+    h.config.pipeline.max_tokens = Some(1_000);
+    let resumed = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(resumed.final_status, TaskStatus::Ready, "{resumed:#?}");
+    assert_eq!(resumed.run_id, paused.run_id);
+    assert_eq!(resumed.usage.total(), 30, "this invocation only");
+    assert_eq!(h.router.calls_with_key(&first), 1);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Finished);
+    assert_eq!(state.usage.total(), 60, "whole run");
+}
+
+#[tokio::test]
+async fn duration_budget_counts_earlier_invocations() {
+    let mut h = Harness::new().await;
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([{"name": "Only", "subtasks": [
+            {"title": "Fix the typo", "description": "edit README"}
+        ]}]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let paused = h
+        .pipeline()
+        .run(
+            task.id,
+            RunOptions {
+                until_phase: Some(Phase::Plan),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(paused.final_status, TaskStatus::Backlog);
+
+    // Pretend the first invocation took an hour: a 30 minute budget is spent.
+    let mut state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert!(state.usage.total() > 0);
+    state.active_ms = 3_600_000;
+    h.store.save_run_state(&state).await.unwrap();
+    h.config.pipeline.max_duration_secs = Some(1_800);
+    let stopped = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(stopped.final_status, TaskStatus::Backlog);
+    assert!(h.router.calls_for("coder").is_empty());
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert!(state.active_ms >= 3_600_000);
+    assert!(
+        state
+            .last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("duration budget exhausted"))
+    );
+
+    h.config.pipeline.max_duration_secs = None;
+    let done = h.pipeline().resume(task.id).await.unwrap();
+    assert_eq!(done.final_status, TaskStatus::Ready);
+}
+
+#[tokio::test]
+async fn isolated_subtasks_integrate_one_at_a_time_and_retry_conflicts() {
+    let mut h = Harness::new().await;
+    let fake = Arc::new(FakeSubtasks::default());
+    fake.conflict_once.lock().unwrap().push("s2-".into());
+    h.subtasks = Some(fake.clone());
+    let task = h.task("Add export command", "Export tasks as CSV").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([
+            {"name": "Par", "parallel": true, "subtasks": [
+                {"title": "First", "description": "a"},
+                {"title": "Second", "description": "b"}
+            ]}
+        ]))],
+    );
+    let first = subtask_key(1, 2, "First");
+    let second = subtask_key(2, 2, "Second");
+    // The first subtask is slow, so the second finishes (and conflicts) first.
+    h.router.route_delayed(
+        CODER,
+        Some(&first),
+        Duration::from_millis(80),
+        vec![coder_done("first")],
+    );
+    h.router.route(
+        CODER,
+        Some(&second),
+        vec![coder_done("second"), coder_done("second again")],
+    );
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+
+    let report = h
+        .pipeline()
+        .run(
+            task.id,
+            RunOptions {
+                complexity_override: Some(Complexity::Trivial),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Ready, "{report:#?}");
+    assert_eq!(h.router.max_in_flight(), 2, "subtasks ran in parallel");
+    assert_eq!(h.router.calls_with_key(&second), 2, "conflict was retried");
+
+    let log = fake.log();
+    assert_eq!(log.first().map(String::as_str), Some("discard_all"));
+    assert_eq!(log.last().map(String::as_str), Some("discard_all"));
+    let integrations: Vec<&str> = log
+        .iter()
+        .filter(|l| l.starts_with("integrate"))
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        integrations,
+        vec!["integrate s2-a1", "integrate s2-a2", "integrate s1-a1"]
+    );
+    for label in ["s1-a1", "s2-a1", "s2-a2"] {
+        assert!(log.contains(&format!("open {label}")), "{log:?}");
+        assert!(log.contains(&format!("discard {label}")), "{log:?}");
+    }
+    // Subtasks are integrated, not committed through the shared committer.
+    assert_eq!(
+        h.commits.lock().unwrap().clone(),
+        vec!["vibe: checkpoint before build".to_string()]
+    );
+    // Each attempt worked in its own workspace.
+    let coders = h.router.calls_for("coder");
+    assert!(
+        coders
+            .iter()
+            .any(|c| c.system.contains("attempt-s1-a1") || c.user.contains("attempt-s1-a1"))
+    );
+    let plan = h.store.load_plan(task.id).await.unwrap().unwrap();
+    assert!(plan.subtasks().all(|s| s.status == SubtaskStatus::Done));
+    let progress = h.store.load_progress(task.id).await.unwrap();
+    assert!(
+        progress.contains("conflict with work integrated since the attempt started"),
+        "{progress}"
+    );
+}
+
+#[tokio::test]
+async fn isolation_can_be_turned_off() {
+    let mut h = Harness::new().await;
+    let fake = Arc::new(FakeSubtasks::default());
+    h.subtasks = Some(fake.clone());
+    h.config.pipeline.isolate_subtasks = false;
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([{"name": "Only", "subtasks": [
+            {"title": "Fix the typo", "description": "edit README"}
+        ]}]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let report = h
+        .pipeline()
+        .run(task.id, RunOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(report.final_status, TaskStatus::Ready);
+    assert!(fake.log().is_empty());
+    assert_eq!(
+        h.commits.lock().unwrap().clone(),
+        vec!["vibe: complete subtask 1 - Fix the typo".to_string()]
+    );
+}
+
+#[tokio::test]
+async fn logged_events_are_numbered_across_resumes() {
+    let h = Harness::new().await;
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![plan_json(json!([{"name": "Only", "subtasks": [
+            {"title": "Fix the typo", "description": "edit README"}
+        ]}]))],
+    );
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let pipeline = h.pipeline();
+    let first = pipeline
+        .run(
+            task.id,
+            RunOptions {
+                until_phase: Some(Phase::Plan),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    pipeline.resume(task.id).await.unwrap();
+
+    let events = h.store.load_events(task.id).await.unwrap();
+    let seqs: Vec<u64> = events.iter().map(|e| e.seq.unwrap()).collect();
+    let expected: Vec<u64> = (1..=seqs.len() as u64).collect();
+    assert_eq!(
+        seqs, expected,
+        "one run, numbered without gaps across the resume"
+    );
+    assert!(
+        events
+            .iter()
+            .all(|e| e.event.run_id() == Some(first.run_id))
+    );
+    assert!(
+        events
+            .iter()
+            .all(|e| e.schema == vibe_core::EVENT_SCHEMA_VERSION)
+    );
+    let has = |pred: &dyn Fn(&Event) -> bool| events.iter().any(|e| pred(&e.event));
+    assert!(has(&|e| matches!(
+        e,
+        Event::ArtefactWritten {
+            artefact: vibe_core::Artefact::Plan,
+            ..
+        }
+    )));
+    assert!(has(&|e| matches!(
+        e,
+        Event::ArtefactWritten {
+            artefact: vibe_core::Artefact::QaReport { round: 1 },
+            ..
+        }
+    )));
+    assert!(has(
+        &|e| matches!(e, Event::BudgetUpdated { tokens, .. } if *tokens > 0)
+    ));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| matches!(e.event, Event::RunStarted { .. }))
+            .count(),
+        2
+    );
+}
+
+async fn approve(h: &Harness, task: vibe_core::TaskId, approved: bool, comment: &str) {
+    let mut state = h.store.load_run_state(task).await.unwrap().unwrap();
+    state.resolve_approval(approved, comment).unwrap();
+    h.store.save_run_state(&state).await.unwrap();
+}
+
+fn one_subtask_plan() -> vibe_core::CompletionResponse {
+    plan_json(json!([{"name": "Only", "subtasks": [
+        {"title": "Fix the typo", "description": "edit README"}
+    ]}]))
+}
+
+#[tokio::test]
+async fn plan_gate_pauses_until_approved() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.approvals = vec![vibe_core::ApprovalGate::Plan];
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(PLANNER, None, vec![one_subtask_plan()]);
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let pipeline = h.pipeline();
+
+    let paused = pipeline.run(task.id, RunOptions::default()).await.unwrap();
+    assert_eq!(paused.final_status, TaskStatus::Review);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.status, RunStatus::Paused);
+    assert_eq!(state.current_phase, Phase::Build);
+    assert_eq!(state.pending_approval, Some(vibe_core::ApprovalGate::Plan));
+    assert!(h.router.calls_for("coder").is_empty());
+    assert!(h.collector.events().iter().any(|e| matches!(
+        e,
+        Event::ApprovalRequested {
+            gate: vibe_core::ApprovalGate::Plan,
+            ..
+        }
+    )));
+
+    // Resuming without a decision pauses again, without a new request.
+    pipeline.resume(task.id).await.unwrap();
+    let requests = h
+        .collector
+        .events()
+        .iter()
+        .filter(|e| matches!(e, Event::ApprovalRequested { .. }))
+        .count();
+    assert_eq!(requests, 1);
+
+    approve(&h, task.id, true, "looks right").await;
+    let done = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(done.final_status, TaskStatus::Ready, "{done:#?}");
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.approvals.len(), 1);
+    assert!(state.approvals[0].approved);
+    assert_eq!(state.pending_approval, None);
+}
+
+#[tokio::test]
+async fn rejected_plan_is_redone_with_the_reason() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.approvals = vec![vibe_core::ApprovalGate::Plan];
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router
+        .route(PLANNER, None, vec![one_subtask_plan(), one_subtask_plan()]);
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    let pipeline = h.pipeline();
+    pipeline.run(task.id, RunOptions::default()).await.unwrap();
+
+    approve(&h, task.id, false, "Also fix the same typo in docs/").await;
+    let again = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(
+        again.final_status,
+        TaskStatus::Review,
+        "waits for the new plan"
+    );
+    let planners = h.router.calls_for("planner");
+    assert_eq!(planners.len(), 2);
+    let second = format!("{}{}", planners[1].system, planners[1].user);
+    assert!(
+        second.contains("Also fix the same typo in docs/"),
+        "{second}"
+    );
+    assert!(!format!("{}{}", planners[0].system, planners[0].user).contains("docs/"));
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.rejection, None, "the planner consumed it");
+    assert_eq!(state.pending_approval, Some(vibe_core::ApprovalGate::Plan));
+
+    approve(&h, task.id, true, "").await;
+    let done = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(done.final_status, TaskStatus::Ready);
+}
+
+#[tokio::test]
+async fn rejected_merge_goes_to_the_fixer_then_asks_again() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.approvals = vec![vibe_core::ApprovalGate::Merge];
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    h.router.route(PLANNER, None, vec![one_subtask_plan()]);
+    h.router.route(CODER, None, vec![coder_done("typo fixed")]);
+    h.router.route(
+        REVIEWER,
+        None,
+        vec![qa("approved", &[]), qa("approved", &[])],
+    );
+    h.router.route(FIXER, None, vec![fixer_done()]);
+    let pipeline = h.pipeline();
+    let options = || RunOptions {
+        complexity_override: Some(Complexity::Trivial),
+        ..RunOptions::default()
+    };
+    let paused = pipeline.run(task.id, options()).await.unwrap();
+    assert_eq!(paused.final_status, TaskStatus::Review);
+    let state = h.store.load_run_state(task.id).await.unwrap().unwrap();
+    assert_eq!(state.current_phase, Phase::Merge);
+
+    approve(&h, task.id, false, "The README title must stay in English").await;
+    let again = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(
+        phases(&again),
+        vec![Phase::Fix, Phase::Qa],
+        "the trivial profile still runs the fixer for a human rejection"
+    );
+    let fixer = &h.router.calls_for("fixer")[0];
+    assert!(format!("{}{}", fixer.system, fixer.user).contains("must stay in English"));
+    let reports = h.store.load_qa_reports(task.id).await.unwrap();
+    assert_eq!(reports.len(), 3, "review, human review, review");
+    assert_eq!(reports[1].issues[0].title, "Human review");
+
+    approve(&h, task.id, true, "ok").await;
+    let done = pipeline.resume(task.id).await.unwrap();
+    assert_eq!(done.final_status, TaskStatus::Ready);
+}
+
+#[test]
+fn approvals_need_a_pending_gate_and_rejections_a_reason() {
+    let mut state = vibe_pipeline::RunState::new(
+        vibe_core::RunId::new(),
+        vibe_core::TaskId::new(),
+        Phase::Build,
+    );
+    assert!(state.resolve_approval(true, "").is_err());
+    state.pending_approval = Some(vibe_core::ApprovalGate::Plan);
+    assert!(state.resolve_approval(false, "  ").is_err());
+    assert!(state.resolve_approval(false, "why").is_ok());
+    assert_eq!(state.rejection.as_ref().unwrap().comment, "why");
+}
+
+fn slow_coder_harness_routes(h: &Harness, delay_ms: u64) {
+    h.router
+        .route(PLANNER, None, vec![one_subtask_plan(), one_subtask_plan()]);
+    h.router.route_delayed(
+        CODER,
+        None,
+        Duration::from_millis(delay_ms),
+        vec![coder_done("done"), coder_done("done")],
+    );
+    h.router.route(
+        REVIEWER,
+        None,
+        vec![qa("approved", &[]), qa("approved", &[])],
+    );
+}
+
+#[tokio::test]
+async fn run_manager_runs_tasks_in_parallel_and_cancels_one() {
+    let h = Harness::new().await;
+    let a = h.task("Fix typo in README", "teh -> the").await;
+    let b = h.task("Fix typo in CHANGELOG", "teh -> the").await;
+    slow_coder_harness_routes(&h, 300);
+    let manager = vibe_pipeline::RunManager::new(h.pipeline());
+    let mut events = manager.subscribe();
+    let run_a = manager.start(a.id, RunOptions::default()).unwrap();
+    let run_b = manager.start(b.id, RunOptions::default()).unwrap();
+    assert!(manager.start(a.id, RunOptions::default()).is_err());
+    let mut active = manager.active();
+    active.sort();
+    let mut expected = vec![a.id, b.id];
+    expected.sort();
+    assert_eq!(active, expected);
+
+    // Cancel `a` once its coder is working.
+    loop {
+        let e = events.recv().await.unwrap();
+        if let Event::AgentStarted { role, .. } = &e.event
+            && *role == vibe_core::AgentRole::Coder
+        {
+            break;
+        }
+    }
+    assert!(manager.cancel(a.id));
+    let ra = run_a.wait().await.unwrap();
+    let rb = run_b.wait().await.unwrap();
+    assert_eq!(ra.final_status, TaskStatus::Cancelled);
+    assert_eq!(rb.final_status, TaskStatus::Ready);
+    assert!(manager.active().is_empty());
+    assert!(!manager.cancel(a.id));
+}
+
+#[tokio::test]
+async fn one_process_at_a_time_and_cancel_requests_from_another() {
+    let h = Harness::new().await;
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    slow_coder_harness_routes(&h, 1500);
+    let first = vibe_pipeline::RunManager::new(h.pipeline());
+    let running = first.start(task.id, RunOptions::default()).unwrap();
+    // Wait until the run holds its lock.
+    for _ in 0..100 {
+        if h.store.is_running(task.id).await.unwrap() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(h.store.is_running(task.id).await.unwrap());
+
+    // A second store (another process) cannot run the task...
+    let other = vibe_pipeline::FileTaskStore::open(h.root()).unwrap();
+    let err = other.lock_run(task.id).await.err().unwrap();
+    assert!(err.message.contains("already being run"), "{err}");
+    // ...but can ask the running one to stop.
+    other.request_cancel(task.id).await.unwrap();
+    let report = running.wait().await.unwrap();
+    assert_eq!(report.final_status, TaskStatus::Cancelled);
+    assert!(!h.store.is_running(task.id).await.unwrap());
+    assert!(
+        other.request_cancel(task.id).await.is_err(),
+        "not running any more"
+    );
+    // The lock is free again.
+    assert!(other.lock_run(task.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn lessons_of_one_task_are_recalled_in_the_next() {
+    let mut h = Harness::new().await;
+    h.config.pipeline.max_subtask_attempts = 1;
+    let memory = Arc::new(vibe_pipeline::FileMemoryStore::for_project(&h.root()));
+    h.registry.add_memory("project", memory.clone());
+    let first = h.task("Add export command", "Export tasks as CSV").await;
+    h.router.route(
+        PLANNER,
+        None,
+        vec![
+            plan_json(json!([{"name": "Only", "subtasks": [
+                {"title": "Write the exporter", "description": "csv"}
+            ]}])),
+            one_subtask_plan(),
+        ],
+    );
+    h.router.route(
+        CODER,
+        None,
+        vec![coder_failed("the csv crate is not vendored offline")],
+    );
+    let failed = h
+        .pipeline()
+        .run(
+            first.id,
+            RunOptions {
+                complexity_override: Some(Complexity::Trivial),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(failed.final_status, TaskStatus::Failed);
+    let lessons = memory.all().await.unwrap();
+    assert_eq!(lessons.len(), 1);
+    assert!(lessons[0].content.contains("not vendored offline"));
+    assert_eq!(lessons[0].task_id, Some(first.id));
+
+    let second = h.task("Add export to JSON", "Export tasks as JSON").await;
+    h.router.route(CODER, None, vec![coder_done("done")]);
+    h.router.route(REVIEWER, None, vec![qa("approved", &[])]);
+    h.pipeline()
+        .run(
+            second.id,
+            RunOptions {
+                complexity_override: Some(Complexity::Trivial),
+                ..RunOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    let planner = &h.router.calls_for("planner")[1];
+    let prompt = format!("{}{}", planner.system, planner.user);
+    assert!(prompt.contains("Recalled from `project`"), "{prompt}");
+    assert!(prompt.contains("not vendored offline"));
 }

@@ -55,6 +55,45 @@ pub enum Command {
     Task(TaskCommand),
     /// Run a task through the pipeline.
     Run(RunArgs),
+    /// Approve what a paused run is waiting for (`pipeline.approvals`).
+    Approve {
+        /// Task number, `NNN-slug` directory name, or id prefix.
+        #[arg(value_name = "REF")]
+        reference: String,
+        /// A note recorded with the approval.
+        #[arg(long)]
+        comment: Option<String>,
+    },
+    /// Reject what a paused run is waiting for; the reason goes back to the
+    /// agents that produced it.
+    Reject {
+        /// Task number, `NNN-slug` directory name, or id prefix.
+        #[arg(value_name = "REF")]
+        reference: String,
+        /// Why, in terms the agents can act on.
+        #[arg(long)]
+        reason: String,
+    },
+    /// Ask the process running a task to stop after its current step.
+    Cancel {
+        /// Task number, `NNN-slug` directory name, or id prefix.
+        #[arg(value_name = "REF")]
+        reference: String,
+        /// Wait until the run has stopped.
+        #[arg(long)]
+        wait: bool,
+    },
+    /// Push a ready task's branch and open a pull request (or GitLab merge request).
+    Pr(PrArgs),
+    /// Show or clear the project memory (`.vibe/memory.jsonl`).
+    #[command(subcommand)]
+    Memory(MemoryCommand),
+    /// Open the terminal UI: task board, live run view, approvals.
+    Tui,
+    /// Serve the HTTP API and the web UI on this machine.
+    Serve(ServeArgs),
+    /// Replay the logged events of a task's run, optionally following new ones.
+    Events(EventsArgs),
     /// Project summary: tasks per status, last runs, active worktrees.
     Status,
     /// Show or edit the configuration.
@@ -100,6 +139,15 @@ pub enum TaskCommand {
         /// Include done and cancelled tasks.
         #[arg(long)]
         all: bool,
+    },
+    /// Create a task from a GitHub or GitLab issue.
+    Import {
+        /// `owner/repo#12`, `gitlab:group/project#5`, or an issue URL.
+        #[arg(value_name = "ISSUE")]
+        issue: String,
+        /// Forge of the short form (`github` by default).
+        #[arg(long, value_name = "FORGE", default_value = "github")]
+        forge: String,
     },
     /// Show a task: spec, plan, QA verdict, run state and workspace.
     Show {
@@ -154,6 +202,125 @@ pub struct RunArgs {
     /// Resume the last run of the task where it stopped.
     #[arg(long)]
     pub resume: bool,
+    /// Pause the run once it used this many tokens (input plus output),
+    /// counted across resumes. Overrides `pipeline.max_tokens`.
+    #[arg(long, value_name = "TOKENS")]
+    pub max_tokens: Option<u64>,
+    /// Pause the run once it was active this long, counted across resumes:
+    /// seconds, or a number followed by `s`, `m` or `h` (`90m`). Overrides
+    /// `pipeline.max_duration_secs`.
+    #[arg(long, value_name = "DURATION", value_parser = parse_duration_secs)]
+    pub max_duration: Option<u64>,
+}
+
+/// Parse `90`, `90s`, `15m` or `2h` into seconds.
+pub fn parse_duration_secs(text: &str) -> Result<u64, String> {
+    let text = text.trim();
+    let (number, unit) = match text.char_indices().last() {
+        Some((i, c)) if c.is_ascii_alphabetic() => (&text[..i], c.to_ascii_lowercase()),
+        _ => (text, 's'),
+    };
+    let value: u64 = number
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid duration `{text}`: expected e.g. 90, 90s, 15m or 2h"))?;
+    let factor = match unit {
+        's' => 1,
+        'm' => 60,
+        'h' => 3600,
+        _ => return Err(format!("invalid duration unit in `{text}`: use s, m or h")),
+    };
+    value
+        .checked_mul(factor)
+        .ok_or_else(|| format!("duration `{text}` is too large"))
+}
+
+/// `vibe pr …`
+#[derive(Debug, Args)]
+pub struct PrArgs {
+    /// Task number, `NNN-slug` directory name, or id prefix.
+    #[arg(value_name = "REF")]
+    pub reference: String,
+    /// Repository (`owner/repo`); default: read from the remote URL.
+    #[arg(long, value_name = "OWNER/REPO")]
+    pub repo: Option<String>,
+    /// `github` or `gitlab`; default: from the remote host, else github.
+    #[arg(long, value_name = "FORGE")]
+    pub forge: Option<String>,
+    /// Remote to push to.
+    #[arg(long, default_value = "origin")]
+    pub remote: String,
+    /// Target branch; default: the branch the task was forked from.
+    #[arg(long)]
+    pub base: Option<String>,
+    /// Open it as a draft.
+    #[arg(long)]
+    pub draft: bool,
+    /// Do not push the branch (it is already on the remote).
+    #[arg(long)]
+    pub no_push: bool,
+}
+
+/// `vibe memory …`
+#[derive(Debug, Subcommand)]
+pub enum MemoryCommand {
+    /// List the lessons, newest first, or the ones relevant to a query.
+    List {
+        /// Only entries sharing words with this text, most relevant first.
+        #[arg(long)]
+        query: Option<String>,
+    },
+    /// Forget everything.
+    Clear {
+        /// Do not ask for confirmation (required when stdin is not a terminal).
+        #[arg(short, long)]
+        yes: bool,
+    },
+}
+
+/// `vibe serve …`
+#[derive(Debug, Args)]
+pub struct ServeArgs {
+    /// Address to listen on (loopback by default; anything else exposes the
+    /// agents to the network).
+    #[arg(long, default_value = "127.0.0.1")]
+    pub bind: String,
+    /// Port (0 picks a free one).
+    #[arg(long, default_value_t = 7777)]
+    pub port: u16,
+    /// Use this provider for every phase of the runs it starts.
+    #[arg(long, value_name = "NAME")]
+    pub provider: Option<String>,
+    /// Use this `provider/model` for every phase.
+    #[arg(long, value_name = "PROVIDER/MODEL")]
+    pub model: Option<String>,
+    /// Workspace provider.
+    #[arg(long, value_name = "NAME")]
+    pub workspace: Option<String>,
+    /// Drive the `mock` provider with scripted responses from a JSON file.
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["provider", "model"])]
+    pub script: Option<std::path::PathBuf>,
+    /// Directory of evaluation results (`evals/run_suite.py` destinations)
+    /// shown in the web UI.
+    #[arg(long, value_name = "DIR")]
+    pub evals: Option<std::path::PathBuf>,
+}
+
+/// `vibe events …`
+#[derive(Debug, Args)]
+pub struct EventsArgs {
+    /// Task number, `NNN-slug` directory name, or id prefix.
+    #[arg(value_name = "REF")]
+    pub reference: String,
+    /// Only events whose sequence number is greater than this.
+    #[arg(long, value_name = "SEQ", default_value_t = 0)]
+    pub after: u64,
+    /// Keep printing new events until the run finishes or pauses.
+    #[arg(short, long)]
+    pub follow: bool,
+    /// Every run of the task, not only the last one.
+    #[arg(long, conflicts_with = "follow")]
+    pub all: bool,
 }
 
 /// `vibe config …`
@@ -324,5 +491,28 @@ mod tests {
         assert!(args.dry_run);
         assert_eq!(args.from, Some(PhaseArg::Plan));
         assert_eq!(args.complexity, Some(ComplexityArg::Simple));
+    }
+
+    #[test]
+    fn budget_flags() {
+        let Command::Run(args) = Cli::parse_from([
+            "vibe",
+            "run",
+            "1",
+            "--max-tokens",
+            "50000",
+            "--max-duration",
+            "15m",
+        ])
+        .command
+        else {
+            panic!("not a run command");
+        };
+        assert_eq!(args.max_tokens, Some(50_000));
+        assert_eq!(args.max_duration, Some(900));
+        assert_eq!(parse_duration_secs("90"), Ok(90));
+        assert_eq!(parse_duration_secs("2H"), Ok(7200));
+        assert!(parse_duration_secs("3d").is_err());
+        assert!(parse_duration_secs("m").is_err());
     }
 }

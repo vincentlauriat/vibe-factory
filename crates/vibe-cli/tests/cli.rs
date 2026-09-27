@@ -959,3 +959,397 @@ fn integration_validation_rejects_combined_tree_and_rebuilds_it_on_resume() {
     assert_eq!(state["validations"][3]["integration"], true);
     assert_eq!(state["validations"][3]["passed"], true);
 }
+
+#[test]
+fn parallel_subtasks_run_in_their_own_worktrees_and_are_integrated() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Add two files", "Create one.txt and two.txt.");
+    // Both coder sessions pull from one queue in whatever order they run;
+    // any interleaving writes both files and ends both sessions.
+    let script = p.write_script(
+        "parallel-script.json",
+        &json!({"routes": {
+            "planner": [fenced(json!({"approach": "two files", "phases": [
+                {"name": "Both", "parallel": true, "subtasks": [
+                    {"title": "Write one.txt", "description": "create it"},
+                    {"title": "Write two.txt", "description": "create it"}
+                ]}
+            ]}))],
+            "coder": [
+                {"tool": "write_file", "input": {"path": "one.txt", "content": "one\n"}},
+                fenced(json!({"status": "done", "summary": "written"})),
+                {"tool": "write_file", "input": {"path": "two.txt", "content": "two\n"}},
+                fenced(json!({"status": "done", "summary": "written"}))
+            ],
+            "qa_reviewer": [fenced(json!({"verdict": "approved", "summary": "ok", "issues": []}))]
+        }}),
+    );
+    let out = p
+        .vibe()
+        .args(["run", "1", "--complexity", "trivial", "--script"])
+        .arg(&script)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(p.task_json(1)["status"], "ready");
+
+    let worktrees = p.root().join(".vibe").join("worktrees");
+    let dirs: Vec<String> = std::fs::read_dir(&worktrees)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| !n.starts_with('.'))
+        .collect();
+    assert_eq!(dirs.len(), 1, "attempt worktrees were removed: {dirs:?}");
+    let task_root = worktrees.join(&dirs[0]);
+    assert_eq!(
+        std::fs::read_to_string(task_root.join("one.txt")).unwrap(),
+        "one\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(task_root.join("two.txt")).unwrap(),
+        "two\n"
+    );
+    assert_eq!(p.git(&["branch", "--list", "*--s*"]).trim(), "");
+    // The project checkout was not touched.
+    assert!(!p.root().join("one.txt").exists());
+}
+
+/// Image of the live container test, when the runtime has it locally.
+#[cfg(unix)]
+fn local_container_image() -> Option<String> {
+    let image =
+        std::env::var("VIBE_TEST_CONTAINER_IMAGE").unwrap_or_else(|_| "alpine:3.20".to_string());
+    let ok = |args: &[&str]| {
+        StdCommand::new("docker")
+            .args(args)
+            .output()
+            .is_ok_and(|o| o.status.success())
+    };
+    if !ok(&["info"]) || !ok(&["image", "inspect", &image]) {
+        eprintln!("skipping: docker or the image {image} is not available locally");
+        return None;
+    }
+    Some(image)
+}
+
+#[cfg(unix)]
+#[test]
+fn container_workspace_runs_commands_in_a_container() {
+    let Some(image) = local_container_image() else {
+        return;
+    };
+    let p = Project::new();
+    p.init();
+    for (key, value) in [
+        ("pipeline.workspace", "container".to_string()),
+        ("workspace.container.image", image.clone()),
+        (
+            "pipeline.validation_commands",
+            "[\"grep -q container-ok out.txt\"]".to_string(),
+        ),
+    ] {
+        p.vibe()
+            .args(["config", "set", key, &value])
+            .assert()
+            .success();
+    }
+    p.add_task(
+        "Record the environment",
+        "Write out.txt from inside the sandbox.",
+    );
+    let script = p.write_script(
+        "container-script.json",
+        &json!({"routes": {
+            "planner": [fenced(json!({"approach": "one command", "phases": [
+                {"name": "Only", "subtasks": [{"title": "Write out.txt", "description": "run it"}]}
+            ]}))],
+            "coder": [
+                {"tool": "bash", "input": {"command":
+                    "test -f /.dockerenv && echo container-ok > out.txt; touch /etc/escaped 2>/dev/null || echo read-only >> out.txt"}},
+                fenced(json!({"status": "done", "summary": "written"}))
+            ],
+            "qa_reviewer": [fenced(json!({"verdict": "approved", "summary": "ok", "issues": []}))]
+        }}),
+    );
+    let out = p
+        .vibe()
+        .args(["run", "1", "--complexity", "trivial", "--script"])
+        .arg(&script)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(p.task_json(1)["status"], "ready");
+    let worktrees = p.root().join(".vibe").join("worktrees");
+    let task_root = std::fs::read_dir(&worktrees)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.is_dir() && !p.file_name().unwrap().to_string_lossy().starts_with('.'))
+        .unwrap();
+    assert_eq!(
+        std::fs::read_to_string(task_root.join("out.txt")).unwrap(),
+        "container-ok\nread-only\n"
+    );
+    let state: Value =
+        serde_json::from_slice(&std::fs::read(p.task_dir(1).join("run.json")).unwrap()).unwrap();
+    assert_eq!(state["validations"][0]["passed"], true);
+    assert_eq!(state["validations"][0]["metadata"]["runner"], "container");
+    // No container is left behind.
+    let left = StdCommand::new("docker")
+        .args([
+            "ps",
+            "-aq",
+            "--filter",
+            "label=io.vibe-factory.managed=true",
+        ])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&left.stdout).trim().is_empty());
+}
+
+#[test]
+fn container_workspace_requires_a_valid_configuration() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Anything", "x");
+    p.vibe()
+        .args(["config", "set", "pipeline.workspace", "container"])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--dry-run"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("[workspace.container]"));
+    p.vibe()
+        .args(["config", "set", "workspace.container.image", "alpine"])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["config", "set", "workspace.container.network", "host"])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--dry-run"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("namespace"));
+}
+
+#[test]
+fn streamed_deltas_reach_json_output_but_not_the_event_log() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    let out = p
+        .vibe()
+        .args(["--json", "run", "1", "--provider", "mock", "--dry-run"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"agent_delta\""), "{stdout}");
+    let log = std::fs::read_to_string(p.task_dir(1).join("events.jsonl")).unwrap();
+    assert!(!log.contains("agent_delta"));
+    assert!(log.contains("\"agent_text\""));
+}
+
+#[test]
+fn events_replays_numbered_events_and_follows_to_the_end() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--dry-run"])
+        .assert()
+        .success();
+    let out = p.vibe().args(["--json", "events", "1"]).output().unwrap();
+    assert!(out.status.success());
+    let lines: Vec<Value> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let seqs: Vec<u64> = lines.iter().map(|l| l["seq"].as_u64().unwrap()).collect();
+    assert_eq!(seqs, (1..=seqs.len() as u64).collect::<Vec<_>>());
+    assert!(lines.iter().all(|l| l["schema"] == 2));
+    assert_eq!(lines.last().unwrap()["event"]["type"], "run_finished");
+
+    let after = p
+        .vibe()
+        .args(["--json", "events", "1", "--after", "3"])
+        .output()
+        .unwrap();
+    let first: Value = serde_json::from_str(
+        String::from_utf8_lossy(&after.stdout)
+            .lines()
+            .next()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(first["seq"], 4);
+
+    // Following a finished run stops at its end.
+    p.vibe()
+        .args(["events", "1", "--follow"])
+        .timeout(std::time::Duration::from_secs(20))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run finished"));
+}
+
+#[test]
+fn approval_gate_pauses_and_approve_lets_the_run_continue() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    p.vibe()
+        .args(["config", "set", "pipeline.approvals", "[\"plan\"]"])
+        .assert()
+        .success();
+    p.vibe()
+        .args(["run", "1", "--provider", "mock", "--workspace", "in_place"])
+        .assert()
+        .code(2)
+        .stdout(predicate::str::contains("approval needed: the plan"));
+    let state: Value =
+        serde_json::from_slice(&std::fs::read(p.task_dir(1).join("run.json")).unwrap()).unwrap();
+    assert_eq!(state["pending_approval"], "plan");
+
+    p.vibe().args(["reject", "1"]).assert().failure();
+    p.vibe()
+        .args(["approve", "1", "--comment", "fine"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("plan of task 1 approved"));
+    p.vibe().args(["approve", "1"]).assert().code(1);
+    p.vibe()
+        .args([
+            "run",
+            "1",
+            "--resume",
+            "--provider",
+            "mock",
+            "--workspace",
+            "in_place",
+        ])
+        .assert()
+        .success();
+    assert_eq!(p.task_json(1)["status"], "ready");
+
+    let out = p.vibe().args(["--json", "events", "1"]).output().unwrap();
+    let lines: Vec<Value> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let seqs: Vec<u64> = lines.iter().map(|l| l["seq"].as_u64().unwrap()).collect();
+    assert_eq!(seqs, (1..=seqs.len() as u64).collect::<Vec<_>>());
+    assert!(
+        lines
+            .iter()
+            .any(|l| l["event"]["type"] == "approval_resolved" && l["event"]["comment"] == "fine")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn cancel_stops_a_run_in_another_process() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    p.vibe()
+        .args(["cancel", "1"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("not running"));
+    let script = p.write_script(
+        "slow-script.json",
+        &json!({"routes": {
+            "planner": [fenced(json!({"approach": "wait", "phases": [
+                {"name": "Only", "subtasks": [{"title": "Wait", "description": "sleep"}]}
+            ]}))],
+            "coder": [
+                {"tool": "bash", "input": {"command": "sleep 2"}},
+                {"tool": "bash", "input": {"command": "sleep 2"}},
+                fenced(json!({"status": "done", "summary": "slept"}))
+            ]
+        }}),
+    );
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("vibe"))
+        .current_dir(p.root())
+        .env("NO_COLOR", "1")
+        .env("HOME", p.root().join(".home"))
+        .args([
+            "run",
+            "1",
+            "--complexity",
+            "trivial",
+            "--workspace",
+            "in_place",
+            "--script",
+        ])
+        .arg(&script)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let out = p.vibe().args(["cancel", "1", "--wait"]).output().unwrap();
+        if out.status.success() {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the run never started"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let status = child.wait().unwrap();
+    assert_eq!(status.code(), Some(130));
+    assert_eq!(p.task_json(1)["status"], "cancelled");
+}
+
+#[test]
+fn memory_list_query_and_clear() {
+    let p = Project::new();
+    p.init();
+    p.vibe()
+        .args(["memory", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("empty"));
+    let lines = [
+        json!({"kind": "gotcha", "content": "Integration tests need DATABASE_URL", "recorded_at": "2026-09-01T10:00:00Z"}),
+        json!({"kind": "pattern", "content": "Errors use anyhow", "recorded_at": "2026-09-02T10:00:00Z"}),
+    ];
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    std::fs::write(p.root().join(".vibe").join("memory.jsonl"), text).unwrap();
+    let all = p.json(&["memory", "list"]);
+    assert_eq!(all.as_array().unwrap().len(), 2);
+    assert_eq!(all[0]["content"], "Errors use anyhow", "newest first");
+    let hits = p.json(&["memory", "list", "--query", "flaky integration tests"]);
+    assert_eq!(hits.as_array().unwrap().len(), 1);
+    p.vibe().args(["memory", "clear"]).assert().failure();
+    p.vibe()
+        .args(["memory", "clear", "--yes"])
+        .assert()
+        .success();
+    assert_eq!(p.json(&["memory", "list"]).as_array().unwrap().len(), 0);
+}

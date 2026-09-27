@@ -1,0 +1,71 @@
+{
+  "name": "vibe-factory",
+  "displayName": "Vibe Factory",
+  "description": "Drive Vibe Factory tasks from VS Code: board, runs, approvals and live events, through `vibe serve`.",
+  "version": "0.3.0",
+  "publisher": "vibe-factory",
+  "license": "MIT OR Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/vincentlauriat/vibe-factory" },
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "main": "./out/src/extension.js",
+  "activationEvents": ["workspaceContains:.vibe/config.toml"],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "vibe", "title": "Vibe Factory", "icon": "$(rocket)" }]
+    },
+    "views": {
+      "vibe": [{ "id": "vibeTasks", "name": "Tasks" }]
+    },
+    "commands": [
+      { "command": "vibe.refresh", "title": "Refresh", "category": "Vibe", "icon": "$(refresh)" },
+      { "command": "vibe.newTask", "title": "New task", "category": "Vibe", "icon": "$(add)" },
+      { "command": "vibe.run", "title": "Run", "category": "Vibe", "icon": "$(play)" },
+      { "command": "vibe.resume", "title": "Resume", "category": "Vibe", "icon": "$(debug-continue)" },
+      { "command": "vibe.cancel", "title": "Cancel run", "category": "Vibe", "icon": "$(debug-stop)" },
+      { "command": "vibe.approve", "title": "Approve", "category": "Vibe", "icon": "$(check)" },
+      { "command": "vibe.reject", "title": "Reject…", "category": "Vibe", "icon": "$(close)" },
+      { "command": "vibe.follow", "title": "Follow events", "category": "Vibe", "icon": "$(output)" },
+      { "command": "vibe.openWebUi", "title": "Open the web UI", "category": "Vibe", "icon": "$(globe)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "vibe.newTask", "when": "view == vibeTasks", "group": "navigation@1" },
+        { "command": "vibe.refresh", "when": "view == vibeTasks", "group": "navigation@2" },
+        { "command": "vibe.openWebUi", "when": "view == vibeTasks", "group": "navigation@3" }
+      ],
+      "view/item/context": [
+        { "command": "vibe.run", "when": "view == vibeTasks && viewItem =~ /idle/", "group": "inline@1" },
+        { "command": "vibe.resume", "when": "view == vibeTasks && viewItem =~ /resumable/", "group": "inline@2" },
+        { "command": "vibe.cancel", "when": "view == vibeTasks && viewItem =~ /running/", "group": "inline@3" },
+        { "command": "vibe.approve", "when": "view == vibeTasks && viewItem =~ /approval/", "group": "inline@4" },
+        { "command": "vibe.reject", "when": "view == vibeTasks && viewItem =~ /approval/", "group": "inline@5" },
+        { "command": "vibe.follow", "when": "view == vibeTasks", "group": "navigation" }
+      ]
+    },
+    "configuration": {
+      "title": "Vibe Factory",
+      "properties": {
+        "vibe.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:7777",
+          "description": "Address of `vibe serve`."
+        },
+        "vibe.token": {
+          "type": "string",
+          "default": "",
+          "description": "API token; empty reads .vibe/server.token in the workspace."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "test": "tsc -p . && node --test out/test/events.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "~1.90.0",
+    "typescript": "~5.9.0"
+  }
+}

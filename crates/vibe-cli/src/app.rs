@@ -13,7 +13,10 @@ use vibe_core::{
 use vibe_pipeline::{Committer, FileTaskStore, Pipeline, PipelineDeps, PipelineStore, Resetter};
 use vibe_plugins::PluginHost;
 use vibe_providers::ProviderRegistry;
-use vibe_workspace::{GitWorktreeProvider, MergeStrategy as WorkspaceMergeStrategy};
+use vibe_workspace::{
+    ContainerRunner, ContainerSettings, ContainerWorkspace, GitWorktreeProvider,
+    MergeStrategy as WorkspaceMergeStrategy,
+};
 
 use crate::mock::{RoleMatcher, Script, mock_provider};
 
@@ -33,6 +36,10 @@ pub struct Overrides {
     pub auto_merge: bool,
     /// Scripted responses for the mock provider.
     pub script: Option<PathBuf>,
+    /// Token budget of the run.
+    pub max_tokens: Option<u64>,
+    /// Active time budget of the run, in seconds.
+    pub max_duration_secs: Option<u64>,
 }
 
 /// Path of the configuration file of a project.
@@ -152,6 +159,8 @@ pub struct AppContext {
     /// Discards the uncommitted changes of a failed subtask attempt, when
     /// the project is a git repository.
     pub resetter: Option<Resetter>,
+    /// Worktree per subtask attempt, with the `git_worktree` workspace.
+    pub subtask_workspaces: Option<Arc<dyn vibe_core::SubtaskWorkspaces>>,
     /// Running plugins (shut down by [`AppContext::shutdown`]).
     pub plugins: PluginHost,
     /// Whether the project is a git repository.
@@ -198,12 +207,28 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
     if overrides.auto_merge {
         config.pipeline.auto_merge = true;
     }
+    if let Some(t) = overrides.max_tokens {
+        config.pipeline.max_tokens = Some(t);
+    }
+    if let Some(s) = overrides.max_duration_secs {
+        config.pipeline.max_duration_secs = Some(s);
+    }
 
-    // Agents and tools.
+    // Container settings are validated before anything starts.
+    let container = container_settings(root, &config)?;
+
+    // Agents and tools. With the container workspace, `bash` (and therefore
+    // the required validation commands) runs in containers.
     let mut registry = agent_registry(root)?;
     registry
         .tools
         .extend(&vibe_tools::builtin_tools(&config.security));
+    if let Some(settings) = &container {
+        let runner = Arc::new(ContainerRunner::new(settings.clone()));
+        registry.tools.register(Arc::new(
+            vibe_tools::BashTool::new(&config.security).with_runner(runner),
+        ));
+    }
 
     // Providers. The CLI's mock is used for `--script`, and for `mock` when
     // the configuration does not declare one.
@@ -230,6 +255,12 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
     plugins
         .register_all(&mut registry)
         .context("cannot register plugins")?;
+    if config.pipeline.project_memory && !registry.memories.contains_key("project") {
+        registry.add_memory(
+            "project",
+            Arc::new(vibe_pipeline::FileMemoryStore::for_project(root)),
+        );
+    }
     let registry = Arc::new(registry);
     let resolver = CliResolver {
         providers,
@@ -238,8 +269,8 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
 
     // Workspace.
     let is_git = is_git_repo(root).await;
-    let workspace = workspace_provider(&config, &registry, &resolver)?;
-    if workspace.name() == "git_worktree" && !is_git {
+    let workspace = workspace_provider(&config, &registry, &resolver, container)?;
+    if uses_worktrees(workspace.name()) && !is_git {
         anyhow::bail!(
             "{} is not a git repository: run `git init`, or use `--workspace in_place`",
             root.display()
@@ -252,6 +283,15 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
     let events = EventBus::default();
     let committer = is_git.then(git_committer);
     let resetter = is_git.then(git_resetter);
+    let subtask_workspaces: Option<Arc<dyn vibe_core::SubtaskWorkspaces>> = (is_git
+        && uses_worktrees(workspace.name()))
+    .then(|| -> Result<Arc<dyn vibe_core::SubtaskWorkspaces>> {
+        Ok(Arc::new(
+            vibe_workspace::GitSubtaskWorkspaces::new()
+                .with_merge_strategy(merge_strategy(&config, &resolver)?),
+        ))
+    })
+    .transpose()?;
 
     Ok(AppContext {
         root: root.to_path_buf(),
@@ -263,8 +303,52 @@ pub async fn build_context(root: &Path, overrides: &Overrides) -> Result<AppCont
         events,
         committer,
         resetter,
+        subtask_workspaces,
         plugins,
         is_git,
+    })
+}
+
+/// Whether the workspace provider `name` keeps a git worktree per task
+/// under `.vibe/worktrees` (`git_worktree` and `container`).
+pub fn uses_worktrees(name: &str) -> bool {
+    matches!(
+        name,
+        "git_worktree" | vibe_workspace::container::PROVIDER_NAME
+    )
+}
+
+/// Validated `[workspace.container]` settings when the configured workspace
+/// provider is `container` (`None` for any other provider).
+pub fn container_settings(root: &Path, config: &VibeConfig) -> Result<Option<ContainerSettings>> {
+    if config.pipeline.workspace != vibe_workspace::container::PROVIDER_NAME {
+        return Ok(None);
+    }
+    let Some(container) = &config.workspace.container else {
+        anyhow::bail!(
+            "the `container` workspace needs a [workspace.container] table with at least \
+             `image = \"…\"` in {}",
+            config_path(root).display()
+        );
+    };
+    ContainerSettings::from_config(container, root)
+        .map(Some)
+        .context("invalid [workspace.container] configuration")
+}
+
+/// How merge and subtask integration conflicts are handled: assisted
+/// resolutions use the model of the merge phase, metered against the run
+/// budget.
+fn merge_strategy(config: &VibeConfig, resolver: &CliResolver) -> Result<WorkspaceMergeStrategy> {
+    if config.pipeline.merge_strategy != ConfigMergeStrategy::Assisted {
+        return Ok(WorkspaceMergeStrategy::Manual);
+    }
+    let (model, _) = config.model_for(Phase::Merge);
+    let (llm, model) = vibe_pipeline::ProviderResolver::resolve(resolver, &model)
+        .context("cannot resolve the model of assisted merges")?;
+    Ok(WorkspaceMergeStrategy::Assisted {
+        provider: Arc::new(vibe_core::MeteredProvider::new(llm)),
+        model,
     })
 }
 
@@ -272,22 +356,27 @@ fn workspace_provider(
     config: &VibeConfig,
     registry: &Registry,
     resolver: &CliResolver,
+    container: Option<ContainerSettings>,
 ) -> Result<SharedWorkspaceProvider> {
     let name = config.pipeline.workspace.as_str();
-    if name == "git_worktree" && config.pipeline.merge_strategy == ConfigMergeStrategy::Assisted {
-        let (model, _) = config.model_for(Phase::Merge);
-        let (provider, model) = vibe_pipeline::ProviderResolver::resolve(resolver, &model)
-            .context("cannot resolve the model of assisted merges")?;
+    if uses_worktrees(name) {
         let provider = GitWorktreeProvider::new()
             .with_base_branch(config.base_branch.clone())
-            .with_merge_strategy(WorkspaceMergeStrategy::Assisted { provider, model });
-        return Ok(Arc::new(provider));
+            .with_merge_strategy(merge_strategy(config, resolver)?);
+        return Ok(match container {
+            Some(settings) => Arc::new(ContainerWorkspace::new(provider, settings)),
+            None => Arc::new(provider),
+        });
     }
     if let Some(p) = vibe_workspace::provider_by_name(name, config.base_branch.clone()) {
         return Ok(p);
     }
     registry.workspaces.get(name).cloned().ok_or_else(|| {
-        let mut known = vec!["git_worktree".to_string(), "in_place".to_string()];
+        let mut known = vec![
+            "git_worktree".to_string(),
+            "in_place".to_string(),
+            "container".to_string(),
+        ];
         known.extend(registry.workspaces.keys().cloned());
         anyhow!(
             "unknown workspace provider `{name}` (known: {})",
@@ -332,6 +421,7 @@ impl AppContext {
             project_root: self.root.clone(),
             committer: self.committer.clone(),
             resetter: self.resetter.clone(),
+            subtask_workspaces: self.subtask_workspaces.clone(),
         })
     }
 

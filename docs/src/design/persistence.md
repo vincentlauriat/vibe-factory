@@ -13,6 +13,8 @@ and which ones you may edit.
 ├── config.toml                     project configuration
 ├── agents/*.toml                   agent overrides and custom agents (+ prompt files)
 ├── plugins/<name>/vibe-plugin.toml plugin manifests
+├── memory.jsonl                    project memory: one lesson per line, shared by tasks
+├── server.token                    token of a running `vibe serve` (owner-only)
 ├── worktrees/                      one git worktree per task (git_worktree workspace)
 │   ├── .gitignore                  "*"
 │   └── <slug>-<id8>/               the task's workspace
@@ -21,6 +23,7 @@ and which ones you may edit.
 │           └── tool-output/<uuid>.txt   full text of truncated tool outputs
 └── tasks/
     ├── index.json                  task id → directory and number
+    ├── .index.lock                 OS lock serialising index updates across processes
     └── NNN-<slug>/                 one directory per task
         ├── task.json
         ├── spec.json   spec.md
@@ -29,7 +32,9 @@ and which ones you may edit.
         ├── progress.md                           append-only, timestamped
         ├── memory/gotchas.md   memory/patterns.md
         ├── events.jsonl                          every event of every run
-        └── run.json                              state of the last run
+        ├── run.json                              state of the last run
+        ├── run.lock   run.owner                  OS lock and pid of the process running it
+        └── cancel.request                        present while a `vibe cancel` is pending
 ```
 
 | Path | Written by | Read by |
@@ -83,6 +88,8 @@ task id; an ambiguous prefix is an error. A corrupt index is reported as
 | `memory/gotchas.md` | repeatedly failing subtasks, escalated QA issues | appended when they happen |
 | `events.jsonl` | one `Envelope` per line | appended by the run's event sink |
 | `run.json` | the `RunState` of the last run | before and after every phase, and at the end |
+| `run.lock`, `run.owner` | empty lock file, pid | taken by the process running the task, released when it ends or dies |
+| `cancel.request` | marker | written by `vibe cancel`, consumed by the running process |
 
 The shapes of `Task`, `Spec`, `Plan` and `QaReport` are documented in
 [Domain model](domain-model.md). A `task.json`:

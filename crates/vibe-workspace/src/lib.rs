@@ -43,6 +43,9 @@
 //!   human review, [`GitWorktreeProvider::accept_config_changes`] records the
 //!   current configuration as the new baseline.
 //!
+//! [`GitSubtaskWorkspaces`] adds one worktree per subtask attempt, forked
+//! from the task branch and merged back one at a time (see [`subtask`]).
+//!
 //! [`InPlaceWorkspace`] (`"in_place"`) works directly in the project
 //! directory, without isolation.
 //!
@@ -79,18 +82,22 @@
 
 pub mod commit;
 pub mod config_guard;
+pub mod container;
 pub mod git;
 pub mod in_place;
 pub mod merge_ai;
+pub mod subtask;
 pub mod worktree;
 
 use std::sync::Arc;
 
 pub use commit::{commit_all, has_uncommitted};
 pub use config_guard::{ChangeKind, ConfigChange, ConfigSnapshot};
+pub use container::{ContainerRunner, ContainerSettings, ContainerWorkspace};
 pub use git::{Git, GitOutput, WorktreeInfo};
 pub use in_place::InPlaceWorkspace;
 pub use merge_ai::{MergeStrategy, Resolution, resolve_conflicts};
+pub use subtask::GitSubtaskWorkspaces;
 pub use vibe_core::workspace::{MergeOutcome, SharedWorkspaceProvider};
 pub use worktree::GitWorktreeProvider;
 

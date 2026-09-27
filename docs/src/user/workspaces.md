@@ -12,6 +12,7 @@ is merged into the base branch, or left for you to review. The design rationale 
 [pipeline]
 workspace = "git_worktree"   # default
 # workspace = "in_place"     # no isolation
+# workspace = "container"    # git worktrees, shell commands in containers
 # workspace = "<name>"       # a WorkspaceProvider registered by an in-process plugin
 
 base_branch = "main"         # top level; default: the branch currently checked out
@@ -21,6 +22,7 @@ base_branch = "main"         # top level; default: the branch currently checked 
 |-------|-----------|-----------|-------|
 | `git_worktree` | one worktree and branch per task | yes | fast-forward, merge commit, or human review |
 | `in_place` | none: agents work in the project directory | no | nothing to merge; changes are already there |
+| `container` | git worktrees as above, and every shell command in a throw-away container | yes, and Docker or Podman | as `git_worktree` |
 
 ## Git worktrees
 
@@ -52,6 +54,96 @@ a new worktree is created on the existing branch, keeping its commits.
 
 The project must be a git repository; otherwise opening fails with
 ``<path> is not a git repository; use the in_place workspace or run `git init` ``.
+
+### One worktree per subtask attempt
+
+With `git_worktree` (and `pipeline.isolate_subtasks = true`, the default), every attempt at a
+subtask also gets its own worktree, forked from the current commit of the task branch:
+
+| What | Value |
+|------|-------|
+| directory | `<task worktree>--s<N>-a<attempt>`, for example `.vibe/worktrees/add-oauth-login-github-6f1c3e0a--s2-a1` |
+| branch | `<task branch>--s<N>-a<attempt>`, for example `vibe/add-oauth-login-github-6f1c3e0a--s2-a1` |
+
+Parallel coder sessions therefore never see each other's unfinished edits, and a failed
+attempt is thrown away with its worktree instead of being reset in a shared directory.
+
+When a session reports its subtask done, its work is committed on the attempt branch
+(`vibe: complete subtask 2 - Routes`) and merged into the task branch right away: a
+fast-forward when the task branch did not move, else a merge commit. Integrations happen one
+at a time; sessions that finish together are integrated in plan order, and a subtask starts
+only once the work of its `depends_on` subtasks is integrated. If the merge conflicts with
+work integrated since the attempt started, the merge is aborted (the task branch is left
+exactly as it was), the attempt counts as failed with the conflicting files in its notes,
+and the next attempt starts from the updated task branch. With `merge_strategy =
+"assisted"`, the model of the merge phase first tries to resolve the conflict markers, as for
+the final merge; the attempt only fails when a file stays unresolved.
+
+Attempt worktrees and branches are removed after each attempt and, to clean up after a
+crash, when the build starts and ends. `vibe task discard` removes any that remain. Before
+the first attempt the task worktree is committed as `vibe: checkpoint before build`, so
+attempts fork from everything already in it.
+
+Set `pipeline.isolate_subtasks = false` to have parallel subtasks share the task worktree as
+in 0.1 (completed subtasks are then committed when no other session is running, and failed
+attempts are reset). `in_place` and plugin workspaces always share the task workspace.
+
+## Container workspace
+
+The shell policy filters commands but is not a sandbox. With `workspace = "container"`, the
+`bash` tool, and therefore the required validation commands, runs every command in a fresh
+container instead of on your machine:
+
+```toml
+[pipeline]
+workspace = "container"
+
+[workspace.container]
+image = "rust:1.88"          # required
+runtime = "docker"           # or "podman", or a path to either
+network = "none"             # default; "bridge" or a named network
+cpus = 2.0
+memory = "4g"                # also the swap limit
+pids_limit = 1024            # default
+tmp_size = "1g"              # size of the /tmp tmpfs
+# user = "1000:1000"         # default: owner of the worktree on Unix
+env = ["CARGO_TERM_COLOR"]   # host variables passed through, by name only
+mount_git_metadata = false   # mount the git directory read-only (Unix only)
+
+[[workspace.container.mounts]]
+source = "/home/me/.cargo/registry" # absolute, or relative to the project root; no `~`
+target = "/usr/local/cargo/registry"
+read_only = true             # default
+```
+
+Files still live in the task's git worktree on the host: it is bind-mounted at `/workspace`
+and the command's working directory is translated to the matching path inside the
+container. The file tools, the diff shown to reviewers, commits, merges and validated merges
+work exactly as with `git_worktree`, and so do subtask worktrees.
+
+Every container is started with `--rm`, `--cap-drop=ALL`,
+`--security-opt=no-new-privileges`, a read-only root file system, a `/tmp` tmpfs, a process
+limit and a label `io.vibe-factory.managed=true`. There is no way to pass raw flags to the
+runtime; unknown keys in `[workspace.container]` are an error. One container runs per command
+and is removed with `rm --force` when the command ends, times out or is cancelled, which also
+kills its background processes. The start-up costs a few hundred milliseconds per command.
+
+What the settings allow and refuse:
+
+* **Network.** `none` unless the configured network is `bridge` or a named network **and**
+  `security.allow_network = true`. `host` and `container:<id>` are refused.
+* **Mounts.** The source must exist; the filesystem root and sockets (such as the Docker
+  socket) are refused; a writable mount may not overlap the project's `.git` or `.vibe`;
+  targets must be absolute and outside `/workspace`, `/tmp`, `/proc`, `/sys` and `/dev`.
+* **Git.** The worktree's `.git` pointer is mounted read-only, and the repository's git
+  directory is not mounted unless `mount_git_metadata = true` (then read-only), so git
+  commands that write do not work inside the container; the framework commits on the host.
+* **Failures of the runtime.** An exit status of 125 (image missing, daemon down) is reported
+  to the agent as a runner failure with `sandbox_error: true` in the tool metadata.
+
+The settings are validated before a run starts. `vibe doctor` also checks that `<runtime>
+info` answers. The image must already contain the tools the agents need (compilers, test
+runners); nothing is installed for you.
 
 ## In-place mode
 
@@ -88,7 +180,7 @@ including assisted conflict resolutions. Only a passing, unchanged candidate is 
 by fast-forwarding the base branch to that exact commit. A failed check, unresolved conflict,
 changed target or unsupported provider pauses in `review`; the target is not updated by the
 integration. Resume builds and checks a fresh candidate. See
-[Required validation commands](configuration.md#required-validation-commands-unreleased).
+[Required validation commands](configuration.md#required-validation-commands).
 
 Without configured validation commands, merging integrates the task branch into the base
 branch **in your project checkout** using the original algorithm:

@@ -43,7 +43,8 @@ pub use security::{
     truncate_output,
 };
 pub use tools::{
-    BashTool, EditFileTool, GlobTool, GrepTool, ListDirTool, ReadFileTool, WriteFileTool,
+    BashTool, EditFileTool, GlobTool, GrepTool, ListDirTool, ReadFileTool, WebFetchTool,
+    WebSearchTool, WriteFileTool,
 };
 
 /// Names of the built-in tools, in registration order.
@@ -55,13 +56,14 @@ pub const BUILTIN_TOOL_NAMES: &[&str] = &[
     "glob",
     "grep",
     "bash",
+    "web_fetch",
 ];
 
 /// A registry containing every built-in tool, with `bash` configured from
 /// `security`.
 #[must_use]
 pub fn builtin_tools(security: &SecurityConfig) -> ToolRegistry {
-    ToolRegistry::new()
+    let mut tools = ToolRegistry::new()
         .with(Arc::new(ReadFileTool))
         .with(Arc::new(WriteFileTool))
         .with(Arc::new(EditFileTool))
@@ -69,6 +71,13 @@ pub fn builtin_tools(security: &SecurityConfig) -> ToolRegistry {
         .with(Arc::new(GlobTool))
         .with(Arc::new(GrepTool))
         .with(Arc::new(BashTool::new(security)))
+        .with(Arc::new(WebFetchTool::new(
+            security.web_allowed_domains.clone(),
+        )));
+    if let Some(url) = &security.search_url {
+        tools.register(Arc::new(WebSearchTool::new(url.clone())));
+    }
+    tools
 }
 
 #[cfg(test)]
@@ -96,6 +105,6 @@ mod tests {
     fn read_only_selection_matches_core() {
         let reg = builtin_tools(&SecurityConfig::default());
         let ro = vibe_core::ToolSelection::ReadOnly.resolve(reg.names());
-        assert_eq!(ro, ["read_file", "list_dir", "glob", "grep"]);
+        assert_eq!(ro, ["read_file", "list_dir", "glob", "grep", "web_fetch"]);
     }
 }

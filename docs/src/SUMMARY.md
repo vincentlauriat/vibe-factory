@@ -15,6 +15,7 @@
 - [Customising agents](user/agents.md)
 - [Plugins](user/plugins.md)
 - [Troubleshooting](user/troubleshooting.md)
+- [Upgrading from 0.1](user/migration.md)
 
 # Design
 
@@ -34,9 +35,11 @@
     - [ADR-004: Denylist shell policy](design/adr/004-shell-policy.md)
     - [ADR-005: JSON-RPC plugin protocol](design/adr/005-plugin-protocol.md)
     - [ADR-006: Structured QA verdicts](design/adr/006-structured-qa.md)
+    - [ADR-007: One seam for every user interface](design/adr/007-one-seam-many-interfaces.md)
 
 # Reference
 
+- [Events](reference/events.md)
 - [Roadmap](reference/roadmap.md)
 - [Contributing](reference/contributing.md)
 - [Glossary](reference/glossary.md)

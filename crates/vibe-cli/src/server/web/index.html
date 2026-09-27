@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'">
+<title>Vibe Factory</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd;
+    --accent: #2f6fdf; --good: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --stream: #7b3fb5;
+    --chip: #efeee9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --panel: #1f1f1d; --text: #ecebe6; --muted: #9a998f; --line: #34332f;
+      --accent: #6aa0ff; --good: #4cc27d; --warn: #e0a84a; --bad: #ef6b5b; --stream: #c19bf0;
+      --chip: #2b2a27;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; }
+  header .muted { margin-left: auto; }
+  main { display: grid; grid-template-columns: minmax(260px, 34%) 1fr; min-height: calc(100vh - 45px); }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+  aside { border-right: 1px solid var(--line); padding: 12px; background: var(--panel); }
+  section { padding: 16px; min-width: 0; }
+  .muted { color: var(--muted); }
+  form.new { display: flex; gap: 6px; margin-bottom: 12px; }
+  input, textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
+                    border-radius: 6px; padding: 6px 8px; width: 100%; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--chip); color: inherit;
+           border-radius: 6px; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  ul.tasks { list-style: none; margin: 0; padding: 0; }
+  ul.tasks li { padding: 8px; border-radius: 6px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
+  ul.tasks li:hover { background: var(--chip); }
+  ul.tasks li.selected { background: var(--chip); outline: 1px solid var(--line); }
+  .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { font-size: 12px; padding: 1px 7px; border-radius: 99px; background: var(--chip); }
+  .s-ready, .s-done { color: var(--good); } .s-failed { color: var(--bad); }
+  .s-review { color: var(--warn); } .s-planning, .s-building { color: var(--accent); }
+  .dot { color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .banner { border: 1px solid var(--warn); border-radius: 8px; padding: 10px; margin: 10px 0; }
+  .banner textarea { margin: 8px 0; min-height: 60px; }
+  .bars { display: grid; gap: 4px; margin: 8px 0; }
+  .bar { height: 6px; background: var(--chip); border-radius: 3px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 12px; }
+  .tabs button { border: none; background: none; border-bottom: 2px solid transparent; border-radius: 0; }
+  .tabs button.on { border-bottom-color: var(--accent); color: var(--accent); }
+  .pane { padding: 10px 0; }
+  .log div { padding: 2px 0; white-space: pre-wrap; word-break: break-word; }
+  .t-dim { color: var(--muted); } .t-good { color: var(--good); } .t-warn { color: var(--warn); }
+  .t-bad { color: var(--bad); }
+  .live { color: var(--stream); white-space: pre-wrap; word-break: break-word; margin-top: 6px; }
+  pre { white-space: pre-wrap; word-break: break-word; background: var(--chip); padding: 10px; border-radius: 6px; }
+  .empty { padding: 30px; text-align: center; }
+  nav.views { display: flex; gap: 4px; }
+  nav.views button { border: none; background: none; }
+  nav.views button.on { background: var(--chip); }
+  #evals { padding: 16px; max-width: 1200px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 24px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  tr.total td { font-weight: 600; }
+  .rate { display: flex; align-items: center; gap: 8px; }
+  .rate .bar { width: 80px; }
+  .error { color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vibe Factory</h1>
+  <nav class="views">
+    <button id="view-tasks" class="on">Tasks</button>
+    <button id="view-evals">Evaluations</button>
+  </nav>
+  <span id="summary" class="muted"></span>
+</header>
+<section id="evals" hidden></section>
+<main id="board">
+  <aside>
+    <form class="new" id="new-task">
+      <input id="new-title" placeholder="New task title" autocomplete="off" aria-label="New task title">
+      <button class="primary" type="submit">Add</button>
+    </form>
+    <ul class="tasks" id="tasks"></ul>
+    <p id="no-tasks" class="muted empty" hidden>No task yet.</p>
+  </aside>
+  <section id="detail"><p class="muted empty">Select a task.</p></section>
+</main>
+<script>
+"use strict";
+const params = new URLSearchParams(location.hash.slice(1));
+if (params.get("token")) {
+  sessionStorage.setItem("vibe-token", params.get("token"));
+  history.replaceState(null, "", location.pathname);
+}
+let token = sessionStorage.getItem("vibe-token") || "";
+const state = { tasks: [], selected: null, detail: null, tab: "activity", log: [], live: "",
+                source: null, streamTask: null, error: "" };
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (v !== false && v !== undefined && v !== null) node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+async function api(method, path, body) {
+  const response = await fetch("/api" + path, {
+    method,
+    headers: Object.assign({ "Authorization": "Bearer " + token },
+                           body === undefined ? {} : { "Content-Type": "application/json" }),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (response.status === 401) { askToken(); throw new Error("token required"); }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || response.statusText);
+  return data;
+}
+
+function askToken() {
+  const given = prompt("API token printed by `vibe serve` (also in .vibe/server.token):");
+  if (given) { token = given.trim(); sessionStorage.setItem("vibe-token", token); }
+}
+
+const label = (row) => row.number ? String(row.number).padStart(3, "0") : row.task.id.slice(0, 8);
+const short = (text, max) => text.length > max ? text.slice(0, max) + "…" : text;
+const statusName = (s) => String(s).replace(/_/g, " ");
+const human = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
+const secs = (ms) => { const s = Math.round(ms / 1000); return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s` : `${s} s`; };
+
+function renderTasks() {
+  const list = document.getElementById("tasks");
+  list.replaceChildren(...state.tasks.map((row) => el("li", {
+      class: row.task.id === state.selected ? "selected" : "",
+      onclick: () => select(row.task.id) },
+    el("span", { class: "dot" }, row.running ? "●" : " "),
+    el("span", { class: "num" }, label(row)),
+    el("span", { class: "title", title: row.task.title }, row.task.title),
+    el("span", { class: "badge s-" + row.task.status }, statusName(row.task.status)))));
+  document.getElementById("no-tasks").hidden = state.tasks.length > 0;
+  const running = state.tasks.filter((t) => t.running).length;
+  document.getElementById("summary").textContent = `${state.tasks.length} task(s), ${running} running`;
+}
+
+function describe(e) {
+  const ev = e.event;
+  switch (ev.type) {
+    case "run_started": return ["", "▶ run started"];
+    case "phase_started": return ["", "● " + ev.phase];
+    case "phase_finished": return [ev.success ? "good" : "warn", `  ${ev.phase} done: ${ev.summary}`];
+    case "agent_started": return ["dim", `  ${ev.role} started`];
+    case "agent_text": return ev.text.trim() ? ["", `  ${ev.role}: ${short(ev.text.trim().replace(/\s+/g, " "), 240)}`] : null;
+    case "tool_called": return ["dim", `    → ${ev.tool} ${JSON.stringify(ev.input).slice(0, 160)}`];
+    case "tool_returned": return ev.is_error ? ["warn", `    ← ${ev.tool} failed: ${ev.preview.slice(0, 160)}`] : null;
+    case "agent_finished": return ["dim", `  ${ev.role} finished (${human(ev.usage.input_tokens + ev.usage.output_tokens)} tokens)`];
+    case "subtask_updated": return ["", `  ▸ subtask ${subtaskTitle(ev.subtask)}: ${statusName(ev.status)}`];
+    case "subtask_integrated": return ev.conflicts.length ? ["warn", `  ▸ ${subtaskTitle(ev.subtask)}: conflicts in ${ev.conflicts.join(", ")}`] : null;
+    case "validation_finished": return ev.passed ? ["good", "  ✓ " + ev.command] : ["bad", "  ✗ " + ev.command];
+    case "artefact_written": return ["dim", "  wrote the " + (ev.artefact.kind === "qa_report" ? "QA report " + ev.artefact.round : ev.artefact.kind)];
+    case "approval_requested": return ["warn", `⏸ approval needed: the ${ev.gate}`];
+    case "approval_resolved": return ["good", `  ${ev.gate} ${ev.approved ? "approved" : "rejected"}${ev.comment ? ": " + ev.comment : ""}`];
+    case "retrying": return ["warn", `  ↻ retrying ${ev.what} (attempt ${ev.attempt})`];
+    case "paused": return ["warn", "⏸ " + ev.reason];
+    case "run_finished": return [ev.success ? "good" : "warn", "■ run finished: " + statusName(ev.status)];
+    case "log": return ev.level === "info" ? null : [ev.level === "error" ? "bad" : "warn", "  ! " + ev.message];
+    default: return null;
+  }
+}
+
+function subtaskTitle(id) {
+  const plan = state.detail && state.detail.plan;
+  if (!plan) return id.slice(0, 8);
+  for (const phase of plan.phases) for (const s of phase.subtasks) if (s.id === id) return s.title;
+  return id.slice(0, 8);
+}
+
+function bar(used, limit, text) {
+  const children = [el("div", { class: "muted" }, text)];
+  if (limit) children.push(el("div", { class: "bar" }, el("div", { style: `width:${Math.min(100, used / limit * 100)}%` })));
+  return el("div", {}, children);
+}
+
+function renderDetail() {
+  const pane = document.getElementById("detail");
+  const d = state.detail;
+  if (!d) { pane.replaceChildren(el("p", { class: "muted empty" }, state.error || "Select a task.")); return; }
+  const run = d.run;
+  const pending = run && run.pending_approval;
+  const busy = d.running;
+  const act = (text, fn, primary, disabled) =>
+    el("button", { class: primary ? "primary" : "", disabled: !!disabled, onclick: fn }, text);
+  const children = [
+    el("h2", {}, `${label(d)} ${d.task.title} `, el("span", { class: "badge s-" + d.task.status }, statusName(d.task.status))),
+    d.task.description ? el("p", { class: "muted" }, d.task.description) : null,
+    el("div", { class: "muted" }, run ? `run ${statusName(run.status)} · phase ${run.current_phase}${run.last_error && !pending ? " · " + run.last_error : ""}` : "Not run yet."),
+    el("div", { class: "actions" },
+      act("Run", () => post("/run", {}), !run, busy),
+      act("Resume", () => post("/run", { resume: true }), !!run, busy || !run || run.status === "finished"),
+      act("Cancel", () => post("/cancel", {}), false, !busy)),
+  ];
+  if (pending) {
+    const reason = el("textarea", { placeholder: "Reason, if you reject (the agents will work from it)" });
+    children.push(el("div", { class: "banner" },
+      el("strong", {}, `Waiting for your approval of the ${pending}.`),
+      reason,
+      el("div", { class: "actions" },
+        act("Approve", () => post("/approve", {}).then(() => post("/run", { resume: true })), true),
+        act("Reject", () => {
+          if (!reason.value.trim()) { reason.focus(); return; }
+          post("/reject", { reason: reason.value.trim() }).then(() => post("/run", { resume: true }));
+        }))));
+  }
+  const budget = state.budget;
+  if (budget) {
+    children.push(el("div", { class: "bars" },
+      bar(budget.tokens, budget.token_limit, `tokens ${human(budget.tokens)}${budget.token_limit ? " / " + human(budget.token_limit) : ""}`),
+      bar(budget.active_ms, budget.duration_limit_ms, `active ${secs(budget.active_ms)}${budget.duration_limit_ms ? " / " + secs(budget.duration_limit_ms) : ""}`)));
+  }
+  const tabs = [["activity", "Activity"], ["plan", "Plan"], ["spec", "Spec"], ["qa", "QA"], ["changes", "Changes"]];
+  children.push(el("div", { class: "tabs" }, tabs.map(([key, text]) =>
+    el("button", { class: state.tab === key ? "on" : "", onclick: () => { state.tab = key; if (key === "changes") loadChanges(); renderDetail(); } }, text))));
+  children.push(el("div", { class: "pane" }, renderTab(d)));
+  pane.replaceChildren(...children.filter(Boolean));
+  const log = pane.querySelector(".log");
+  if (log) log.scrollTop = log.scrollHeight;
+}
+
+function renderTab(d) {
+  if (state.tab === "activity") {
+    const lines = state.log.map(describe).filter(Boolean).slice(-400)
+      .map(([tone, text]) => el("div", { class: tone ? "t-" + tone : "" }, text));
+    return [el("div", { class: "log" }, lines.length ? lines : el("div", { class: "muted" }, "No activity yet.")),
+            state.live ? el("div", { class: "live" }, "… " + state.live.slice(-2000)) : null];
+  }
+  if (state.tab === "plan") {
+    if (!d.plan) return el("p", { class: "muted" }, "No plan yet.");
+    const icon = { done: "✓", in_progress: "●", failed: "✗", skipped: "–", pending: "○" };
+    return [el("p", {}, d.plan.approach || ""), ...d.plan.phases.map((phase) => el("div", {},
+      el("h4", {}, phase.name + (phase.parallel ? " (parallel)" : "")),
+      el("ol", {}, phase.subtasks.map((s) => el("li", {}, `${icon[s.status] || ""} ${s.title}`,
+        el("div", { class: "muted" }, s.description))))))];
+  }
+  if (state.tab === "spec") {
+    if (!d.spec) return el("p", { class: "muted" }, "No specification (quick profiles skip it).");
+    return [el("p", {}, d.spec.summary), el("ul", {}, d.spec.requirements.map((r) =>
+      el("li", {}, `${r.id}: ${r.description}`, el("div", { class: "muted" }, (r.acceptance || []).join(" · ")))))];
+  }
+  if (state.tab === "qa") {
+    if (!d.qa_reports.length) return el("p", { class: "muted" }, "No QA report yet.");
+    return d.qa_reports.slice().reverse().map((q) => el("div", {},
+      el("h4", {}, `Round ${q.round}: ${statusName(q.verdict)}`), el("p", {}, q.summary),
+      el("ul", {}, q.issues.map((i) => el("li", {}, `[${i.severity}] ${i.title}: ${i.detail}`)))));
+  }
+  return el("pre", {}, state.changes === undefined ? "Loading…" : (state.changes.trim() || "No change in the workspace."));
+}
+
+async function post(path, body) {
+  try { await api("POST", `/tasks/${state.selected}${path}`, body); await refreshDetail(); }
+  catch (e) { alert(e.message); }
+}
+
+async function loadChanges() {
+  state.changes = undefined;
+  try { state.changes = (await api("GET", `/tasks/${state.selected}/changes`)).changes; }
+  catch (e) { state.changes = "Cannot load the changes: " + e.message; }
+  renderDetail();
+}
+
+function openStream(id) {
+  if (state.source) state.source.close();
+  state.log = []; state.live = ""; state.budget = null; state.streamTask = id;
+  const source = new EventSource(`/api/tasks/${id}/stream?token=${encodeURIComponent(token)}`);
+  source.onmessage = () => {};
+  const handle = (msg) => {
+    if (state.streamTask !== id) return;
+    const envelope = JSON.parse(msg.data);
+    const ev = envelope.event;
+    if (ev.type === "agent_delta") { state.live += ev.delta.text; renderDetailSoon(); return; }
+    if (ev.type === "run_started" && envelope.seq === 1) { state.log = []; }
+    if (ev.type === "agent_text") state.live = "";
+    if (ev.type === "budget_updated") state.budget = ev;
+    state.log.push(envelope);
+    if (["artefact_written", "subtask_updated", "approval_requested", "approval_resolved", "run_finished", "paused"].includes(ev.type)) refreshDetail();
+    else renderDetailSoon();
+  };
+  for (const type of ["run_started", "phase_started", "phase_finished", "agent_started", "agent_text", "agent_delta",
+    "tool_called", "tool_returned", "agent_finished", "subtask_updated", "subtask_integrated", "validation_finished",
+    "budget_updated", "artefact_written", "approval_requested", "approval_resolved", "retrying", "paused", "run_finished", "log"]) {
+    source.addEventListener(type, handle);
+  }
+  state.source = source;
+}
+
+let pending = false;
+function renderDetailSoon() {
+  if (pending) return;
+  pending = true;
+  requestAnimationFrame(() => { pending = false; renderDetail(); });
+}
+
+async function select(id) {
+  state.selected = id; state.tab = "activity"; state.changes = undefined;
+  renderTasks();
+  openStream(id);
+  await refreshDetail();
+}
+
+async function refreshDetail() {
+  if (!state.selected) return;
+  try { state.detail = await api("GET", "/tasks/" + state.selected); state.error = ""; }
+  catch (e) { state.detail = null; state.error = e.message; }
+  renderDetail();
+  refreshTasks();
+}
+
+async function refreshTasks() {
+  try { state.tasks = await api("GET", "/tasks"); renderTasks(); }
+  catch (e) { document.getElementById("summary").textContent = e.message; }
+}
+
+document.getElementById("new-task").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = document.getElementById("new-title");
+  if (!input.value.trim()) return;
+  try {
+    const row = await api("POST", "/tasks", { title: input.value.trim() });
+    input.value = "";
+    await refreshTasks();
+    select(row.task.id);
+  } catch (e) { alert(e.message); }
+});
+
+function showView(view) {
+  document.getElementById("board").hidden = view !== "tasks";
+  document.getElementById("evals").hidden = view !== "evals";
+  document.getElementById("view-tasks").className = view === "tasks" ? "on" : "";
+  document.getElementById("view-evals").className = view === "evals" ? "on" : "";
+  if (view === "evals") loadEvals();
+}
+document.getElementById("view-tasks").addEventListener("click", () => showView("tasks"));
+document.getElementById("view-evals").addEventListener("click", () => showView("evals"));
+
+async function loadEvals() {
+  const pane = document.getElementById("evals");
+  pane.replaceChildren(el("p", { class: "muted" }, "Loading…"));
+  let data;
+  try { data = await api("GET", "/evals"); }
+  catch (e) { pane.replaceChildren(el("p", { class: "error" }, e.message)); return; }
+  if (!data.enabled) {
+    pane.replaceChildren(el("p", { class: "muted empty" },
+      "Start the server with `vibe serve --evals <DIR>` to show the results of evals/run_suite.py."));
+    return;
+  }
+  if (!data.suites.length) {
+    pane.replaceChildren(el("p", { class: "muted empty" }, "No summary.json found yet."));
+    return;
+  }
+  const fmt = (v) => v === null || v === undefined ? "–" : String(v);
+  pane.replaceChildren(...data.suites.map((suite) => {
+    const s = suite.summary;
+    const rows = (s.rows || []).map((r) => el("tr", { class: r.case === "ALL" ? "total" : "" },
+      el("td", {}, fmt(r.provider)), el("td", {}, fmt(r.model)), el("td", {}, r.case),
+      el("td", {}, el("div", { class: "rate" },
+        el("div", { class: "bar" }, el("div", { style: `width:${(r.success_rate || 0) * 100}%;background:var(--good)` })),
+        `${r.successes}/${r.runs}`)),
+      el("td", {}, fmt(r.mean_seconds)), el("td", {}, fmt(r.median_seconds)),
+      el("td", {}, r.mean_tokens === null ? "–" : human(r.mean_tokens)),
+      el("td", {}, fmt(r.runs_without_usage)), el("td", {}, fmt(r.mean_validation_attempts))));
+    return el("div", {},
+      el("h3", {}, suite.name || "results"),
+      el("div", { class: "muted" }, `${s.reports} report(s) · framework ${(s.framework_commits || []).map((c) => c.slice(0, 10)).join(", ")}${suite.modified ? " · " + new Date(suite.modified).toLocaleString() : ""}`),
+      el("table", {},
+        el("thead", {}, el("tr", {}, ["provider", "model", "case", "success", "mean s", "median s", "mean tokens", "no usage", "validations"].map((h) => el("th", {}, h)))),
+        el("tbody", {}, rows)));
+  }));
+}
+
+if (!token) askToken();
+refreshTasks();
+setInterval(refreshTasks, 2000);
+setInterval(() => { if (state.selected && state.detail && state.detail.running) refreshDetail(); }, 3000);
+</script>
+</body>
+</html>

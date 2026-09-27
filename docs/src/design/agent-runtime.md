@@ -191,6 +191,7 @@ Each retry publishes `retrying`. The cancel token is checked after each wait.
 | Event | When |
 |-------|------|
 | `agent_started` | before the first step |
+| `agent_delta` | while a step streams: text or reasoning pieces, merged when several arrive together; ephemeral (not in `events.jsonl`) |
 | `agent_text` | after each step whose answer contains text |
 | `tool_called` / `tool_returned` | around each tool call |
 | `retrying` | before each runner-level retry |

@@ -93,8 +93,24 @@ policies the static layer cannot express.
 
 The default workspace is a git worktree on its own branch
 ([ADR-003](adr/003-git-worktrees.md)); the project checkout is never modified until the
-merge step, which refuses to run on a dirty tree. Stronger isolation (containers, VMs,
-remote sandboxes) is a `WorkspaceProvider` plugin.
+merge step, which refuses to run on a dirty tree. With the git worktree workspace each
+subtask attempt also gets its own worktree, integrated into the task branch one at a time.
+
+The `container` workspace (`vibe_workspace::ContainerWorkspace`) keeps the worktrees and
+changes where commands run. `vibe_core::CommandRunner` is the seam: the `bash` tool checks
+the policy and the paths as usual, then asks the runner for the process to spawn
+(`PreparedCommand`: program, arguments, a cleanup command and the exit status that means
+"the runner failed"). `ContainerRunner` returns `docker run --rm` (or `podman run --rm`)
+with fixed hardening flags (`--cap-drop=ALL`, `--security-opt=no-new-privileges`,
+`--read-only`, a `/tmp` tmpfs, `--pids-limit`), the worktree bind-mounted at `/workspace`,
+its `.git` pointer mounted read-only over itself so a command cannot redirect the host's git
+to a crafted directory, and `--network=none` unless a network is both configured and
+granted. The cleanup (`rm --force <name>`) runs when the command ends, times out or its
+future is dropped, which kills everything the command started. Settings are validated
+before any container starts (`ContainerSettings::from_config`): namespace-sharing networks,
+sockets, writable mounts over `.git` or `.vibe` and reserved targets are refused, and there
+is no raw flag passthrough. File tools are unaffected: they act on the host worktree under
+path containment. VMs and remote sandboxes remain `WorkspaceProvider` plugins.
 
 A worktree shares `.git/config` with the user's checkout, so the provider treats the
 repository configuration as untrusted after agents have run:

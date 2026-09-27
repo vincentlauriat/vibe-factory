@@ -9,9 +9,9 @@ use tokio::sync::watch;
 use vibe_agents::AgentRunner;
 use vibe_core::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, Complexity, Error, ErrorKind, EventBus,
-    ModelProvider, ModelRef, ModelSelection, Permissions, Phase, Plan, Registry, Result, RunId,
-    SecurityConfig, SharedProvider, Spec, Task, TaskStatus, ToolContext, ToolRegistry,
-    ToolSelection, Usage, VibeConfig, Workspace, WorkspaceProvider,
+    ModelProvider, ModelRef, ModelSelection, Permissions, Phase, Plan, Registry, Result, RunBudget,
+    RunId, SecurityConfig, SharedProvider, Spec, SubtaskWorkspaces, Task, TaskStatus, ToolContext,
+    ToolRegistry, ToolSelection, Usage, VibeConfig, Workspace, WorkspaceProvider,
 };
 
 use crate::complexity::Profile;
@@ -256,8 +256,14 @@ pub struct RunContext {
     pub committer: Option<Committer>,
     /// Optional reset of the workspace after a failed attempt.
     pub resetter: Option<Resetter>,
+    /// Workspaces of subtask attempts, when the build isolates subtasks.
+    pub subtask_workspaces: Option<Arc<dyn SubtaskWorkspaces>>,
     /// Cancellation token.
     pub cancel: Option<watch::Receiver<bool>>,
+    /// Token and duration budget of the run, shared with its agents. A
+    /// reached limit stops the run like a cancellation; the pipeline then
+    /// pauses it instead of cancelling it.
+    pub budget: Arc<RunBudget>,
     /// Complexity forced by the caller.
     pub complexity_override: Option<Complexity>,
     /// Current specification, once written or loaded.
@@ -286,10 +292,10 @@ impl std::fmt::Debug for RunContext {
 }
 
 impl RunContext {
-    /// Whether the run has been cancelled.
+    /// Whether the run has been cancelled or reached a budget limit.
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
-        self.cancel.as_ref().is_some_and(|rx| *rx.borrow())
+        self.cancel.as_ref().is_some_and(|rx| *rx.borrow()) || self.budget.exceeded().is_some()
     }
 
     /// Agent spec for `role`: the registry's (plugins and overrides win),
@@ -324,6 +330,12 @@ impl RunContext {
     /// configuration; tools confined to the workspace with permissions
     /// derived from the agent's tool selection.
     pub fn runner(&self, spec: &AgentSpec) -> Result<AgentRunner> {
+        self.runner_in(spec, self.workspace.root.clone())
+    }
+
+    /// Like [`RunContext::runner`], with tools confined to `root` (the
+    /// workspace of a subtask attempt) instead of the task workspace.
+    pub fn runner_in(&self, spec: &AgentSpec, root: PathBuf) -> Result<AgentRunner> {
         let model = match &spec.model {
             ModelSelection::Fixed(m) => m.clone(),
             ModelSelection::Phase => self.config.model_for(self.phase).0,
@@ -339,8 +351,9 @@ impl RunContext {
         .run_id(self.run_id)
         .task(self.task.clone())
         .context_window(context_window_for(&self.config, &model))
-        .tool_context(ToolContext::new(self.workspace.root.clone()))
-        .permissions(self.permissions(spec));
+        .tool_context(ToolContext::new(root))
+        .permissions(self.permissions(spec))
+        .budget(Arc::clone(&self.budget));
         if let Some(c) = &self.cancel {
             runner = runner.cancel_token(c.clone());
         }
@@ -404,6 +417,65 @@ impl RunContext {
             }
         }
         Ok(truncate_head(&out, MEMORY_MAX_CHARS))
+    }
+
+    /// Take the pending rejection of `gate`, as feedback for the phase that
+    /// redoes the rejected work.
+    pub fn take_rejection(&mut self, gate: vibe_core::ApprovalGate) -> Option<String> {
+        if self.state.rejection.as_ref()?.gate != gate {
+            return None;
+        }
+        self.state.rejection.take().map(|r| {
+            format!(
+                "### Human review of the previous version\n\nA human rejected the previous {gate} \
+                 with this reason. Address it explicitly:\n\n{}\n",
+                r.comment.trim()
+            )
+        })
+    }
+
+    /// Publish [`vibe_core::Event::ArtefactWritten`].
+    pub async fn artefact_written(&self, artefact: vibe_core::Artefact) {
+        self.events
+            .publish(vibe_core::Event::ArtefactWritten {
+                run: self.run_id,
+                artefact,
+            })
+            .await;
+    }
+
+    /// Publish [`vibe_core::Event::BudgetUpdated`] with the run totals.
+    pub async fn budget_updated(&self) {
+        let limits = self.budget.limits();
+        let ms = |d: std::time::Duration| u64::try_from(d.as_millis()).unwrap_or(u64::MAX);
+        self.events
+            .publish(vibe_core::Event::BudgetUpdated {
+                run: self.run_id,
+                tokens: self.budget.used_tokens(),
+                token_limit: limits.max_tokens,
+                active_ms: ms(self.budget.elapsed()),
+                duration_limit_ms: limits.max_duration.map(ms),
+            })
+            .await;
+    }
+
+    /// Record a lesson: in the task's memory file, and in every registered
+    /// memory store (the project memory among them) so later tasks recall
+    /// it. A store that fails is logged, never fatal.
+    pub async fn remember(&self, file: crate::store::MemoryFile, note: &str) -> Result<()> {
+        self.store.append_memory(self.task.id, file, note).await?;
+        let kind = match file {
+            crate::store::MemoryFile::Gotchas => vibe_core::MemoryKind::Gotcha,
+            crate::store::MemoryFile::Patterns => vibe_core::MemoryKind::Pattern,
+        };
+        let mut entry = vibe_core::MemoryEntry::new(kind, note);
+        entry.task_id = Some(self.task.id);
+        for (name, memory) in &self.registry.memories {
+            if let Err(e) = memory.remember(entry.clone()).await {
+                tracing::warn!(memory = %name, error = %e, "cannot remember");
+            }
+        }
+        Ok(())
     }
 
     /// Append a progress note.

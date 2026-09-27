@@ -27,8 +27,8 @@ use std::time::Duration;
 
 use vibe_core::provider::ProviderInfo;
 use vibe_core::{
-    CompletionRequest, CompletionResponse, ContentBlock, Error, ErrorKind, Message, ModelProvider,
-    Result, Role, StopReason, Usage,
+    CompletionRequest, CompletionResponse, ContentBlock, DeltaSink, Error, ErrorKind, Message,
+    ModelProvider, Result, Role, StopReason, StreamDelta, Usage,
 };
 
 /// Closure producing a response for a request once the script is exhausted.
@@ -274,6 +274,32 @@ impl ModelProvider for MockProvider {
             supports_thinking: self.supports_thinking,
             default_model: self.default_model.clone(),
         }
+    }
+
+    /// Streams the text of the scripted answer word by word (thinking
+    /// first), then returns the answer unchanged.
+    async fn complete_streaming(
+        &self,
+        request: CompletionRequest,
+        on_delta: DeltaSink<'_>,
+    ) -> Result<CompletionResponse> {
+        let response = self.complete(request).await?;
+        for block in &response.message.content {
+            let (text, thinking) = match block {
+                ContentBlock::Text { text } => (text, false),
+                ContentBlock::Thinking { text } => (text, true),
+                _ => continue,
+            };
+            for piece in text.split_inclusive(' ') {
+                let text = piece.to_string();
+                on_delta(if thinking {
+                    StreamDelta::Thinking { text }
+                } else {
+                    StreamDelta::Text { text }
+                });
+            }
+        }
+        Ok(response)
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {

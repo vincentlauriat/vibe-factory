@@ -2,7 +2,7 @@
 
 Vibe Factory is young. The list below is ordered by priority, not by date.
 
-## 0.1 — foundation (this release)
+## 0.1 — foundation (released)
 
 - [x] Layered crate architecture with documented extension points
 - [x] Anthropic and OpenAI-compatible providers, mock provider
@@ -14,26 +14,51 @@ Vibe Factory is young. The list below is ordered by priority, not by date.
 - [x] `vibe` CLI
 - [x] User guide, design book, ADRs, API docs
 
-## 0.2 — reliability (in development)
+## 0.2 — reliability (released)
 
 - [x] Required commands before ready/merge, persistent results and replay on resume
-- [x] Three reproducible Rust evaluation fixtures and an independent acceptance runner
-- [ ] Run real-model evaluations; expand the suite to ten tasks and record success, time and tokens
 - [x] Feed deterministic validation failures into the bounded QA/fix loop
 - [x] Validate the integration candidate, including assisted conflict resolution, before publication
-- [ ] Worktree per subtask, ordered integration and conflict tests
-- [ ] Container workspace provider with explicit network, mounts and resource limits
-- [ ] Persistent token and duration budgets across resumes
-- [ ] Cancellation-safe plugin writer task
-- [ ] Cross-platform release qualification and migration guide
+- [x] Ten reproducible Rust evaluation cases with independent oracles, a suite runner and a
+      summary of success, time and tokens
+- [x] Worktree per subtask, ordered integration and conflict tests
+- [x] Container workspace provider with explicit network, mounts and resource limits
+- [x] Persistent token and duration budgets across resumes
+- [x] Cancellation-safe plugin writer task
+- [x] Cross-platform release qualification and migration guide
 
-## 0.3 — interaction and capabilities
+Carried over: a published real-model baseline. The harness is ready
+([evals/README.md](https://github.com/vincentlauriat/vibe-factory/blob/main/evals/README.md));
+no score will be claimed before it has been run with repetitions on named models.
 
-- [ ] Streaming completions and live token output
-- [ ] Terminal UI board with live events
-- [ ] Web fetch and search tools
-- [ ] Richer persistent memory across tasks
-- [ ] HTTP/WebSocket server and issue tracker importers
+## 0.3 — interaction foundations and terminal UI (done, unreleased)
+
+The engine learns to stream, to wait for a human and to outlive the terminal that started
+it, then gets a terminal UI. See [ADR-007](../design/adr/007-one-seam-many-interfaces.md).
+
+- [ ] Real-model evaluation baseline, published with the framework commit and models used
+      (needs a maintainer with an API key)
+- [x] Streaming completions and live agent text
+- [x] Events v2: sequence numbers, schema version, validation, integration, budget and
+      artefact events, replay and follow
+- [x] Human approvals after spec, plan or before merge
+- [x] Run manager and cross-process locking of `.vibe/`
+- [x] Terminal UI: task board and live run view
+
+## 0.4 — server, web UI and integrations (done, unreleased)
+
+- [x] `vibe serve`: HTTP API and server-sent events over the run manager
+- [x] Local web UI: board, activity, plan, spec, QA, changes, approvals, evaluation dashboard
+- [x] GitHub and GitLab issue import and pull request creation
+- [x] Web fetch and search tools
+- [x] Persistent project memory across tasks
+- [x] VS Code extension on `vibe serve`
+
+## Later
+
+- OpenAPI description of the server API
+- Editing the plan from the web UI before approving it
+- Linear and Jira importers
 
 ## Ideas
 

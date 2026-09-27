@@ -36,18 +36,36 @@
 //! starts, so a retry always begins from the last commit. Without a
 //! resetter the changes stay in place and a progress note says so.
 //!
+//! ## Subtask workspaces
+//!
+//! With [`vibe_core::SubtaskWorkspaces`] injected and
+//! `pipeline.isolate_subtasks` on (the CLI does this for the `git_worktree`
+//! workspace), every attempt instead runs in its own workspace forked from
+//! the current state of the task workspace, so parallel sessions never see
+//! each other's half-finished edits. A successful attempt is committed and
+//! integrated into the task workspace right away, one at a time: sessions
+//! that finish together are integrated in plan order, and a subtask only
+//! starts once the work of its dependencies is integrated. An integration
+//! conflict fails the attempt, whose retry starts from the updated task
+//! workspace. Failed attempts are simply thrown away: nothing waits for
+//! other sessions to commit or reset. Leftover attempt workspaces are
+//! removed when the build starts and ends.
+//!
 //! Each session runs in its own tokio task; the tasks are aborted when the
 //! build ends early or its future is dropped.
 
 use std::collections::{HashMap, HashSet};
 
+use std::sync::Arc;
+
+use futures::FutureExt;
 use futures::StreamExt;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use vibe_agents::{ContinuationPolicy, run_with_continuation};
 use vibe_core::{
     AgentOutcome, AgentRole, AgentStop, Error, ErrorKind, Event, Phase, Plan, Result, SubtaskId,
-    SubtaskStatus, TaskStatus,
+    SubtaskIntegration, SubtaskStatus, SubtaskWorkspaces, TaskStatus, Workspace,
 };
 
 use super::{lenient_string, lenient_strings};
@@ -250,8 +268,9 @@ async fn publish_status(ctx: &RunContext, id: SubtaskId, status: SubtaskStatus) 
         .await;
 }
 
-/// Start one attempt of subtask `id`: mark it in progress, persist the plan
-/// and return the session future.
+/// Start one attempt of subtask `id`: mark it in progress, persist the plan,
+/// open its own workspace when subtasks are isolated, and return the
+/// session future.
 async fn launch(
     ctx: &mut RunContext,
     plan: &mut Plan,
@@ -259,7 +278,8 @@ async fn launch(
     max_attempts: u32,
     memory: &str,
     spec_text: &str,
-) -> Result<(Attempt, tokio::task::AbortHandle)> {
+    isolation: Option<&Arc<dyn SubtaskWorkspaces>>,
+) -> Result<(Attempt, tokio::task::AbortHandle, Option<Workspace>)> {
     let attempt = {
         let s = plan
             .subtask_mut(id)
@@ -285,8 +305,18 @@ async fn launch(
         .subtask(id)
         .map(|s| s.notes.clone())
         .unwrap_or_default();
+    let attempt_ws = match isolation {
+        Some(iso) => {
+            let label = format!("s{}-a{attempt}", position(plan, id));
+            Some(iso.open(&ctx.workspace, &label).await?)
+        }
+        None => None,
+    };
+    let root = attempt_ws
+        .as_ref()
+        .map_or_else(|| ctx.workspace.root.clone(), |w| w.root.clone());
     let runner = ctx
-        .runner(&agent)?
+        .runner_in(&agent, root)?
         .subtask(id)
         .var("spec", spec_text)
         .var("plan", plan_text.clone())
@@ -322,7 +352,85 @@ async fn launch(
             ),
         }
     });
-    Ok((fut, abort))
+    Ok((fut, abort, attempt_ws))
+}
+
+/// Integrate a successful attempt; `Some(reason)` when it could not be.
+async fn integrate_attempt(
+    ctx: &RunContext,
+    iso: &Arc<dyn SubtaskWorkspaces>,
+    id: SubtaskId,
+    attempt: &Workspace,
+    message: &str,
+) -> Option<String> {
+    let outcome = iso.integrate(&ctx.workspace, attempt, message).await;
+    if let Ok(integration) = &outcome {
+        let (commit, conflicts) = match integration {
+            SubtaskIntegration::Integrated { commit } => (commit.clone(), Vec::new()),
+            SubtaskIntegration::Conflict { files } => (None, files.clone()),
+        };
+        ctx.events
+            .publish(Event::SubtaskIntegrated {
+                run: ctx.run_id,
+                subtask: id,
+                commit,
+                conflicts,
+            })
+            .await;
+    }
+    match outcome {
+        Ok(SubtaskIntegration::Integrated { .. }) => None,
+        Ok(SubtaskIntegration::Conflict { files }) => Some(format!(
+            "its changes conflict with work integrated since the attempt started ({}); \
+             the next attempt starts from the updated task workspace",
+            files.join(", ")
+        )),
+        Err(e) => Some(format!("integration failed: {e}")),
+    }
+}
+
+/// Remove an attempt workspace; failures are logged, never fatal.
+async fn discard_attempt(
+    ctx: &RunContext,
+    iso: Option<&Arc<dyn SubtaskWorkspaces>>,
+    attempt: Option<Workspace>,
+) {
+    let (Some(iso), Some(ws)) = (iso, attempt) else {
+        return;
+    };
+    if let Err(e) = iso.discard(&ws).await {
+        ctx.events
+            .log(
+                Some(ctx.run_id),
+                "warn",
+                format!("cannot remove subtask workspace {}: {e}", ws.root.display()),
+            )
+            .await;
+    }
+}
+
+/// Remove every attempt workspace of the task; failures are logged.
+async fn discard_all_attempts(ctx: &RunContext, iso: Option<&Arc<dyn SubtaskWorkspaces>>) {
+    let Some(iso) = iso else {
+        return;
+    };
+    if let Err(e) = iso.discard_all(&ctx.workspace).await {
+        ctx.events
+            .log(
+                Some(ctx.run_id),
+                "warn",
+                format!("cannot remove subtask workspaces: {e}"),
+            )
+            .await;
+    }
+}
+
+/// Put an interrupted attempt back to pending, without counting it.
+fn requeue(plan: &mut Plan, id: SubtaskId) {
+    if let Some(s) = plan.subtask_mut(id) {
+        s.status = SubtaskStatus::Pending;
+        s.attempts = s.attempts.saturating_sub(1);
+    }
 }
 
 /// Why an attempt failed, or `None` when it succeeded.
@@ -397,6 +505,18 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
     // retry never begins from a dirty tree.
     let mut to_reset: Vec<String> = Vec::new();
     let mut cancelled = false;
+    let isolation: Option<Arc<dyn SubtaskWorkspaces>> = ctx
+        .subtask_workspaces
+        .clone()
+        .filter(|_| ctx.config.pipeline.isolate_subtasks);
+    let isolated = isolation.is_some();
+    let mut attempt_workspaces: HashMap<SubtaskId, Workspace> = HashMap::new();
+    if isolated {
+        // Attempts fork from the last commit: record what earlier phases or
+        // a human left, and drop attempt workspaces of a crashed process.
+        ctx.commit("vibe: checkpoint before build").await;
+        discard_all_attempts(ctx, isolation.as_ref()).await;
+    }
 
     loop {
         if ctx.is_cancelled() {
@@ -420,8 +540,19 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
             let Some(id) = next_ready(&plan, &preds, &in_flight) else {
                 break;
             };
-            let (fut, abort) =
-                launch(ctx, &mut plan, id, max_attempts, &memory, &spec_text).await?;
+            let (fut, abort, attempt_ws) = launch(
+                ctx,
+                &mut plan,
+                id,
+                max_attempts,
+                &memory,
+                &spec_text,
+                isolation.as_ref(),
+            )
+            .await?;
+            if let Some(ws) = attempt_ws {
+                attempt_workspaces.insert(id, ws);
+            }
             aborts.0.insert(id, abort);
             in_flight.insert(id);
             running.push(fut);
@@ -448,126 +579,148 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
             continue;
         }
 
-        let Some((id, result)) = running.next().await else {
+        let Some(first) = running.next().await else {
             break;
         };
-        in_flight.remove(&id);
-        aborts.0.remove(&id);
-        let outcome = match result {
-            Ok(o) => {
-                ctx.record(&o);
-                if o.stop == AgentStop::Cancelled {
-                    if let Some(s) = plan.subtask_mut(id) {
-                        s.status = SubtaskStatus::Pending;
-                        s.attempts = s.attempts.saturating_sub(1);
+        // Sessions that finished together are handled in plan order, so the
+        // order of integration never depends on scheduling luck.
+        let mut batch = vec![first];
+        while let Some(Some(next)) = running.next().now_or_never() {
+            batch.push(next);
+        }
+        batch.sort_by_key(|(id, _)| position(&plan, *id));
+        for (id, result) in batch {
+            in_flight.remove(&id);
+            aborts.0.remove(&id);
+            let attempt_ws = attempt_workspaces.remove(&id);
+            let outcome = match result {
+                Ok(o) => {
+                    ctx.record(&o);
+                    if o.stop == AgentStop::Cancelled {
+                        requeue(&mut plan, id);
+                        discard_attempt(ctx, isolation.as_ref(), attempt_ws).await;
+                        cancelled = true;
+                        continue;
                     }
+                    Some(o)
+                }
+                Err(e) if e.kind == ErrorKind::Cancelled => {
+                    requeue(&mut plan, id);
+                    discard_attempt(ctx, isolation.as_ref(), attempt_ws).await;
                     cancelled = true;
-                    break;
+                    continue;
                 }
-                Some(o)
-            }
-            Err(e) if e.kind == ErrorKind::Cancelled => {
-                if let Some(s) = plan.subtask_mut(id) {
-                    s.status = SubtaskStatus::Pending;
-                    s.attempts = s.attempts.saturating_sub(1);
+                Err(e) => {
+                    ctx.events
+                        .log(
+                            Some(ctx.run_id),
+                            "warn",
+                            format!("coder session failed: {e}"),
+                        )
+                        .await;
+                    None
                 }
-                cancelled = true;
-                break;
+            };
+            let (mut reason, report) = match &outcome {
+                Some(o) => failure_reason(o),
+                None => (
+                    Some("the session could not run".into()),
+                    CoderReport::default(),
+                ),
+            };
+            let n = position(&plan, id);
+            let title = plan
+                .subtask(id)
+                .map(|s| s.title.clone())
+                .unwrap_or_default();
+            if reason.is_none()
+                && let (Some(iso), Some(ws)) = (isolation.as_ref(), attempt_ws.as_ref())
+            {
+                let message = commit_message(&[(n, title.clone())]);
+                reason = integrate_attempt(ctx, iso, id, ws, &message).await;
             }
-            Err(e) => {
-                ctx.events
-                    .log(
-                        Some(ctx.run_id),
-                        "warn",
-                        format!("coder session failed: {e}"),
-                    )
-                    .await;
-                None
-            }
-        };
-        let (reason, report) = match &outcome {
-            Some(o) => failure_reason(o),
-            None => (
-                Some("the session could not run".into()),
-                CoderReport::default(),
-            ),
-        };
-        let n = position(&plan, id);
-        let Some(sub) = plan.subtask_mut(id) else {
-            continue;
-        };
-        let title = sub.title.clone();
-        let attempt = sub.attempts;
-        match reason {
-            None => {
-                sub.status = SubtaskStatus::Done;
-                sub.notes = report.notes.trim().to_string();
-                ctx.store.save_plan(&plan).await?;
-                publish_status(ctx, id, SubtaskStatus::Done).await;
-                let files = if report.files_changed.is_empty() {
-                    String::new()
-                } else {
-                    format!("\n\nFiles: {}", report.files_changed.join(", "))
-                };
-                let notes = if report.notes.trim().is_empty() {
-                    String::new()
-                } else {
-                    format!("\n\nNotes: {}", report.notes.trim())
-                };
-                ctx.note(&format!(
-                    "Subtask {n} `{title}` done (attempt {attempt}): {}{files}{notes}",
-                    report.summary.trim()
-                ))
-                .await?;
-                to_commit.push((n, title));
-            }
-            Some(why) => {
-                sub.notes
-                    .push_str(&format!("Attempt {attempt} failed: {why}\n"));
-                let what = format!("attempt {attempt} of subtask {n} `{title}`");
-                let give_up = attempt >= max_attempts;
-                sub.status = if give_up {
-                    SubtaskStatus::Failed
-                } else {
-                    SubtaskStatus::Pending
-                };
-                ctx.store.save_plan(&plan).await?;
-                if ctx.resetter.is_some() {
-                    to_reset.push(what);
-                } else {
-                    ctx.reset_workspace(&what).await;
-                }
-                if give_up {
-                    publish_status(ctx, id, SubtaskStatus::Failed).await;
+            discard_attempt(ctx, isolation.as_ref(), attempt_ws).await;
+            ctx.budget_updated().await;
+            let Some(sub) = plan.subtask_mut(id) else {
+                continue;
+            };
+            let attempt = sub.attempts;
+            match reason {
+                None => {
+                    sub.status = SubtaskStatus::Done;
+                    sub.notes = report.notes.trim().to_string();
+                    ctx.store.save_plan(&plan).await?;
+                    publish_status(ctx, id, SubtaskStatus::Done).await;
+                    let files = if report.files_changed.is_empty() {
+                        String::new()
+                    } else {
+                        format!("\n\nFiles: {}", report.files_changed.join(", "))
+                    };
+                    let notes = if report.notes.trim().is_empty() {
+                        String::new()
+                    } else {
+                        format!("\n\nNotes: {}", report.notes.trim())
+                    };
                     ctx.note(&format!(
-                        "Subtask {n} `{title}` FAILED after {attempt} attempt(s): {why}"
+                        "Subtask {n} `{title}` done (attempt {attempt}): {}{files}{notes}",
+                        report.summary.trim()
                     ))
                     .await?;
-                    ctx.store
-                        .append_memory(
-                            ctx.task.id,
+                    if !isolated {
+                        to_commit.push((n, title));
+                    }
+                }
+                Some(why) => {
+                    sub.notes
+                        .push_str(&format!("Attempt {attempt} failed: {why}\n"));
+                    let what = format!("attempt {attempt} of subtask {n} `{title}`");
+                    let give_up = attempt >= max_attempts;
+                    sub.status = if give_up {
+                        SubtaskStatus::Failed
+                    } else {
+                        SubtaskStatus::Pending
+                    };
+                    ctx.store.save_plan(&plan).await?;
+                    if isolated {
+                        // The attempt workspace is gone with its changes.
+                    } else if ctx.resetter.is_some() {
+                        to_reset.push(what);
+                    } else {
+                        ctx.reset_workspace(&what).await;
+                    }
+                    if give_up {
+                        publish_status(ctx, id, SubtaskStatus::Failed).await;
+                        ctx.note(&format!(
+                            "Subtask {n} `{title}` FAILED after {attempt} attempt(s): {why}"
+                        ))
+                        .await?;
+                        ctx.remember(
                             MemoryFile::Gotchas,
                             &format!("Subtask `{title}` failed repeatedly: {why}"),
                         )
                         .await?;
-                } else {
-                    publish_status(ctx, id, SubtaskStatus::Pending).await;
-                    ctx.note(&format!(
-                        "Subtask {n} `{title}` attempt {attempt} failed: {why}"
-                    ))
-                    .await?;
-                    ctx.events
-                        .publish(Event::Retrying {
-                            run: ctx.run_id,
-                            what: format!("subtask `{title}`"),
-                            attempt: attempt + 1,
-                            delay_ms: 0,
-                        })
-                        .await;
+                    } else {
+                        publish_status(ctx, id, SubtaskStatus::Pending).await;
+                        ctx.note(&format!(
+                            "Subtask {n} `{title}` attempt {attempt} failed: {why}"
+                        ))
+                        .await?;
+                        ctx.events
+                            .publish(Event::Retrying {
+                                run: ctx.run_id,
+                                what: format!("subtask `{title}`"),
+                                attempt: attempt + 1,
+                                delay_ms: 0,
+                            })
+                            .await;
+                    }
                 }
             }
+            ctx.plan = Some(plan.clone());
         }
-        ctx.plan = Some(plan.clone());
+        if cancelled {
+            break;
+        }
         if in_flight.is_empty() {
             // Completed work is committed first so that the reset below can
             // never discard it; the reset then removes whatever the failed
@@ -587,16 +740,15 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
         drop(aborts);
         drop(running);
         for id in in_flight {
-            if let Some(s) = plan.subtask_mut(id) {
-                s.status = SubtaskStatus::Pending;
-                s.attempts = s.attempts.saturating_sub(1);
-            }
+            requeue(&mut plan, id);
         }
+        discard_all_attempts(ctx, isolation.as_ref()).await;
         ctx.store.save_plan(&plan).await?;
         ctx.plan = Some(plan);
         return Err(Error::new(ErrorKind::Cancelled, "build cancelled"));
     }
 
+    discard_all_attempts(ctx, isolation.as_ref()).await;
     ctx.store.save_plan(&plan).await?;
     let count = |st: SubtaskStatus| plan.subtasks().filter(|s| s.status == st).count();
     let (done, failed, skipped, pending) = (

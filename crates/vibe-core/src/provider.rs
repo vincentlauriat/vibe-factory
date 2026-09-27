@@ -185,6 +185,25 @@ pub struct CompletionResponse {
     pub model: String,
 }
 
+/// A piece of a completion, delivered while it is being generated.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum StreamDelta {
+    /// Visible answer text.
+    Text {
+        /// The new text.
+        text: String,
+    },
+    /// Reasoning text, when the provider exposes it.
+    Thinking {
+        /// The new text.
+        text: String,
+    },
+}
+
+/// Receives the [`StreamDelta`]s of a streamed completion, in order.
+pub type DeltaSink<'a> = &'a (dyn Fn(StreamDelta) + Send + Sync);
+
 /// Static information about a provider.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProviderInfo {
@@ -211,6 +230,22 @@ pub trait ModelProvider: Send + Sync {
 
     /// Produce one completion.
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse>;
+
+    /// Produce one completion, calling `on_delta` with text as it is
+    /// generated. The returned response is complete, exactly as
+    /// [`ModelProvider::complete`] would return it; deltas are only a
+    /// preview. The default calls `complete` and sends no delta.
+    ///
+    /// Implementations must not retry once a delta was sent (the caller
+    /// would see the text twice): an interrupted stream is an error.
+    async fn complete_streaming(
+        &self,
+        request: CompletionRequest,
+        on_delta: DeltaSink<'_>,
+    ) -> Result<CompletionResponse> {
+        let _ = on_delta;
+        self.complete(request).await
+    }
 
     /// Verify credentials and connectivity. Default: succeed.
     async fn health_check(&self) -> Result<()> {

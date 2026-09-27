@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 pub mod agent;
+pub mod budget;
 pub mod config;
 pub mod error;
 pub mod event;
@@ -38,6 +39,7 @@ pub mod plugin;
 pub mod prompt;
 pub mod provider;
 pub mod qa;
+pub mod sandbox;
 pub mod spec;
 pub mod store;
 pub mod task;
@@ -47,12 +49,13 @@ pub mod workspace;
 pub use agent::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, ModelSelection, ThinkingLevel, ToolSelection,
 };
+pub use budget::{BudgetExceeded, BudgetLimits, MeteredProvider, RunBudget};
 pub use config::{
-    MergeStrategy, PhaseModels, PipelineConfig, PluginConfig, ProviderConfig, SecurityConfig,
-    VibeConfig,
+    ApprovalGate, ForgeConfig, IntegrationsConfig, MergeStrategy, PhaseModels, PipelineConfig,
+    PluginConfig, ProviderConfig, SecurityConfig, VibeConfig,
 };
 pub use error::{Error, ErrorKind, Result};
-pub use event::{Envelope, Event, EventBus, EventSink};
+pub use event::{Artefact, EVENT_SCHEMA_VERSION, Envelope, Event, EventBus, EventSink};
 pub use ids::{RunId, SessionId, SubtaskId, TaskId};
 pub use memory::{InMemoryStore, MemoryEntry, MemoryKind, MemoryStore, SharedMemory};
 pub use message::{ContentBlock, Message, Role};
@@ -61,15 +64,16 @@ pub use plan::{Plan, PlanPhase, Subtask, SubtaskStatus};
 pub use plugin::{Hook, HookDecision, Plugin, Registry, SharedHook};
 pub use prompt::PromptTemplate;
 pub use provider::{
-    CompletionRequest, CompletionResponse, ModelProvider, ModelRef, ProviderInfo, SharedProvider,
-    StopReason, ToolSpec, Usage,
+    CompletionRequest, CompletionResponse, DeltaSink, ModelProvider, ModelRef, ProviderInfo,
+    SharedProvider, StopReason, StreamDelta, ToolSpec, Usage,
 };
 pub use qa::{QaIssue, QaReport, QaVerdict, Severity};
+pub use sandbox::{CommandRequest, CommandRunner, PreparedCommand, SharedCommandRunner};
 pub use spec::{Requirement, RequirementKind, Spec, SpecContext};
 pub use store::{SharedTaskStore, TaskStore};
 pub use task::{Complexity, Task, TaskSource, TaskStatus};
 pub use tool::{Permissions, SharedTool, Tool, ToolContext, ToolOutput, ToolRegistry};
 pub use workspace::{
-    InPlaceWorkspace, MergeOutcome, MergeValidator, SharedWorkspaceProvider, Workspace,
-    WorkspaceKind, WorkspaceProvider,
+    InPlaceWorkspace, MergeOutcome, MergeValidator, SharedWorkspaceProvider, SubtaskIntegration,
+    SubtaskWorkspaces, Workspace, WorkspaceKind, WorkspaceProvider,
 };

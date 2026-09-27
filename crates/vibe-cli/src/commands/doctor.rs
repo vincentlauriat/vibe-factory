@@ -101,7 +101,7 @@ pub async fn run(root: &Path, ui: Ui) -> Result<u8> {
     let git_repo = is_git_repo(root).await;
     let needs_git = config
         .as_ref()
-        .is_none_or(|c| c.pipeline.workspace == "git_worktree");
+        .is_none_or(|c| crate::app::uses_worktrees(&c.pipeline.workspace));
     match (git_repo, needs_git) {
         (true, _) => r.add(
             Level::Ok,
@@ -112,7 +112,7 @@ pub async fn run(root: &Path, ui: Ui) -> Result<u8> {
             Level::Fail,
             "repository",
             format!(
-                "{} is not a git repository (needed by the git_worktree workspace)",
+                "{} is not a git repository (needed by the git_worktree and container workspaces)",
                 root.display()
             ),
         ),
@@ -147,6 +147,8 @@ pub async fn run(root: &Path, ui: Ui) -> Result<u8> {
         let ws = config.pipeline.workspace.as_str();
         if matches!(ws, "git_worktree" | "in_place") {
             r.add(Level::Ok, "workspace", format!("`{ws}`"));
+        } else if ws == vibe_workspace::container::PROVIDER_NAME {
+            check_container(root, config, &mut r).await;
         } else if results.iter().any(|(_, res)| res.is_ok()) {
             r.add(
                 Level::Warn,
@@ -157,7 +159,9 @@ pub async fn run(root: &Path, ui: Ui) -> Result<u8> {
             r.add(
                 Level::Fail,
                 "workspace",
-                format!("unknown workspace provider `{ws}` (built in: git_worktree, in_place)"),
+                format!(
+                    "unknown workspace provider `{ws}` (built in: git_worktree, in_place, container)"
+                ),
             );
         }
     }
@@ -249,5 +253,38 @@ fn check_providers(config: &VibeConfig, r: &mut Report) {
                 format!("{name}: no API key (set {var}){usage}"),
             );
         }
+    }
+}
+
+/// Check the `container` workspace: valid settings and a reachable runtime.
+async fn check_container(root: &Path, config: &VibeConfig, r: &mut Report) {
+    let settings = match crate::app::container_settings(root, config) {
+        Ok(Some(s)) => s,
+        Ok(None) => return,
+        Err(e) => {
+            r.add(Level::Fail, "workspace", format!("`container`: {e:#}"));
+            return;
+        }
+    };
+    if vibe_workspace::container::runtime_available(&settings.runtime).await {
+        r.add(
+            Level::Ok,
+            "workspace",
+            format!(
+                "`container`: image `{}`, network `{}`, `{} info` answers",
+                settings.image,
+                settings.effective_network(config.security.allow_network),
+                settings.runtime
+            ),
+        );
+    } else {
+        r.add(
+            Level::Fail,
+            "workspace",
+            format!(
+                "`container`: `{} info` failed; install the runtime or start its daemon",
+                settings.runtime
+            ),
+        );
     }
 }

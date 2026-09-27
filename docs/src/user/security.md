@@ -14,6 +14,11 @@ workspace and governed by a security policy you control from `.vibe/config.toml`
 | `glob` | Find files by pattern (`**/*.rs`), newest first, at most 2000 results. | read |
 | `grep` | Regex search in text files (`content`, `files` or `count` mode, context lines, case-insensitive). | read |
 | `bash` | Run a shell command inside the workspace with a timeout (default 120 s, max 600 s). Background jobs are killed when the command finishes. | execute |
+| `web_fetch` | Fetch a public http(s) page and return its text (HTML converted, 2 MB read at most, 30 000 characters returned). Hosts resolving to loopback, private, link-local or other internal addresses are refused, and each redirect is checked again; `security.web_allowed_domains` narrows it to some domains. | network |
+| `web_search` | Search through the SearXNG-compatible endpoint of `security.search_url` and list the first 10 results. Only registered when that key is set. | network |
+
+The web tools refuse to run unless `security.allow_network = true`. They are read-only
+tools, so read-only agents such as the researcher and the reviewers get them too.
 
 Which tools an agent may use is decided per role (see [Customising agents](agents.md)):
 the planner and the reviewers of the spec phase are read-only, the coder and the QA agents
@@ -114,6 +119,9 @@ as a plugin in any language; see [Plugins](plugins.md) and
 
 It is a **denylist and a set of validators, not a sandbox**. An agent that can run
 `python -c` or `node -e` can, in principle, do anything the interpreter can. For untrusted
-code or strict environments, combine the policy with an isolated workspace (a container or
-a VM through a `WorkspaceProvider` plugin), keep `allow_network = false`, and use the
-allowlist.
+code or strict environments, combine the policy with an isolated workspace, keep
+`allow_network = false`, and use the allowlist. The built-in
+[container workspace](workspaces.md#container-workspace) runs every shell command in a
+hardened, throw-away container with no network by default; a VM or remote sandbox can be
+plugged in as a `WorkspaceProvider` plugin. The file tools still act on the host worktree,
+inside the path containment described above.

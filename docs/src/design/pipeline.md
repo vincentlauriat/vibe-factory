@@ -27,6 +27,8 @@ let report = pipeline.resume_with(task_id, options).await?;
 | `config: VibeConfig` | the parsed `.vibe/config.toml` |
 | `project_root: PathBuf` | the project directory |
 | `committer: Option<Committer>` | commits the workspace after subtasks and fixes |
+| `resetter: Option<Resetter>` | discards what a failed attempt left in a shared workspace |
+| `subtask_workspaces: Option<Arc<dyn SubtaskWorkspaces>>` | one workspace per subtask attempt (the CLI plugs `GitSubtaskWorkspaces` for `git_worktree`) |
 
 | `RunOptions` field | Effect |
 |--------------------|--------|
@@ -192,10 +194,22 @@ is allowed). After the last attempt the subtask is **failed**, a line is added t
 transitively, becomes **skipped**. Failures do not skip later phases by ordering alone.
 Pending subtasks that can never become ready are skipped as "blocked by the plan ordering".
 
-Commits are **deferred**: the committer stages the whole workspace, so completed subtasks
-are committed only when no other session is running, possibly several in one commit
-(`vibe: complete subtask 2 - Routes`, `vibe: complete subtasks 2, 3 - Routes; Login page`).
-A failed commit is logged and noted, never fatal.
+**Isolated subtasks.** When `subtask_workspaces` is set and `pipeline.isolate_subtasks` is
+true, `launch` opens a workspace labelled `s<N>-a<attempt>` forked from the task workspace
+and the session's tools are confined to it (`RunContext::runner_in`). The scheduler awaits
+one finished session, drains every other session that already finished (`now_or_never`),
+and handles the batch in plan order. A successful attempt is integrated right away with
+`SubtaskWorkspaces::integrate`; a `Conflict` or an error turns it into a failed attempt with
+the reason in its notes. Every attempt workspace is discarded after its outcome is known;
+`discard_all` runs when the build starts (after a `vibe: checkpoint before build` commit)
+and when it ends or is cancelled. Nothing is deferred: the task workspace only changes
+through integrations, which the scheduler serialises.
+
+**Shared workspace.** Otherwise commits are **deferred**: the committer stages the whole
+workspace, so completed subtasks are committed only when no other session is running,
+possibly several in one commit (`vibe: complete subtask 2 - Routes`,
+`vibe: complete subtasks 2, 3 - Routes; Login page`). A failed commit is logged and noted,
+never fatal.
 
 The build continues to QA when at least one subtask is done and none is pending; its
 `success` flag is false if any subtask failed or was skipped. Otherwise the run fails with
@@ -253,6 +267,50 @@ clears `last_error`, and reuses the persisted spec and plan. Subtasks already `d
 never redone; interrupted ones are retried. When a **failed** run resumes at `build`, failed
 and skipped subtasks go back to pending with their attempt counters reset, and a progress
 note says how many.
+
+## Run manager and locking
+
+`RunManager` is the seam interfaces use ([ADR-007](adr/007-one-seam-many-interfaces.md)):
+`start` and `resume` spawn a run on its own tokio task and return a `RunHandle` to await,
+`cancel` flips that run's cancellation token, `active` lists running tasks and `subscribe`
+returns the live event stream. `vibe run` goes through it; the terminal UI runs several
+tasks at once with it.
+
+`Pipeline::execute` first calls `PipelineStore::lock_run`: `FileTaskStore` takes an
+exclusive OS lock on `run.lock` in the task directory (and writes its pid to `run.owner`), so
+one process at a time runs a task, and a crashed process leaves no stale lock. The run's
+cancellation token combines the caller's token with `PipelineStore::take_cancel_request`,
+polled every 500 ms: `vibe cancel` writes `cancel.request`, which the running process
+consumes. Index updates take `.index.lock` in the tasks directory as well as the in-process
+mutex, so a CLI and another process never interleave them.
+
+## Approval gates
+
+`pipeline.approvals` lists `ApprovalGate`s. Before a phase runs, the driver computes the
+gate it must pass (`Plan` needs `Spec` when a spec exists, `Build` needs `Plan`, `Merge`
+needs `Merge`). A gate without a valid approval sets `RunState::pending_approval`,
+publishes `approval_requested` once, then `paused`, and ends the run as `paused` (task
+`review`) at that phase. `RunState::resolve_approval`, called by `vibe approve` and
+`vibe reject`, records the decision. On resume an approved gate lets the phase run; a
+rejected one redirects to the producer: `Spec` and `Plan` take the reason through
+`RunContext::take_rejection` and put it in their prompt, `Merge` becomes a QA report with
+one high severity "Human review" issue and forces the fix phase (`pending_human_fix`), even
+in profiles without it. A completed `Spec` revokes the spec and plan approvals, `Plan` the
+plan approval, `Build` and `Fix` the merge approval.
+
+## Budgets
+
+`run.json` accumulates the tokens (`usage`) and active milliseconds (`active_ms`) of every
+invocation of a run. The driver builds a `vibe_core::RunBudget` from those totals and the
+`pipeline.max_tokens` / `pipeline.max_duration_secs` limits, stores it in the `RunContext`
+and hands it to every `AgentRunner`. The runner adds each model call's usage to it and
+treats a reached limit like a cancellation: no new step starts. `RunContext::is_cancelled`
+is true as well, so the build scheduler stops launching sessions and puts interrupted
+subtasks back to pending. The driver tells the two apart with `RunBudget::exceeded`: a
+cancelled phase whose budget is exhausted ends the run as `paused` (task `backlog`) at the
+same `current_phase`, and the budget is also checked before every phase. The totals are
+written to `run.json` before and after each phase and at the end of the run, so a crash
+loses at most the accounting of the phase in progress.
 
 `run` with `from_phase` is different: it starts a new run id at that phase, keeping only the
 previous profile. It is how you re-run QA after fixing things by hand (`--from qa`).

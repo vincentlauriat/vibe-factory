@@ -103,11 +103,16 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in [Providers and models](pro
 | `validation_commands` | list of strings | `[]` | mandatory shell checks before ready/merge; see below |
 | `max_validation_fix_attempts` | integer | `2` | automatic validation fixes over the whole run, including resumes; `0` disables them |
 | `merge_strategy` | `"manual"` or `"assisted"` | `"manual"` | `manual` reports conflicts for a human; `assisted` lets a model resolve conflict markers first |
+| `isolate_subtasks` | bool | `true` | with `git_worktree`, one worktree per subtask attempt, integrated one at a time; see [Workspaces](workspaces.md#one-worktree-per-subtask-attempt) |
+| `project_memory` | bool | `true` | keep lessons (pitfalls, conventions) in `.vibe/memory.jsonl` and recall the relevant ones in later tasks; see `vibe memory` |
+| `approvals` | list of `"spec"`, `"plan"`, `"merge"` | `[]` | where the run waits for a human decision; see [Human approvals](#human-approvals) |
+| `max_tokens` | integer | none | input plus output tokens of the whole run, including resumes; the run pauses when reached |
+| `max_duration_secs` | integer | none | active time of the whole run in seconds, including resumes; the run pauses when reached |
 
 What these limits do at run time is described in [The pipeline](../design/pipeline.md);
 workspaces and merging in [Workspaces and merging](workspaces.md).
 
-## Required validation commands (unreleased)
+## Required validation commands
 
 ```toml
 [pipeline]
@@ -165,6 +170,79 @@ integration; the default refuses it rather than falling back to an unchecked mer
 External manual `git merge` commands are outside this gate. Configuration is loaded by the
 host, not accepted from an agent's QA report.
 
+## Run budgets
+
+```toml
+[pipeline]
+max_tokens = 2_000_000      # input + output tokens over the whole run
+max_duration_secs = 3600    # one hour of active work
+```
+
+Both limits are off by default. They apply to a **run**, not to one invocation of
+`vibe run`: `run.json` keeps the tokens (`usage`) and the active time (`active_ms`) of every
+invocation, and a resumed run starts from those totals. Time spent paused or between
+invocations is not counted.
+
+Agents add the tokens of every model call to the budget as it happens. Once a limit is
+reached no new model call starts: running sessions stop before their next step,
+interrupted subtasks go back to pending, and the run **pauses** (exit code 2) at the phase
+it was in, with a note in `progress.md` naming the limit. A running shell command is not
+interrupted; it is bounded by its own timeout. Resuming without raising the limit pauses
+again immediately and spends nothing. Raise the limit in the configuration, or for one
+invocation with `vibe run <REF> --resume --max-tokens N --max-duration 2h`, to continue.
+
+The token limit counts every model call of the run: the agents' calls and the ones made by
+`merge_strategy = "assisted"` to resolve conflict markers.
+
+## Human approvals
+
+```toml
+[pipeline]
+approvals = ["plan", "merge"]
+```
+
+Each listed gate pauses the run (exit code 2, task `review`) until a human decides:
+
+| Gate | The run stops | A rejection goes back to |
+|------|---------------|--------------------------|
+| `spec` | after the specification, before planning (only when the profile writes a spec) | the spec phase |
+| `plan` | after the plan, before building | the planner |
+| `merge` | after QA approval, before the merge phase (validation, integration or marking ready) | the fixer, through a QA report titled "Human review", then QA again |
+
+```sh
+vibe task show 3                       # read the spec, plan or QA report
+vibe approve 3 --comment "ok"          # or:
+vibe reject 3 --reason "Split the migration into its own subtask"
+vibe run 3 --resume
+```
+
+The decision is stored in `run.json` (`approvals`, `pending_approval`, `rejection`) and
+logged as an `approval_resolved` event. A rejection needs a reason: it is handed to the
+agents that redo the work. Regenerating an artefact revokes its approval, so a new plan is
+approved again, and a merge is approved again after any new build or fix. Resuming without
+a decision pauses again at the same gate.
+
+## `[workspace.container]`
+
+Settings of the `container` workspace (`pipeline.workspace = "container"`). Only `image` is
+required; unknown keys are refused.
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `image` | string | required | image the commands run in |
+| `runtime` | string | `"docker"` | `docker` or `podman`, or a path to one of them |
+| `network` | string | `"none"` | `none`, `bridge` or a named network; attached only when `security.allow_network` is true |
+| `mounts` | list of tables | `[]` | extra bind mounts: `source`, `target`, `read_only` (default true) |
+| `cpus` | number | none | `--cpus` |
+| `memory` | string | none | `--memory` and `--memory-swap`, such as `4g` |
+| `pids_limit` | integer | `1024` | maximum number of processes |
+| `tmp_size` | string | runtime default | size of the `/tmp` tmpfs |
+| `user` | string | owner of the worktree (Unix) | `uid[:gid]` or `name[:group]` |
+| `env` | list of names | `[]` | host environment variables passed through |
+| `mount_git_metadata` | bool | `false` | mount the repository's git directory read-only (Unix only) |
+
+See [Container workspace](workspaces.md#container-workspace) for what each setting allows.
+
 ## `[security]`
 
 | Key | Type | Default | Meaning |
@@ -174,8 +252,25 @@ host, not accepted from an agent's QA report.
 | `command_timeout_secs` | integer | `120` | default timeout of a shell command; an agent may ask for up to 600 |
 | `allow_network` | bool | `false` | grant the network permission (`curl`, `wget`, `ssh`, … and network-using tools) |
 | `extra_read_paths` | list of paths | `[]` | directories outside the workspace that agents may read, never write |
+| `web_allowed_domains` | list of strings | `[]` | domains (and subdomains) `web_fetch` may reach; empty means any public host |
+| `search_url` | string | none | SearXNG-compatible search URL with `{query}`, e.g. `https://searx.example/search?q={query}&format=json`; registers `web_search` |
 
 The rules behind these keys are in [Tools and security](security.md).
+
+## `[integrations]`
+
+```toml
+[integrations.github]
+api_url = "https://github.example.com/api/v3"   # GitHub Enterprise; default https://api.github.com
+token_env = "GHE_TOKEN"                         # default GITHUB_TOKEN, then GH_TOKEN
+
+[integrations.gitlab]
+api_url = "https://gitlab.example.com/api/v4"   # default https://gitlab.com/api/v4
+token_env = "GITLAB_TOKEN"
+```
+
+Used by `vibe task import` and `vibe pr`. Tokens are read from the environment only, never
+from the configuration file.
 
 ## `[[plugins]]`
 
@@ -235,6 +330,8 @@ max_phase_retries = 2       # extra planner attempts on an invalid plan
 workspace = "git_worktree"  # or "in_place"
 auto_merge = false          # stop in `ready` and let me merge
 merge_strategy = "manual"
+max_tokens = 3_000_000      # pause the run beyond this, resumes included
+max_duration_secs = 7200    # and beyond two hours of active work
 
 # Security ----------------------------------------------------------------
 [security]

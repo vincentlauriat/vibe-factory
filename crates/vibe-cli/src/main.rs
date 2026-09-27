@@ -38,8 +38,11 @@
 mod app;
 mod cli;
 mod commands;
+mod forge;
 mod mock;
 mod render;
+mod server;
+mod tui;
 mod util;
 
 use std::process::ExitCode;

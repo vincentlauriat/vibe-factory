@@ -4,9 +4,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::sync::watch;
 use vibe_core::{TaskStatus, TaskStore};
-use vibe_pipeline::{RunOptions, RunReport, RunStatus};
+use vibe_pipeline::{RunManager, RunOptions, RunReport, RunStatus};
 
 use super::{resolve_task, task_number};
 use crate::app::{Overrides, build_context, worktree_location};
@@ -51,6 +50,8 @@ pub async fn run(root: &Path, args: RunArgs, ui: Ui) -> Result<u8> {
         workspace: args.workspace.clone(),
         auto_merge: args.auto_merge,
         script: args.script.clone(),
+        max_tokens: args.max_tokens,
+        max_duration_secs: args.max_duration,
     };
     let ctx = build_context(root, &overrides).await?;
     let outcome = execute(&ctx, &args, ui).await;
@@ -79,34 +80,37 @@ async fn execute(ctx: &crate::app::AppContext, args: &RunArgs, ui: Ui) -> Result
         );
     }
 
-    let (cancel_tx, cancel_rx) = watch::channel(false);
-    let ctrl_c = tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_err() {
-            return;
-        }
-        eprintln!(
-            "\n{} cancelling after the current step… press Ctrl-C again to exit now",
-            style::warn().apply_to("!")
-        );
-        let _ = cancel_tx.send(true);
-        if tokio::signal::ctrl_c().await.is_ok() {
-            std::process::exit(i32::from(EXIT_CANCELLED));
-        }
-    });
-
     let options = RunOptions {
         complexity_override: args.complexity.map(Into::into),
         from_phase: args.from.map(Into::into),
         until_phase: args.until.map(Into::into),
         dry_run: args.dry_run,
-        cancel: Some(cancel_rx),
+        cancel: None,
     };
-    let pipeline = ctx.pipeline();
-    let result = if args.resume {
-        pipeline.resume_with(task.id, options).await
+    let manager = RunManager::new(ctx.pipeline());
+    let handle = if args.resume {
+        manager.resume(task.id, options)?
     } else {
-        pipeline.run(task.id, options).await
+        manager.start(task.id, options)?
     };
+    let ctrl_c = {
+        let manager = manager.clone();
+        let task_id = task.id;
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_err() {
+                return;
+            }
+            eprintln!(
+                "\n{} cancelling after the current step… press Ctrl-C again to exit now",
+                style::warn().apply_to("!")
+            );
+            manager.cancel(task_id);
+            if tokio::signal::ctrl_c().await.is_ok() {
+                std::process::exit(i32::from(EXIT_CANCELLED));
+            }
+        })
+    };
+    let result = handle.wait().await;
     ctrl_c.abort();
     let report = result?;
 
@@ -115,7 +119,7 @@ async fn execute(ctx: &crate::app::AppContext, args: &RunArgs, ui: Ui) -> Result
         task_dir: ctx.store.task_dir(task.id).await.ok(),
         ..SummaryInfo::default()
     };
-    if ctx.workspace.name() == "git_worktree" {
+    if crate::app::uses_worktrees(ctx.workspace.name()) {
         let loc = worktree_location(&ctx.root, &report.task);
         if loc.path.is_dir() {
             info.branch = Some(loc.branch);
@@ -139,7 +143,7 @@ async fn execute(ctx: &crate::app::AppContext, args: &RunArgs, ui: Ui) -> Result
 
 /// Flags of this invocation that a `--resume` must repeat, because they are
 /// not persisted with the run (`--provider`, `--model`, `--workspace`,
-/// `--script`, `--auto-merge`). Empty, or starting with a space.
+/// `--script`, `--auto-merge`, budgets). Empty, or starting with a space.
 fn carried_flags(args: &RunArgs) -> String {
     let mut out = String::new();
     if let Some(p) = &args.provider {
@@ -156,6 +160,12 @@ fn carried_flags(args: &RunArgs) -> String {
     }
     if args.auto_merge {
         out.push_str(" --auto-merge");
+    }
+    if let Some(t) = args.max_tokens {
+        out.push_str(&format!(" --max-tokens {t}"));
+    }
+    if let Some(s) = args.max_duration {
+        out.push_str(&format!(" --max-duration {s}s"));
     }
     out
 }
