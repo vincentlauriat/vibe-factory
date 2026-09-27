@@ -69,7 +69,7 @@
 //! appear, the echo plugin does not send one):
 //!
 //! ```json
-//! > {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol_version":"1","host":{"name":"vibe-factory","version":"0.2.0"}}}
+//! > {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol_version":"1","host":{"name":"vibe-factory","version":"0.4.0"}}}
 //! < {"jsonrpc":"2.0","id":1,"result":{"name":"echo","version":"0.1.0","capabilities":{"tools":true,"agents":true,"hooks":true}}}
 //! > {"jsonrpc":"2.0","method":"notifications/initialized"}
 //! > {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}

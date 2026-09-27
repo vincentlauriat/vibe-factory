@@ -27,11 +27,11 @@ Vibe Factory is young. The list below is ordered by priority, not by date.
 - [x] Cancellation-safe plugin writer task
 - [x] Cross-platform release qualification and migration guide
 
-Carried over: a published real-model baseline, done in 0.3
+Carried over: a published real-model baseline, done in 0.4.0
 ([Claude Sonnet 5, 2026-09-27](https://github.com/vincentlauriat/vibe-factory/blob/main/evals/baselines/2026-09-27-claude-sonnet-5.md):
 30/30 runs over the ten cases).
 
-## 0.3 — interaction foundations and terminal UI (done, unreleased)
+## 0.3 — interaction foundations and terminal UI (released in 0.4.0)
 
 The engine learns to stream, to wait for a human and to outlive the terminal that started
 it, then gets a terminal UI. See [ADR-007](../design/adr/007-one-seam-many-interfaces.md).
@@ -45,7 +45,7 @@ it, then gets a terminal UI. See [ADR-007](../design/adr/007-one-seam-many-inter
 - [x] Run manager and cross-process locking of `.vibe/`
 - [x] Terminal UI: task board and live run view
 
-## 0.4 — server, web UI and integrations (done, unreleased)
+## 0.4 — server, web UI and integrations (released)
 
 - [x] `vibe serve`: HTTP API and server-sent events over the run manager
 - [x] Local web UI: board, activity, plan, spec, QA, changes, approvals, evaluation dashboard

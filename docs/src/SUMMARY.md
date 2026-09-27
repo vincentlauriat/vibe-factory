@@ -15,7 +15,7 @@
 - [Customising agents](user/agents.md)
 - [Plugins](user/plugins.md)
 - [Troubleshooting](user/troubleshooting.md)
-- [Upgrading from 0.1](user/migration.md)
+- [Upgrading](user/migration.md)
 
 # Design
 
