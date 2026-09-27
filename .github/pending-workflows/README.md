@@ -11,7 +11,8 @@ git rm .github/pending-workflows/README.md
 git commit -m "ci: install release workflow and MSRV job"
 ```
 
-* `ci.yml` is the current CI plus an `msrv` job checking the workspace with Rust 1.88.
+* `ci.yml` is the current CI plus an `msrv` job checking the workspace with Rust 1.88 and
+  an `evals` job checking that every evaluation case is valid and solvable.
 * `release.yml` runs on a `vX.Y.Z` tag: fmt, clippy and tests on Linux, macOS and Windows,
   a Rust 1.88 check, a tag/crate version and CHANGELOG check, then builds `vibe` for Linux
   x86_64, macOS arm64 and x86_64, Windows x86_64 and publishes them with `SHA256SUMS` and

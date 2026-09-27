@@ -43,10 +43,14 @@ documented trait, and plugins can be written in Rust or in any language.
 | Plugins: JSON-RPC over stdio, MCP-compatible tools, Rust helper | ✅ |
 | Structured artefacts (JSON) with repair and retry | ✅ |
 | Resume a run from its persisted state | ✅ |
-| Required validation commands before ready/merge (unreleased) | ✅ |
+| Required validation commands before ready/merge, with automatic fixes | ✅ |
+| One git worktree per subtask attempt, integrated one at a time | ✅ |
+| Token and duration budgets that hold across resumes | ✅ |
+| Container workspace: shell commands isolated with explicit network, mounts and limits | ✅ |
+| Reproducible evaluation suite (ten Rust tasks, independent oracles) | ✅ |
 | `vibe` CLI with live event output | ✅ |
 | User guide, design book, ADRs, API docs | ✅ |
-| Web tools, TUI board, HTTP server, container workspaces, issue importers | roadmap |
+| Streaming, TUI board, web tools, HTTP server, issue importers | roadmap |
 
 ## Install
 
@@ -108,8 +112,8 @@ docs/               mdBook: user guide, design book, ADRs
 
 ## Development
 
-The v0.2 reliability work includes [reproducible evaluations](evals/README.md) and
-[required validation commands](docs/src/user/configuration.md#required-validation-commands-unreleased).
+Behaviour is measured with [reproducible evaluations](evals/README.md). Upgrading from 0.1:
+see [the migration guide](docs/src/user/migration.md).
 
 ```sh
 cargo build --workspace

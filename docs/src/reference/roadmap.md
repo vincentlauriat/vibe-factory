@@ -2,7 +2,7 @@
 
 Vibe Factory is young. The list below is ordered by priority, not by date.
 
-## 0.1 — foundation (this release)
+## 0.1 — foundation (released)
 
 - [x] Layered crate architecture with documented extension points
 - [x] Anthropic and OpenAI-compatible providers, mock provider
@@ -14,21 +14,26 @@ Vibe Factory is young. The list below is ordered by priority, not by date.
 - [x] `vibe` CLI
 - [x] User guide, design book, ADRs, API docs
 
-## 0.2 — reliability (in development)
+## 0.2 — reliability (released)
 
 - [x] Required commands before ready/merge, persistent results and replay on resume
-- [x] Three reproducible Rust evaluation fixtures and an independent acceptance runner
-- [ ] Run real-model evaluations; expand the suite to ten tasks and record success, time and tokens
 - [x] Feed deterministic validation failures into the bounded QA/fix loop
 - [x] Validate the integration candidate, including assisted conflict resolution, before publication
-- [ ] Worktree per subtask, ordered integration and conflict tests
-- [ ] Container workspace provider with explicit network, mounts and resource limits
-- [ ] Persistent token and duration budgets across resumes
-- [ ] Cancellation-safe plugin writer task
-- [ ] Cross-platform release qualification and migration guide
+- [x] Ten reproducible Rust evaluation cases with independent oracles, a suite runner and a
+      summary of success, time and tokens
+- [x] Worktree per subtask, ordered integration and conflict tests
+- [x] Container workspace provider with explicit network, mounts and resource limits
+- [x] Persistent token and duration budgets across resumes
+- [x] Cancellation-safe plugin writer task
+- [x] Cross-platform release qualification and migration guide
+
+Carried over: a published real-model baseline. The harness is ready
+([evals/README.md](https://github.com/vincentlauriat/vibe-factory/blob/main/evals/README.md));
+no score will be claimed before it has been run with repetitions on named models.
 
 ## 0.3 — interaction and capabilities
 
+- [ ] Real-model evaluation baseline, published with the framework commit and models used
 - [ ] Streaming completions and live token output
 - [ ] Terminal UI board with live events
 - [ ] Web fetch and search tools

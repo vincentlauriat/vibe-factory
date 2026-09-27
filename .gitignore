@@ -23,3 +23,4 @@ CHANGES.md
 TODOS.md
 PLAN.md
 .omc/
+__pycache__/
