@@ -64,6 +64,8 @@ pub const BLOCKED_PROGRAMS: &[&str] = &[
     "groupdel",
     "passwd",
     "visudo",
+    "pkexec",
+    "run0",
 ];
 
 /// Programs that reach the network and therefore require network access.
@@ -1478,6 +1480,9 @@ mod tests {
         denied(&p, "ls && sudo rm x");
         denied(&p, "echo $(sudo id)");
         denied(&p, "/usr/bin/sudo ls");
+        denied(&p, "pkexec rm -rf x");
+        denied(&p, "run0 id");
+        denied(&p, "nohup /usr/bin/pkexec id");
         denied(&p, "env FOO=1 nohup sudo ls");
         denied(&p, "(cd /tmp && dd if=/dev/zero of=x)");
     }
