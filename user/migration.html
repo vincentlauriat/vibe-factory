@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Upgrading from 0.1 - Vibe Factory</title>
+        <title>Upgrading - Vibe Factory</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-16e143b3.js";
+            window.path_to_searchindex_js = "../searchindex-15f487dc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4140358a.js"></script>
+        <script src="../toc-f3067f38.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,11 +180,73 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="upgrading-from-01-to-02"><a class="header" href="#upgrading-from-01-to-02">Upgrading from 0.1 to 0.2</a></h1>
+                        <h1 id="upgrading"><a class="header" href="#upgrading">Upgrading</a></h1>
+<h2 id="from-02-to-04"><a class="header" href="#from-02-to-04">From 0.2 to 0.4</a></h2>
+<p>Version 0.4 includes the work planned for 0.3 (streaming, numbered events, human approvals,
+the run manager and the terminal UI) and for 0.4 (<code>vibe serve</code>, the web UI, integrations).
+There was no 0.3 release. Existing <code>.vibe/config.toml</code> files keep working, and runs started
+with 0.2 can be resumed with 0.4.</p>
+<h3 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h3>
+<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.4.0 vibe-cli --force
+vibe --version    # vibe 0.4.0
+vibe doctor
+</code></pre>
+<p>Nothing on disk needs converting. Events written by 0.2 in <code>events.jsonl</code> have no <code>schema</code>
+or <code>seq</code> field: they read as schema 1 and are not replayed by <code>vibe events</code>; a resumed run
+numbers its new events from 1. <code>run.json</code> gains approval fields that load empty.</p>
+<h3 id="behaviour-that-changes-by-default"><a class="header" href="#behaviour-that-changes-by-default">Behaviour that changes by default</a></h3>
+<p><strong>Answers are streamed.</strong> Anthropic and OpenAI-compatible providers now use server-sent
+events, and <code>vibe --json</code> prints <code>agent_delta</code> lines while a step is generated (they are not
+kept in <code>events.jsonl</code>). For a gateway that mishandles streaming, set
+<code>stream = false</code> in its <code>[providers.&lt;name&gt;]</code> table. See <a href="providers.html#streaming">Streaming</a>.</p>
+<p><strong>Project memory is on.</strong> Lessons of a finished task are kept in <code>.vibe/memory.jsonl</code> and
+the relevant ones are recalled by later tasks. Turn it off with
+<code>pipeline.project_memory = false</code>; <code>vibe memory list</code> and <code>vibe memory clear</code> inspect and
+reset it.</p>
+<p><strong>One process per task.</strong> A second <code>vibe run</code> on a task that is already running fails
+instead of racing the first one; <code>vibe cancel &lt;task&gt;</code> stops a run from another terminal.</p>
+<p><strong>Anthropic thinking.</strong> Current Anthropic models (Claude 4.6 and later, including the
+default <code>claude-sonnet-5</code>) get adaptive thinking with an effort level and no temperature,
+which they require. Older models keep the token budget form; <code>extra.thinking</code> forces either.</p>
+<h3 id="new-settings-off-by-default"><a class="header" href="#new-settings-off-by-default">New settings, off by default</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>What it does</th><th>Page</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pipeline.approvals</code></td><td>pause for <code>vibe approve</code> / <code>vibe reject</code> after <code>spec</code>, <code>plan</code> or before <code>merge</code></td><td><a href="configuration.html#human-approvals">Human approvals</a></td></tr>
+<tr><td><code>security.web_allowed_domains</code>, <code>security.search_url</code></td><td>limit <code>web_fetch</code> to some domains; the SearXNG-compatible endpoint that registers <code>web_search</code></td><td><a href="configuration.html#security">Configuration</a></td></tr>
+<tr><td><code>[integrations.github]</code>, <code>[integrations.gitlab]</code></td><td><code>vibe task import</code> and <code>vibe pr</code></td><td><a href="cli.html">CLI</a></td></tr>
+</tbody>
+</table>
+</div>
+<p>New commands: <code>vibe events</code>, <code>vibe approve</code>, <code>vibe reject</code>, <code>vibe cancel</code>, <code>vibe tui</code>,
+<code>vibe serve</code>, <code>vibe memory</code>, <code>vibe task import</code> and <code>vibe pr</code>. A run paused for an approval
+exits with code 2, like any run that waits for a human.</p>
+<h3 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h3>
+<p>The Rust API is pre-1.0 and 0.4 changes it in a few places. Code that only uses the <code>vibe</code>
+command line is not affected.</p>
+<ul>
+<li><code>vibe_core::Event</code> has new variants (<code>AgentDelta</code>, <code>ValidationFinished</code>,
+<code>SubtaskIntegrated</code>, <code>BudgetUpdated</code>, <code>ArtefactWritten</code>, <code>ApprovalRequested</code>,
+<code>ApprovalResolved</code>); a <code>match</code> on it needs a wildcard arm or the new cases.</li>
+<li><code>vibe_core::Envelope</code> has new <code>schema</code> and <code>seq</code> fields: build one with <code>Envelope::now</code>.</li>
+<li><code>ModelProvider::complete_streaming</code> has a default that calls <code>complete</code>; implement it to
+stream. <code>StreamDelta</code> and <code>DeltaSink</code> are new.</li>
+<li><code>PipelineConfig</code> has new <code>approvals</code> and <code>project_memory</code> fields, the provider
+configuration a <code>stream</code> field, <code>SecurityConfig</code> <code>web_allowed_domains</code> and
+<code>search_url</code>, and <code>Config</code> an <code>integrations</code> table: use <code>..Default::default()</code> rather than
+full struct literals.</li>
+<li><code>vibe_pipeline::RunManager</code> starts, resumes, cancels and lists runs and is the seam every
+interface uses (<a href="../design/adr/007-one-seam-many-interfaces.html">ADR-007</a>).
+<code>RunState</code> has new approval fields.</li>
+</ul>
+<h2 id="from-01-to-02"><a class="header" href="#from-01-to-02">From 0.1 to 0.2</a></h2>
 <p>Version 0.2 is about reliability. Existing <code>.vibe/config.toml</code> files keep working, and runs
 started with 0.1 can be resumed with 0.2. This page lists what changes when you upgrade and
 what you may want to turn on.</p>
-<h2 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h2>
+<h3 id="upgrade-1"><a class="header" href="#upgrade-1">Upgrade</a></h3>
 <pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.2.0 vibe-cli --force
 vibe --version    # vibe 0.2.0
 vibe doctor
@@ -192,7 +254,7 @@ vibe doctor
 <p>Nothing on disk needs converting. <code>run.json</code> gains new fields (<code>validations</code>,
 <code>validation_fix_attempts</code>, <code>pending_validation_fix</code>, <code>usage</code>, <code>active_ms</code>); files written by
 0.1 load with empty or zero values, so a resumed 0.1 run starts its budgets from zero.</p>
-<h2 id="behaviour-that-changes-by-default"><a class="header" href="#behaviour-that-changes-by-default">Behaviour that changes by default</a></h2>
+<h3 id="behaviour-that-changes-by-default-1"><a class="header" href="#behaviour-that-changes-by-default-1">Behaviour that changes by default</a></h3>
 <p><strong>One worktree per subtask attempt.</strong> With the default <code>git_worktree</code> workspace, every
 subtask attempt now runs in its own worktree and branch (<code>&lt;task branch&gt;--s&lt;N&gt;-a&lt;attempt&gt;</code>)
 and is merged into the task branch as soon as it is done. You will see:</p>
@@ -219,7 +281,7 @@ exhausted (see below). Scripts that treat 2 as “QA needs a human” should rea
 is being written used to close the plugin’s input. Writes now go through a single writer
 task that never leaves a partial line, so the plugin stays usable after a timeout. A
 request cancelled before its turn is not sent at all.</p>
-<h2 id="new-settings-off-by-default"><a class="header" href="#new-settings-off-by-default">New settings, off by default</a></h2>
+<h3 id="new-settings-off-by-default-1"><a class="header" href="#new-settings-off-by-default-1">New settings, off by default</a></h3>
 <p>All of these are optional; leaving them out keeps the 0.1 behaviour.</p>
 <div class="table-wrapper">
 <table>
@@ -242,7 +304,7 @@ validation_commands = ["cargo fmt --all -- --check", "cargo test --offline"]
 max_tokens = 3_000_000
 max_duration_secs = 7200
 </code></pre>
-<h2 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h2>
+<h3 id="for-library-users-1"><a class="header" href="#for-library-users-1">For library users</a></h3>
 <p>The Rust API is pre-1.0 and 0.2 changes it in a few places. Code that only uses the <code>vibe</code>
 command line is not affected.</p>
 <ul>
