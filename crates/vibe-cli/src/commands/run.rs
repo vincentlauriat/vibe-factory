@@ -129,11 +129,35 @@ async fn execute(ctx: &crate::app::AppContext, args: &RunArgs, ui: Ui) -> Result
             "{}",
             summary_text(&report, &renderer.phase_durations(), &info)
         );
-        if let Some(hint) = next_step_hint(&report, code, number, &info) {
+        let flags = carried_flags(args);
+        if let Some(hint) = next_step_hint(&report, code, number, &info, &flags) {
             println!("\n{hint}");
         }
     }
     Ok(code)
+}
+
+/// Flags of this invocation that a `--resume` must repeat, because they are
+/// not persisted with the run (`--provider`, `--model`, `--workspace`,
+/// `--script`, `--auto-merge`). Empty, or starting with a space.
+fn carried_flags(args: &RunArgs) -> String {
+    let mut out = String::new();
+    if let Some(p) = &args.provider {
+        out.push_str(&format!(" --provider {p}"));
+    }
+    if let Some(m) = &args.model {
+        out.push_str(&format!(" --model {m}"));
+    }
+    if let Some(w) = &args.workspace {
+        out.push_str(&format!(" --workspace {w}"));
+    }
+    if let Some(s) = &args.script {
+        out.push_str(&format!(" --script {}", s.display()));
+    }
+    if args.auto_merge {
+        out.push_str(" --auto-merge");
+    }
+    out
 }
 
 fn next_step_hint(
@@ -141,6 +165,7 @@ fn next_step_hint(
     code: u8,
     number: Option<u32>,
     info: &SummaryInfo,
+    flags: &str,
 ) -> Option<String> {
     let reference = number.map_or_else(|| report.task.id.short(), |n| n.to_string());
     match (report.final_status, code) {
@@ -149,11 +174,11 @@ fn next_step_hint(
             None => format!("Review the work: vibe task show {reference}"),
         }),
         (TaskStatus::Done, _) => None,
-        (_, 0) | (_, 2) | (TaskStatus::Cancelled, _) => {
-            Some(format!("Continue with: vibe run {reference} --resume"))
-        }
+        (_, 0) | (_, 2) | (TaskStatus::Cancelled, _) => Some(format!(
+            "Continue with: vibe run {reference}{flags} --resume"
+        )),
         _ => Some(format!(
-            "Inspect with: vibe task show {reference}; retry with: vibe run {reference} --resume"
+            "Inspect with: vibe task show {reference}; retry with: vibe run {reference}{flags} --resume"
         )),
     }
 }
