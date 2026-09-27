@@ -1,4 +1,5 @@
-//! `vibe approve` and `vibe reject`: answer the approval a paused run waits for.
+//! `vibe approve` and `vibe reject` answer the approval a paused run waits
+//! for; `vibe cancel` stops a run from another terminal.
 
 use std::path::Path;
 
@@ -69,6 +70,32 @@ pub async fn run(
             style::bold().apply_to(format!("{} of task {reference}", record.gate))
         );
         println!("Continue with: vibe run {reference} --resume");
+    }
+    Ok(0)
+}
+
+/// How often `vibe cancel --wait` checks whether the run stopped.
+const CANCEL_WAIT_POLL: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// Ask the process running the task to stop, optionally waiting for it.
+pub async fn cancel(root: &Path, reference: &str, wait: bool, ui: Ui) -> Result<u8> {
+    let store = open_store(root)?;
+    let task = resolve_task(&store, reference).await?;
+    store.request_cancel(task.id).await?;
+    if wait {
+        while store.is_running(task.id).await? {
+            tokio::time::sleep(CANCEL_WAIT_POLL).await;
+        }
+    }
+    if ui.json {
+        ui.print_json(&json!({"task_id": task.id, "cancel_requested": true, "stopped": wait}));
+    } else if wait {
+        println!("{} the run stopped", style::ok().apply_to("✓"));
+    } else {
+        println!(
+            "{} cancellation requested; the run stops after its current step",
+            style::ok().apply_to("✓")
+        );
     }
     Ok(0)
 }

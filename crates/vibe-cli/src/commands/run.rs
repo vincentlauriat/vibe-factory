@@ -4,9 +4,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::sync::watch;
 use vibe_core::{TaskStatus, TaskStore};
-use vibe_pipeline::{RunOptions, RunReport, RunStatus};
+use vibe_pipeline::{RunManager, RunOptions, RunReport, RunStatus};
 
 use super::{resolve_task, task_number};
 use crate::app::{Overrides, build_context, worktree_location};
@@ -81,34 +80,37 @@ async fn execute(ctx: &crate::app::AppContext, args: &RunArgs, ui: Ui) -> Result
         );
     }
 
-    let (cancel_tx, cancel_rx) = watch::channel(false);
-    let ctrl_c = tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_err() {
-            return;
-        }
-        eprintln!(
-            "\n{} cancelling after the current step… press Ctrl-C again to exit now",
-            style::warn().apply_to("!")
-        );
-        let _ = cancel_tx.send(true);
-        if tokio::signal::ctrl_c().await.is_ok() {
-            std::process::exit(i32::from(EXIT_CANCELLED));
-        }
-    });
-
     let options = RunOptions {
         complexity_override: args.complexity.map(Into::into),
         from_phase: args.from.map(Into::into),
         until_phase: args.until.map(Into::into),
         dry_run: args.dry_run,
-        cancel: Some(cancel_rx),
+        cancel: None,
     };
-    let pipeline = ctx.pipeline();
-    let result = if args.resume {
-        pipeline.resume_with(task.id, options).await
+    let manager = RunManager::new(ctx.pipeline());
+    let handle = if args.resume {
+        manager.resume(task.id, options)?
     } else {
-        pipeline.run(task.id, options).await
+        manager.start(task.id, options)?
     };
+    let ctrl_c = {
+        let manager = manager.clone();
+        let task_id = task.id;
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_err() {
+                return;
+            }
+            eprintln!(
+                "\n{} cancelling after the current step… press Ctrl-C again to exit now",
+                style::warn().apply_to("!")
+            );
+            manager.cancel(task_id);
+            if tokio::signal::ctrl_c().await.is_ok() {
+                std::process::exit(i32::from(EXIT_CANCELLED));
+            }
+        })
+    };
+    let result = handle.wait().await;
     ctrl_c.abort();
     let report = result?;
 

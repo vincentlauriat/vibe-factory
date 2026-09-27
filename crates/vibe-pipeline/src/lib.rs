@@ -101,6 +101,7 @@
 pub mod complexity;
 pub mod context;
 pub mod kickoff;
+pub mod manager;
 pub mod phases;
 pub mod pipeline;
 pub mod state;
@@ -114,6 +115,7 @@ pub use context::{
     context_window_for, permissions_for,
 };
 pub use kickoff::{Kickoff, KickoffData, kickoff_for};
+pub use manager::{RunHandle, RunManager};
 pub use pipeline::{Pipeline, PipelineDeps, RunOptions, RunReport, default_profile};
 pub use state::{RunState, RunStatus};
 pub use store::{

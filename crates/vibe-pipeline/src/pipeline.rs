@@ -158,6 +158,62 @@ fn sync_accounting(ctx: &mut RunContext, base: (Usage, u64), started: Instant) {
     ctx.state.active_ms = base.1.saturating_add(now);
 }
 
+/// How often a run checks for a cancellation requested by another process.
+const CANCEL_POLL: Duration = Duration::from_millis(500);
+
+/// Aborts a background task when dropped.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// The run's cancellation token: flips when the caller's token does or when
+/// another process asks to cancel the task (see
+/// [`PipelineStore::take_cancel_request`]). The watcher stops with the
+/// returned guard.
+fn cancel_token(
+    caller: Option<watch::Receiver<bool>>,
+    store: &Arc<dyn PipelineStore>,
+    task: TaskId,
+) -> (watch::Receiver<bool>, AbortOnDrop) {
+    let (tx, rx) = watch::channel(caller.as_ref().is_some_and(|c| *c.borrow()));
+    let store = Arc::clone(store);
+    let watcher = tokio::spawn(async move {
+        let mut caller = caller;
+        loop {
+            let caller_cancelled = async {
+                match caller.as_mut() {
+                    Some(c) => {
+                        if c.changed().await.is_err() {
+                            // The caller dropped its sender: it can never cancel.
+                            std::future::pending::<()>().await;
+                        }
+                    }
+                    None => std::future::pending::<()>().await,
+                }
+            };
+            tokio::select! {
+                () = caller_cancelled => {
+                    if caller.as_ref().is_some_and(|c| *c.borrow()) {
+                        let _ = tx.send(true);
+                        return;
+                    }
+                }
+                () = tokio::time::sleep(CANCEL_POLL) => {
+                    if store.take_cancel_request(task).await.unwrap_or(false) {
+                        let _ = tx.send(true);
+                        return;
+                    }
+                }
+            }
+        }
+    });
+    (rx, AbortOnDrop(watcher))
+}
+
 /// Whether the fix phase must run although the profile skips it.
 fn fix_forced(phase: Phase, state: &RunState) -> bool {
     phase == Phase::Fix && (state.pending_validation_fix.is_some() || state.pending_human_fix)
@@ -369,6 +425,10 @@ impl Pipeline {
         let store = Arc::clone(&self.deps.store);
         let events = self.deps.events.clone();
         let run_id = state.run_id;
+        // One process at a time runs a task; the lock lives until the end.
+        let _run_lock = store.lock_run(task.id).await?;
+        let (cancel, _cancel_watch) = cancel_token(options.cancel.take(), &store, task.id);
+        options.cancel = Some(cancel);
 
         self.router_installed
             .get_or_init(|| async {

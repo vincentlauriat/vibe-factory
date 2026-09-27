@@ -268,6 +268,22 @@ never redone; interrupted ones are retried. When a **failed** run resumes at `bu
 and skipped subtasks go back to pending with their attempt counters reset, and a progress
 note says how many.
 
+## Run manager and locking
+
+`RunManager` is the seam interfaces use ([ADR-007](adr/007-one-seam-many-interfaces.md)):
+`start` and `resume` spawn a run on its own tokio task and return a `RunHandle` to await,
+`cancel` flips that run's cancellation token, `active` lists running tasks and `subscribe`
+returns the live event stream. `vibe run` goes through it; the terminal UI runs several
+tasks at once with it.
+
+`Pipeline::execute` first calls `PipelineStore::lock_run`: `FileTaskStore` takes an
+exclusive OS lock on `run.lock` in the task directory (and writes its pid to `run.owner`), so
+one process at a time runs a task, and a crashed process leaves no stale lock. The run's
+cancellation token combines the caller's token with `PipelineStore::take_cancel_request`,
+polled every 500 ms: `vibe cancel` writes `cancel.request`, which the running process
+consumes. Index updates take `.index.lock` in the tasks directory as well as the in-process
+mutex, so a CLI and another process never interleave them.
+
 ## Approval gates
 
 `pipeline.approvals` lists `ApprovalGate`s. Before a phase runs, the driver computes the

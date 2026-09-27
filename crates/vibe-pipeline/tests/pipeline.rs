@@ -1658,3 +1658,87 @@ fn approvals_need_a_pending_gate_and_rejections_a_reason() {
     assert!(state.resolve_approval(false, "why").is_ok());
     assert_eq!(state.rejection.as_ref().unwrap().comment, "why");
 }
+
+fn slow_coder_harness_routes(h: &Harness, delay_ms: u64) {
+    h.router
+        .route(PLANNER, None, vec![one_subtask_plan(), one_subtask_plan()]);
+    h.router.route_delayed(
+        CODER,
+        None,
+        Duration::from_millis(delay_ms),
+        vec![coder_done("done"), coder_done("done")],
+    );
+    h.router.route(
+        REVIEWER,
+        None,
+        vec![qa("approved", &[]), qa("approved", &[])],
+    );
+}
+
+#[tokio::test]
+async fn run_manager_runs_tasks_in_parallel_and_cancels_one() {
+    let h = Harness::new().await;
+    let a = h.task("Fix typo in README", "teh -> the").await;
+    let b = h.task("Fix typo in CHANGELOG", "teh -> the").await;
+    slow_coder_harness_routes(&h, 300);
+    let manager = vibe_pipeline::RunManager::new(h.pipeline());
+    let mut events = manager.subscribe();
+    let run_a = manager.start(a.id, RunOptions::default()).unwrap();
+    let run_b = manager.start(b.id, RunOptions::default()).unwrap();
+    assert!(manager.start(a.id, RunOptions::default()).is_err());
+    let mut active = manager.active();
+    active.sort();
+    let mut expected = vec![a.id, b.id];
+    expected.sort();
+    assert_eq!(active, expected);
+
+    // Cancel `a` once its coder is working.
+    loop {
+        let e = events.recv().await.unwrap();
+        if let Event::AgentStarted { role, .. } = &e.event
+            && *role == vibe_core::AgentRole::Coder
+        {
+            break;
+        }
+    }
+    assert!(manager.cancel(a.id));
+    let ra = run_a.wait().await.unwrap();
+    let rb = run_b.wait().await.unwrap();
+    assert_eq!(ra.final_status, TaskStatus::Cancelled);
+    assert_eq!(rb.final_status, TaskStatus::Ready);
+    assert!(manager.active().is_empty());
+    assert!(!manager.cancel(a.id));
+}
+
+#[tokio::test]
+async fn one_process_at_a_time_and_cancel_requests_from_another() {
+    let h = Harness::new().await;
+    let task = h.task("Fix typo in README", "teh -> the").await;
+    slow_coder_harness_routes(&h, 1500);
+    let first = vibe_pipeline::RunManager::new(h.pipeline());
+    let running = first.start(task.id, RunOptions::default()).unwrap();
+    // Wait until the run holds its lock.
+    for _ in 0..100 {
+        if h.store.is_running(task.id).await.unwrap() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(h.store.is_running(task.id).await.unwrap());
+
+    // A second store (another process) cannot run the task...
+    let other = vibe_pipeline::FileTaskStore::open(h.root()).unwrap();
+    let err = other.lock_run(task.id).await.err().unwrap();
+    assert!(err.message.contains("already being run"), "{err}");
+    // ...but can ask the running one to stop.
+    other.request_cancel(task.id).await.unwrap();
+    let report = running.wait().await.unwrap();
+    assert_eq!(report.final_status, TaskStatus::Cancelled);
+    assert!(!h.store.is_running(task.id).await.unwrap());
+    assert!(
+        other.request_cancel(task.id).await.is_err(),
+        "not running any more"
+    );
+    // The lock is free again.
+    assert!(other.lock_run(task.id).await.unwrap().is_some());
+}

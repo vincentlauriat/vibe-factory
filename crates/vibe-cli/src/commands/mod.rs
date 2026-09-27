@@ -47,6 +47,9 @@ pub async fn dispatch(cli: Cli) -> Result<u8> {
         Command::Reject { reference, reason } => {
             approval::run(&find_project_root(project)?, &reference, false, reason, ui).await
         }
+        Command::Cancel { reference, wait } => {
+            approval::cancel(&find_project_root(project)?, &reference, wait, ui).await
+        }
         Command::Events(args) => events::run(&find_project_root(project)?, args, ui).await,
         Command::Status => status::run(&find_project_root(project)?, ui).await,
         Command::Config(cmd) => config::run(&find_project_root(project)?, cmd, ui),

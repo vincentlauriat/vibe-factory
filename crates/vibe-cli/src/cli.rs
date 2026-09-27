@@ -74,6 +74,15 @@ pub enum Command {
         #[arg(long)]
         reason: String,
     },
+    /// Ask the process running a task to stop after its current step.
+    Cancel {
+        /// Task number, `NNN-slug` directory name, or id prefix.
+        #[arg(value_name = "REF")]
+        reference: String,
+        /// Wait until the run has stopped.
+        #[arg(long)]
+        wait: bool,
+    },
     /// Replay the logged events of a task's run, optionally following new ones.
     Events(EventsArgs),
     /// Project summary: tasks per status, last runs, active worktrees.

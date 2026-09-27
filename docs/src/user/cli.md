@@ -206,6 +206,17 @@ Answer the approval a paused run is waiting for (see
 [Human approvals](configuration.md#human-approvals)). The run is not resumed: continue it
 with `vibe run <REF> --resume`. Both fail when the run is not waiting for an approval.
 
+## `vibe cancel`
+
+```sh
+vibe cancel <REF> [--wait]
+```
+
+Asks the process that runs the task (a `vibe run` in another terminal, for example) to stop
+after its current step, as `Ctrl-C` would. `--wait` returns once the run has stopped. It
+fails when no process runs the task. Only one process at a time can run a given task: a
+second `vibe run` fails with `already being run by another process`.
+
 ## `vibe events`
 
 ```sh

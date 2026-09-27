@@ -1266,3 +1266,62 @@ fn approval_gate_pauses_and_approve_lets_the_run_continue() {
             .any(|l| l["event"]["type"] == "approval_resolved" && l["event"]["comment"] == "fine")
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn cancel_stops_a_run_in_another_process() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    p.vibe()
+        .args(["cancel", "1"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("not running"));
+    let script = p.write_script(
+        "slow-script.json",
+        &json!({"routes": {
+            "planner": [fenced(json!({"approach": "wait", "phases": [
+                {"name": "Only", "subtasks": [{"title": "Wait", "description": "sleep"}]}
+            ]}))],
+            "coder": [
+                {"tool": "bash", "input": {"command": "sleep 2"}},
+                {"tool": "bash", "input": {"command": "sleep 2"}},
+                fenced(json!({"status": "done", "summary": "slept"}))
+            ]
+        }}),
+    );
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("vibe"))
+        .current_dir(p.root())
+        .env("NO_COLOR", "1")
+        .env("HOME", p.root().join(".home"))
+        .args([
+            "run",
+            "1",
+            "--complexity",
+            "trivial",
+            "--workspace",
+            "in_place",
+            "--script",
+        ])
+        .arg(&script)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let out = p.vibe().args(["cancel", "1", "--wait"]).output().unwrap();
+        if out.status.success() {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the run never started"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let status = child.wait().unwrap();
+    assert_eq!(status.code(), Some(130));
+    assert_eq!(p.task_json(1)["status"], "cancelled");
+}

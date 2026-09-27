@@ -44,6 +44,56 @@ pub const RUN_FILE: &str = "run.json";
 pub const EVENTS_FILE: &str = "events.jsonl";
 /// Name of the progress notes inside a task directory.
 pub const PROGRESS_FILE: &str = "progress.md";
+/// Lock file serialising index updates across processes (in [`TASKS_DIR`]).
+pub const INDEX_LOCK_FILE: &str = ".index.lock";
+/// Lock file held by the process running a task (in the task directory).
+pub const RUN_LOCK_FILE: &str = "run.lock";
+/// Process id of the holder of [`RUN_LOCK_FILE`], for messages.
+pub const RUN_OWNER_FILE: &str = "run.owner";
+/// Present when another process asked the running process to cancel.
+pub const CANCEL_FILE: &str = "cancel.request";
+
+/// An exclusive lock on a file, released when dropped or when the process
+/// ends (the operating system releases it even after a crash).
+#[derive(Debug)]
+pub struct FileLock {
+    _file: std::fs::File,
+}
+
+impl FileLock {
+    /// Take the lock on `path` (created if needed), waiting for it.
+    pub async fn acquire(path: PathBuf) -> Result<Self> {
+        let file = tokio::task::spawn_blocking(move || -> std::io::Result<std::fs::File> {
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(&path)?;
+            fs4::fs_std::FileExt::lock_exclusive(&file)?;
+            Ok(file)
+        })
+        .await
+        .map_err(|e| Error::storage(format!("lock task failed: {e}")))??;
+        Ok(Self { _file: file })
+    }
+
+    /// Take the lock on `path` (created if needed) if it is free.
+    pub fn try_acquire(path: &Path) -> Result<Option<Self>> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(path)?;
+        if fs4::fs_std::FileExt::try_lock_exclusive(&file)? {
+            Ok(Some(Self { _file: file }))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Proof that this process runs a task; see [`PipelineStore::lock_run`].
+pub type RunLock = Box<dyn std::any::Any + Send + Sync>;
 
 /// A task-scoped memory file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -91,6 +141,21 @@ pub trait PipelineStore: TaskStore {
     /// A sink recording the events of `run` for the task, if the store keeps
     /// an event log.
     async fn event_sink(&self, id: TaskId, run: RunId) -> Result<Option<Arc<dyn EventSink>>>;
+
+    /// Take the lock that lets one process at a time run the task, for as
+    /// long as the returned value lives. Fails when another process holds
+    /// it. Default: no locking.
+    async fn lock_run(&self, id: TaskId) -> Result<Option<RunLock>> {
+        let _ = id;
+        Ok(None)
+    }
+
+    /// Whether another process asked to cancel the task's run; the request
+    /// is consumed. Default: never.
+    async fn take_cancel_request(&self, id: TaskId) -> Result<bool> {
+        let _ = id;
+        Ok(false)
+    }
 
     /// Every logged event of the task, in log order. Lines that cannot be
     /// read are skipped. Default: none (the store keeps no log).
@@ -146,6 +211,29 @@ impl FileTaskStore {
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Serialise index updates with other processes (the in-process mutex
+    /// must be held too).
+    async fn lock_index_file(&self) -> Result<FileLock> {
+        FileLock::acquire(self.root.join(INDEX_LOCK_FILE)).await
+    }
+
+    /// Ask the process running the task to cancel it. Fails when no process
+    /// runs it.
+    pub async fn request_cancel(&self, id: TaskId) -> Result<()> {
+        let dir = self.task_dir(id).await?;
+        if FileLock::try_acquire(&dir.join(RUN_LOCK_FILE))?.is_some() {
+            return Err(Error::config("the task is not running"));
+        }
+        tokio::fs::write(dir.join(CANCEL_FILE), b"cancel\n").await?;
+        Ok(())
+    }
+
+    /// Whether a process currently runs the task.
+    pub async fn is_running(&self, id: TaskId) -> Result<bool> {
+        let dir = self.task_dir(id).await?;
+        Ok(FileLock::try_acquire(&dir.join(RUN_LOCK_FILE))?.is_none())
     }
 
     async fn read_index(&self) -> Result<Index> {
@@ -224,6 +312,7 @@ impl FileTaskStore {
     /// the task is new.
     async fn ensure_dir(&self, task: &Task) -> Result<PathBuf> {
         let _guard = self.index_lock.lock().await;
+        let _file = self.lock_index_file().await?;
         let mut index = self.read_index().await?;
         let dir = match index.tasks.get(&task.id) {
             Some(e) => e.dir.clone(),
@@ -347,6 +436,7 @@ impl TaskStore for FileTaskStore {
 
     async fn delete_task(&self, id: TaskId) -> Result<()> {
         let _guard = self.index_lock.lock().await;
+        let _file = self.lock_index_file().await?;
         let mut index = self.read_index().await?;
         let Some(entry) = index.tasks.remove(&id) else {
             return Err(Error::storage(format!("unknown task {id}")));
@@ -470,6 +560,37 @@ impl PipelineStore for FileTaskStore {
     async fn event_sink(&self, id: TaskId, run: RunId) -> Result<Option<Arc<dyn EventSink>>> {
         let path = self.task_dir(id).await?.join(EVENTS_FILE);
         Ok(Some(Arc::new(FileEventSink::new(path).for_run(run))))
+    }
+
+    async fn lock_run(&self, id: TaskId) -> Result<Option<RunLock>> {
+        let dir = self.task_dir(id).await?;
+        let Some(lock) = FileLock::try_acquire(&dir.join(RUN_LOCK_FILE))? else {
+            let owner = tokio::fs::read_to_string(dir.join(RUN_OWNER_FILE))
+                .await
+                .map(|pid| format!(" (process {})", pid.trim()))
+                .unwrap_or_default();
+            return Err(Error::config(format!(
+                "task {id} is already being run by another process{owner}; wait for it or \
+                 cancel it with `vibe cancel`"
+            )));
+        };
+        tokio::fs::write(dir.join(RUN_OWNER_FILE), std::process::id().to_string()).await?;
+        // A request left over from an earlier run must not cancel this one.
+        match tokio::fs::remove_file(dir.join(CANCEL_FILE)).await {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+        Ok(Some(Box::new(lock)))
+    }
+
+    async fn take_cancel_request(&self, id: TaskId) -> Result<bool> {
+        let path = self.task_dir(id).await?.join(CANCEL_FILE);
+        match tokio::fs::remove_file(&path).await {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(e.into()),
+        }
     }
 
     async fn load_events(&self, id: TaskId) -> Result<Vec<Envelope>> {
