@@ -40,6 +40,7 @@ mod cli;
 mod commands;
 mod mock;
 mod render;
+mod tui;
 mod util;
 
 use std::process::ExitCode;

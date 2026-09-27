@@ -5,8 +5,9 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use serde_json::json;
-use vibe_core::{Envelope, Event};
-use vibe_pipeline::{PipelineStore, RunStatus};
+use vibe_core::{Envelope, Event, TaskId};
+use vibe_pipeline::state::ApprovalRecord;
+use vibe_pipeline::{FileTaskStore, PipelineStore, RunStatus};
 
 use super::{resolve_task, task_number};
 use crate::app::open_store;
@@ -23,34 +24,7 @@ pub async fn run(
 ) -> Result<u8> {
     let store = open_store(root)?;
     let task = resolve_task(&store, reference).await?;
-    let mut state = store
-        .load_run_state(task.id)
-        .await?
-        .context("the task has not been run yet")?;
-    if state.status == RunStatus::Running {
-        anyhow::bail!("the run is still running; wait until it pauses for approval");
-    }
-    let record = state.resolve_approval(approved, comment)?;
-    store.save_run_state(&state).await?;
-
-    let last_seq = store
-        .load_events(task.id)
-        .await?
-        .iter()
-        .filter(|e| e.event.run_id() == Some(state.run_id))
-        .filter_map(|e| e.seq)
-        .max()
-        .unwrap_or(0);
-    let mut envelope = Envelope::now(Event::ApprovalResolved {
-        run: state.run_id,
-        gate: record.gate,
-        approved,
-        comment: record.comment.clone(),
-    });
-    envelope.seq = Some(last_seq + 1);
-    if let Some(sink) = store.event_sink(task.id, state.run_id).await? {
-        sink.on_event(&envelope).await;
-    }
+    let record = decide(&store, task.id, approved, comment).await?;
 
     let reference = task_number(&store, &task)
         .await
@@ -72,6 +46,45 @@ pub async fn run(
         println!("Continue with: vibe run {reference} --resume");
     }
     Ok(0)
+}
+
+/// Record a decision on the approval the task's run waits for, in
+/// `run.json` and in the run's event log.
+pub async fn decide(
+    store: &FileTaskStore,
+    task: TaskId,
+    approved: bool,
+    comment: String,
+) -> Result<ApprovalRecord> {
+    let mut state = store
+        .load_run_state(task)
+        .await?
+        .context("the task has not been run yet")?;
+    if state.status == RunStatus::Running {
+        anyhow::bail!("the run is still running; wait until it pauses for approval");
+    }
+    let record = state.resolve_approval(approved, comment)?;
+    store.save_run_state(&state).await?;
+
+    let last_seq = store
+        .load_events(task)
+        .await?
+        .iter()
+        .filter(|e| e.event.run_id() == Some(state.run_id))
+        .filter_map(|e| e.seq)
+        .max()
+        .unwrap_or(0);
+    let mut envelope = Envelope::now(Event::ApprovalResolved {
+        run: state.run_id,
+        gate: record.gate,
+        approved,
+        comment: record.comment.clone(),
+    });
+    envelope.seq = Some(last_seq + 1);
+    if let Some(sink) = store.event_sink(task, state.run_id).await? {
+        sink.on_event(&envelope).await;
+    }
+    Ok(record)
 }
 
 /// How often `vibe cancel --wait` checks whether the run stopped.

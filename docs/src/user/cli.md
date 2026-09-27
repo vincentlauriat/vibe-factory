@@ -217,6 +217,33 @@ after its current step, as `Ctrl-C` would. `--wait` returns once the run has sto
 fails when no process runs the task. Only one process at a time can run a given task: a
 second `vibe run` fails with `already being run by another process`.
 
+## `vibe tui`
+
+```sh
+vibe tui
+```
+
+A terminal board of the project: tasks on the left (a `●` marks the ones a process is
+running, whichever terminal started them), the selected task on the right with its run
+state, a budget gauge and three tabs: **Activity** (phases, agents, tools, validations,
+approvals, and the text of the current step as the model writes it), **Plan** (subtasks and
+their status) and **Changes** (the workspace diff summary).
+
+| Key | Action |
+|-----|--------|
+| `↑` `↓` (or `k` `j`) | select a task |
+| `n` | new task (type the title, `Enter`) |
+| `r` / `R` | run / resume the selected task |
+| `c` | cancel its run (also one started in another terminal) |
+| `a` / `x` | approve / reject what the run waits for (a rejection asks for a reason) |
+| `Tab` | next tab |
+| `q` | quit; runs started from the UI are cancelled and stay resumable |
+
+The UI reads the same files and events as the other commands, so `vibe run`, `vibe approve`
+or `vibe cancel` in another terminal show up in it. Runs use the project configuration
+(there are no `--provider` or `--model` flags; set `default_model` or `[phases]`). It needs an
+interactive terminal.
+
 ## `vibe events`
 
 ```sh

@@ -83,6 +83,8 @@ pub enum Command {
         #[arg(long)]
         wait: bool,
     },
+    /// Open the terminal UI: task board, live run view, approvals.
+    Tui,
     /// Replay the logged events of a task's run, optionally following new ones.
     Events(EventsArgs),
     /// Project summary: tasks per status, last runs, active worktrees.

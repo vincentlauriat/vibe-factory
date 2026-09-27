@@ -49,8 +49,11 @@ documented trait, and plugins can be written in Rust or in any language.
 | Container workspace: shell commands isolated with explicit network, mounts and limits | ✅ |
 | Reproducible evaluation suite (ten Rust tasks, independent oracles) | ✅ |
 | `vibe` CLI with live event output | ✅ |
+| Streaming answers, numbered events, `vibe events --follow` (unreleased) | ✅ |
+| Human approvals of the spec, plan or merge (unreleased) | ✅ |
+| `vibe tui`: task board and live run view (unreleased) | ✅ |
 | User guide, design book, ADRs, API docs | ✅ |
-| Streaming, TUI board, web tools, HTTP server, issue importers | roadmap |
+| HTTP server and web UI, issue importers, web tools | roadmap |
 
 ## Install
 
