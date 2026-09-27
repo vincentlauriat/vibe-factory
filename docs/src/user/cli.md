@@ -53,7 +53,8 @@ vibe init [--force]
 Creates `.vibe/config.toml` with every key at its default value, under a short comment, in
 the project directory (the current directory unless `-C` is given). It refuses to overwrite
 an existing file unless `--force` is given. In a git repository it also adds `worktrees/`
-and `tool-output/` to `.vibe/.gitignore`, keeping any lines already there; outside git it
+and `tool-output/` to `.vibe/.gitignore` (with a comment explaining that `tasks/` is
+committable on purpose), keeping any lines already there; outside git it
 warns that worktree isolation needs git. Run `vibe doctor` afterwards. The file is described in
 [Configuration](configuration.md).
 
@@ -111,7 +112,8 @@ vibe task discard <REF> [-y | --yes]
 
 Removes the task's workspace (worktree and branch; nothing for `in_place`) and deletes the
 task directory. It asks for confirmation on a terminal unless `--yes` is given; when standard
-input is not a terminal it does not ask. Unmerged work on the task branch is lost.
+input is not a terminal it refuses to run without `--yes`. Unmerged work on the task branch
+is lost.
 
 ## `vibe run`
 

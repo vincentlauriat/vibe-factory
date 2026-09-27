@@ -160,7 +160,7 @@ Resuming #1 Add a --json flag to the export command (model anthropic/claude-sonn
   ⟵ ok (4 ms)
   ⟶ bash(command: "cargo build")
   ⟵ ok (8412 ms)
-  ● coder finished: 7 step(s), 31.4k in / 1.9k out tokens, {"reason":"completed"}
+  ● coder finished: 7 step(s), 31.4k in / 1.9k out tokens, completed
   ▸ subtask 1/3 Add the --json option to the CLI definition: done
   ▸ subtask 2/3 Serialise records as JSON in export: in_progress
   ● coder · subtask 2/3 Serialise records as JSON in export
@@ -174,7 +174,7 @@ Resuming #1 Add a --json flag to the export command (model anthropic/claude-sonn
   ⟵ ok (2 ms)
   ⟶ bash(command: "cargo test export")
   ⟵ ok (5810 ms)
-  ● coder finished: 12 step(s), 58.0k in / 3.4k out tokens, {"reason":"completed"}
+  ● coder finished: 12 step(s), 58.0k in / 3.4k out tokens, completed
   ▸ subtask 2/3 Serialise records as JSON in export: done
   ▸ subtask 3/3 Test the --json output: in_progress
   …
@@ -185,7 +185,7 @@ Resuming #1 Add a --json flag to the export command (model anthropic/claude-sonn
   ● qa_reviewer
   ⟶ bash(command: "cargo test")
   ⟵ ok (9204 ms)
-  ● qa_reviewer finished: 15 step(s), 39.8k in / 1.9k out tokens, {"reason":"completed"}
+  ● qa_reviewer finished: 15 step(s), 39.8k in / 1.9k out tokens, completed
 ✓ qa: round 1: Approved (0 issue(s)) (1 min 03 s)
 
 ── merge ──────────

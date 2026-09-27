@@ -231,7 +231,7 @@ pub struct VibeConfig {
     #[serde(default)]
     pub security: SecurityConfig,
     /// Plugins to load.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugins: Vec<PluginConfig>,
     /// Base branch for worktrees (default: current branch).
     #[serde(default, skip_serializing_if = "Option::is_none")]
