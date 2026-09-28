@@ -1621,7 +1621,8 @@ fn global_events_are_tagged_filtered_and_ordered() {
         .stderr(predicate::str::contains("run_done"));
 }
 
-/// Wait for `child` at most `secs` seconds.
+/// Wait for `child` at most `secs` seconds. Used by the unix-only `--follow` tests.
+#[cfg(unix)]
 fn wait_for(child: &mut std::process::Child, secs: u64) -> std::process::ExitStatus {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
     loop {
