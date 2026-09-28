@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
-# Build → sign (Developer ID + Hardened Runtime) → DMG → notarize → staple.
-# Adapted from Templates/AppKitTemplate/Scripts/release.sh for Vibe Factory.
-# Plain DMG (no Finder layout, no Sparkle): both come with the first tagged
-# release of the app. Not run in CI.
+# Build → sign (Developer ID + Hardened Runtime) → DMG → notarize → staple →
+# Sparkle EdDSA signature → appcast.xml.
+# Adapted from Templates/Scripts/release-full.sh for Vibe Factory. Plain DMG
+# with an /Applications alias (no Finder background). Not run in CI.
+#
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ SPARKLE SIGNING KEY — DO NOT REGENERATE                                    │
+# │                                                                            │
+# │ Updates are EdDSA-signed with the private key in the login keychain under  │
+# │ account "VibeFactory". Its public half is SUPublicEDKey in project.yml:    │
+# │     lnbeM5Vs5cK+gFpOLx3qf6nIw+BAPRKQtul811Te3sk=                           │
+# │ Never run `generate_keys` again for this account and never change          │
+# │ SUPublicEDKey: installed apps would reject every later update. Back it up: │
+# │     .sparkle-tools/bin/generate_keys -x backup.txt --account VibeFactory   │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# Publishing (not done by this script):
+#   gh release upload v<version> release/VibeFactory-<version>.dmg
+#   then commit appcast.xml to main (SUFeedURL reads it from there).
 #
 # Usage:   ./Scripts/release.sh <version>      (from apps/macos/VibeFactory)
-# Example: ./Scripts/release.sh 0.1.0
+# Example: ./Scripts/release.sh 0.5.0
 #
 # Reuses Vincent's shared Apple credentials (same account for all Mac apps):
 #   - Developer ID Application: Vincent LAURIAT (KFLACS69T9)
@@ -70,13 +85,15 @@ trap 'rm -rf "$STAGING_DIR"' EXIT
 STAGING="$STAGING_DIR/$APP_NAME.app"
 ditto --norsrc --noextattr --noacl "$APP" "$STAGING"
 
-# 5. Codesign with Hardened Runtime + secure timestamp (retry: Apple TS is flaky).
-#    No nested frameworks: VibeAPI is a static Swift package linked into the app.
+# 5. Codesign with Hardened Runtime + secure timestamp (retry: Apple TS is flaky),
+#    deepest first. Sparkle's nested binaries keep their own (no) entitlements;
+#    only the app gets VibeFactory.entitlements. VibeAPI is linked statically.
 codesign_ts() {
-  local target="$1" i
+  local target="$1" entitlements="${2:-}" i
+  local args=(--force --options runtime --timestamp --sign "$SIGNING_IDENTITY")
+  [ -n "$entitlements" ] && args+=(--entitlements "$entitlements")
   for i in 1 2 3 4 5; do
-    if codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" \
-         --entitlements "$ROOT/VibeFactory/VibeFactory.entitlements" "$target"; then
+    if codesign "${args[@]}" "$target"; then
       return 0
     fi
     echo "  …codesign retry $i/5 (timestamp server) in 5s" >&2
@@ -85,8 +102,17 @@ codesign_ts() {
   echo "✗ codesign failed for $target" >&2
   return 1
 }
-echo "▶︎ codesign (Developer ID, Hardened Runtime)"
-codesign_ts "$STAGING"
+echo "▶︎ codesign Sparkle.framework (nested binaries first)"
+SPARKLE_FW="$STAGING/Contents/Frameworks/Sparkle.framework"
+[ -d "$SPARKLE_FW" ] || { echo "✗ Sparkle.framework not embedded in the app" >&2; exit 1; }
+SPARKLE_VER="$SPARKLE_FW/Versions/B"
+codesign_ts "$SPARKLE_VER/XPCServices/Downloader.xpc"
+codesign_ts "$SPARKLE_VER/XPCServices/Installer.xpc"
+codesign_ts "$SPARKLE_VER/Autoupdate"
+codesign_ts "$SPARKLE_VER/Updater.app"
+codesign_ts "$SPARKLE_FW"
+echo "▶︎ codesign the app (Developer ID, Hardened Runtime)"
+codesign_ts "$STAGING" "$ROOT/VibeFactory/VibeFactory.entitlements"
 codesign --verify --strict --deep --verbose=1 "$STAGING"
 
 # 6. Plain DMG with an /Applications alias
@@ -125,7 +151,48 @@ echo "▶︎ independent verification"
 spctl -a -t exec -vv "$RELEASED_APP"          # expected: accepted, source=Notarized Developer ID
 codesign --verify --deep --strict --verbose=2 "$RELEASED_APP"
 
+# 9. Sparkle: EdDSA-sign the stapled DMG and write appcast.xml. Sparkle compares
+#    <sparkle:version> with the installed CFBundleVersion (the build number),
+#    not with the marketing version.
+SPARKLE_VERSION="2.9.1"   # same as the Sparkle package in project.yml
+SPARKLE_TOOLS="$ROOT/.sparkle-tools"
+if [ ! -x "$SPARKLE_TOOLS/bin/sign_update" ]; then
+  echo "▶︎ fetch Sparkle $SPARKLE_VERSION tools"
+  mkdir -p "$SPARKLE_TOOLS"
+  curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz" \
+    | tar -xJ -C "$SPARKLE_TOOLS"
+fi
+echo "▶︎ Sparkle signature (keychain account VibeFactory)"
+# Prints: sparkle:edSignature="…" length="…"
+SPARKLE_SIG_LINE="$("$SPARKLE_TOOLS/bin/sign_update" --account VibeFactory "$DMG")"
+APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$RELEASED_APP/Contents/Info.plist")"
+REPO_URL="https://github.com/vincentlauriat/vibe-factory"
+cat > "$ROOT/appcast.xml" <<APPCAST
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Vibe Factory</title>
+    <link>https://raw.githubusercontent.com/vincentlauriat/vibe-factory/main/apps/macos/VibeFactory/appcast.xml</link>
+    <description>Vibe Factory macOS app updates</description>
+    <language>en</language>
+    <item>
+      <title>$VERSION</title>
+      <pubDate>$(LC_ALL=C date -R)</pubDate>
+      <sparkle:version>$APP_BUILD</sparkle:version>
+      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>$REPO_URL/releases/tag/v$VERSION</sparkle:releaseNotesLink>
+      <enclosure
+        url="$REPO_URL/releases/download/v$VERSION/$(basename "$DMG")"
+        type="application/octet-stream"
+        $SPARKLE_SIG_LINE />
+    </item>
+  </channel>
+</rss>
+APPCAST
+
 SIZE="$(du -h "$DMG" | cut -f1 | tr -d ' ')"
 echo
-echo "✅ Built, signed, notarized & stapled: $(basename "$DMG") ($SIZE)"
+echo "✅ Built, signed, notarized, stapled & Sparkle-signed: $(basename "$DMG") ($SIZE)"
 echo "   Verified app: $RELEASED_APP"
+echo "   appcast.xml written (sparkle:version $APP_BUILD) — commit it to main after uploading the DMG"

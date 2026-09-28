@@ -12,3 +12,4 @@ xcuserdata/
 # Release artefacts (Scripts/release.sh)
 release/
 *.dmg
+.sparkle-tools/
