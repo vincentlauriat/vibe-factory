@@ -48,6 +48,9 @@ final class ProjectSession: Identifiable {
     private(set) var finishedRuns = 0
     /// A task to show, asked by a notification click; the window consumes it.
     var requestedTask: String?
+    /// The variables given to `vibe serve` changed while a run was going: the
+    /// server restarts with them once no task runs.
+    private(set) var restartPending = false
 
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private var server: ServerProcess?
@@ -135,6 +138,18 @@ final class ProjectSession: Identifiable {
     func retry() async {
         await stop()
         await start()
+    }
+
+    /// The variables given to `vibe serve` changed (Settings): a server started
+    /// by this session only reads them at launch, so restart it, now if no task
+    /// runs, else after the last run ends. A remote server is not ours.
+    func environmentChanged() {
+        guard case .folder = ref, state != .idle else { return }
+        if runningRows.isEmpty {
+            Task { await retry() }
+        } else {
+            restartPending = true
+        }
     }
 
     private func cancelTasks() {
@@ -272,6 +287,10 @@ final class ProjectSession: Identifiable {
         do {
             rows = try await client.tasks()
             boardError = nil
+            if restartPending, runningRows.isEmpty {
+                restartPending = false
+                Task { await retry() }
+            }
         } catch is CancellationError {
         } catch {
             boardError = error.localizedDescription
@@ -383,6 +402,11 @@ final class SessionRegistry {
         while servers.contains(where: \.isRunning), Date() < deadline {
             Thread.sleep(forTimeInterval: 0.05)
         }
+    }
+
+    /// The variables given to `vibe serve` changed: every session restarts its server.
+    func environmentChanged() {
+        for session in sessions.values { session.environmentChanged() }
     }
 
     /// A notification was clicked: show the task in its project's window.
