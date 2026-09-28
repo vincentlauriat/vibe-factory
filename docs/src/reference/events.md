@@ -1,8 +1,10 @@
 # Events
 
 Everything the engine does is published as an event. Interfaces (the CLI, `vibe events`,
-the terminal UI, and later `vibe serve`) are built on events only, so this page is a
-public, versioned contract ([ADR-007](../design/adr/007-one-seam-many-interfaces.md)).
+`vibe history`, `vibe trace`, the terminal UI, `vibe serve` and its clients) are built on
+events only, so this page is a public, versioned contract
+([ADR-007](../design/adr/007-one-seam-many-interfaces.md),
+[ADR-008](../design/adr/008-trace-store-and-read-layer.md)).
 
 ## Envelope
 
@@ -102,3 +104,32 @@ Every field added in 0.5 is optional when reading, so older logs still load unde
 `exit_code` and `output_file` as `null`, `timed_out` as `false`, `output_chars` as `0`,
 `model` as `""`, and `run_finished` without totals reads `usage` as zeros, `active_ms` as
 `0` and `started_at` as `1970-01-01T00:00:00Z`.
+
+## Events of every task
+
+A task's `events.jsonl` does not name its task: it is implied by the directory. Views over
+the whole project (`vibe events` without a task, `GET /api/events`, `GET /api/stream`, the
+Activity screens) read every task's log and tag each envelope with its task, serialised
+flat, the envelope's fields next to the tag:
+
+```json
+{"task":"6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19","number":3,"schema":2,"seq":17,"at":"2026-09-27T10:00:00Z","event":{"type":"phase_started","run":"…","phase":"build"}}
+```
+
+`task` is the task id and `number` its number on the board. This shape is
+`vibe_pipeline::TaggedEnvelope`.
+
+Tagged events are ordered by an **event cursor**: the time `at`, then the task number, then
+`seq` (`0` when absent). It is written `<nanoseconds since the epoch>-<number>-<seq>`, for
+example `1790000000123456789-3-17`, and serves as the id of the events of `/api/stream`. A
+client that resumes after the cursor of the last event it saw gets neither a repeat nor a
+loss of events of other tasks logged at the same instant; `0-0-0` means "from the start".
+
+The order across tasks is the order of the `at` times, and each process stamps its own
+events. Events of one task always come in order, but a `vibe run` in another process whose
+clock reads slightly earlier can log an event whose cursor sorts before one already
+delivered for another task. A live follower still delivers it, once, so cursors are not
+always increasing on the wire; a client that was disconnected while it was logged and
+resumes from a later cursor does not get it. When the state of one task must be exact,
+reload that task's events (`vibe events <REF>`, `GET /api/tasks/{ref}/events`), which are
+ordered by `seq`.

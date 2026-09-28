@@ -12,11 +12,13 @@ cooperating AI agents inside an isolated git workspace.
 ## Layered crates
 
 ```text
-vibe-cli → { vibe-pipeline → vibe-agents, vibe-providers, vibe-tools, vibe-workspace, vibe-plugins } → vibe-core
+vibe-cli → { vibe-pipeline → { vibe-agents, vibe-workspace }, vibe-providers, vibe-tools, vibe-plugins } → vibe-core
+apps/macos, editors/vscode, web UI → HTTP API of `vibe serve` (vibe-cli)
 ```
 
 Every crate depends on `vibe-core` only, except `vibe-pipeline` which also depends on
-`vibe-agents`. Concrete implementations meet only in `vibe-cli`, through the `Registry`.
+`vibe-agents`, and on `vibe-workspace` for the read-only git queries of its read layer.
+Concrete implementations meet only in `vibe-cli`, through the `Registry`.
 
 | Crate | Owns |
 |-------|------|
@@ -25,9 +27,9 @@ Every crate depends on `vibe-core` only, except `vibe-pipeline` which also depen
 | `vibe-tools` | Built-in tools (`read_file`, `write_file`, `edit_file`, `list_dir`, `glob`, `grep`, `bash`), shell command parser and security policy, output truncation. |
 | `vibe-workspace` | Git worktree provider (open/reopen, changes, merge, discard), in-place provider, optional AI-assisted conflict resolution, commit helpers. |
 | `vibe-plugins` | Vibe Plugin Protocol (JSON-RPC 2.0 over stdio, MCP-shaped), plugin process client, manifests and discovery, plugin host, `PluginServer` helper for writing plugins in Rust. |
-| `vibe-agents` | `AgentRunner` agentic loop (parallel non-mutating tools, hooks, context budgeting, cancellation), structured-output extraction and repair, continuation after context exhaustion, built-in prompts and agent specs, TOML agent overrides. |
-| `vibe-pipeline` | File-backed `TaskStore` under `.vibe/tasks/NNN-slug/`, complexity profiles, phase orchestration, parallel subtask execution honouring `depends_on`, QA/fix loop with escalation, run state and resume, event log. |
-| `vibe-cli` | `vibe` binary: `init`, `task add|list|show|discard`, `run`, `status`, `config`, `agents`, `plugins`, `doctor`; live event rendering. |
+| `vibe-agents` | `AgentRunner` agentic loop (parallel non-mutating tools, hooks, context budgeting, cancellation), structured-output extraction and repair, continuation after context exhaustion, built-in prompts and agent specs, TOML agent overrides, trace of complete tool outputs (`ToolTrace`). |
+| `vibe-pipeline` | File-backed `TaskStore` under `.vibe/tasks/NNN-slug/`, complexity profiles, phase orchestration, parallel subtask execution honouring `depends_on`, QA/fix loop with escalation, approvals, budgets, run state and resume, event log, `RunManager` (the seam of every interface), read layer: `events_log` (incremental and project-wide event reading, `EventCursor`), `history` (what a task delivered, from events and git), `trace` (tool calls of a run with their outputs). |
+| `vibe-cli` | `vibe` binary: `init`, `task`, `run`, `approve`, `reject`, `cancel`, `pr`, `memory`, `events`, `history`, `trace`, `status`, `config`, `agents`, `plugins`, `doctor`; live event rendering; `vibe tui` (board, activity, history, trace); `vibe serve` (HTTP API, one global event stream fed by a single shared follower, embedded web UI). |
 
 ## Key design rules
 
@@ -38,6 +40,17 @@ Every crate depends on `vibe-core` only, except `vibe-pipeline` which also depen
 5. **Isolation by default** via git worktrees; `in_place` for experiments; other isolation via `WorkspaceProvider` plugins.
 6. **Defence in depth for the shell**: parsed segments, blocked programs, per-command validators, optional allowlist, path containment, timeouts.
 7. **Plugins in any language** through the stdio protocol; MCP servers work as tool plugins.
+8. **One seam, events as the contract** (ADR-007, ADR-008): every interface goes through `RunManager` and rebuilds its views from persisted events and git through the read layer; complete tool outputs live in a trace store referenced by the events.
+
+## Interfaces
+
+| Interface | Where | Reaches the engine through |
+|-----------|-------|----------------------------|
+| Command line | `vibe` (`vibe-cli`) | `RunManager` and the read layer, in process |
+| Terminal UI | `vibe tui` (`vibe-cli`, module `tui`) | the same, in process |
+| Web UI and HTTP API | `vibe serve` (`vibe-cli`, module `server`) | the same; clients use HTTP and server-sent events |
+| macOS app | `apps/macos/VibeFactory` (SwiftUI) | the HTTP API of a `vibe serve` it starts or connects to |
+| VS Code extension | `editors/vscode` (TypeScript) | the HTTP API of `vibe serve` |
 
 ## Persistence (`.vibe/`)
 
@@ -46,11 +59,15 @@ Every crate depends on `vibe-core` only, except `vibe-pipeline` which also depen
   config.toml                 project configuration
   agents/*.toml               agent overrides
   plugins/<name>/vibe-plugin.toml
-  worktrees/<slug>-<id>/      isolated workspaces
+  memory.jsonl                project memory shared by tasks
+  server.token                token of a running `vibe serve`
+  worktrees/<slug>-<id>/      isolated workspaces (each with .vibe/tool-output/<uuid>.txt
+                              for outputs too long for the model)
+  tasks/index.json            task id → directory and number
   tasks/NNN-slug/
     task.json  spec.md  spec.json  plan.json  qa_report_<n>.json  qa_report_<n>.md
-    progress.md  memory/{gotchas.md,patterns.md}  events.jsonl  run.json
-  tool-output/<uuid>.txt      full text of truncated tool outputs
+    progress.md  memory/{gotchas.md,patterns.md}  events.jsonl  run.json  run.lock
+  tool-output/<task dir>/<run>/<call>.txt   trace store: complete output of every tool call
 ```
 
 ## Quality gates

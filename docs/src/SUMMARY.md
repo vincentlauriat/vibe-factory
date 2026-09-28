@@ -9,6 +9,8 @@
 - [Concepts](user/concepts.md)
 - [Configuration](user/configuration.md)
 - [Command line reference](user/cli.md)
+- [History of finished work](user/history.md)
+- [Tool call trace](user/trace.md)
 - [Providers and models](user/providers.md)
 - [Tools and security](user/security.md)
 - [Workspaces and merging](user/workspaces.md)
@@ -36,6 +38,7 @@
     - [ADR-005: JSON-RPC plugin protocol](design/adr/005-plugin-protocol.md)
     - [ADR-006: Structured QA verdicts](design/adr/006-structured-qa.md)
     - [ADR-007: One seam for every user interface](design/adr/007-one-seam-many-interfaces.md)
+    - [ADR-008: Trace store and read layer](design/adr/008-trace-store-and-read-layer.md)
 
 # Reference
 

@@ -190,7 +190,10 @@ Independently of that truncation, a runner given a `ToolTrace` (`dir`, `referenc
 pipeline passes `.vibe/tool-output/<task dir>/<run>/` of the project when
 `pipeline.trace_outputs` is on. The `call` id is generated before the call and repeated on
 the return, so parallel read-only calls pair even when they return out of order;
-`exit_code` and `timed_out` are copied from the tool's metadata (`bash`).
+`exit_code` and `timed_out` are copied from the tool's metadata (`bash`). A trace file that
+cannot be written is logged as a warning and leaves `output_file` empty; the call itself is
+not affected. `vibe trace` and the read layer's `trace` module read the store back
+([Tool call trace](../user/trace.md), [ADR-008](adr/008-trace-store-and-read-layer.md)).
 
 ### Provider errors and retries
 

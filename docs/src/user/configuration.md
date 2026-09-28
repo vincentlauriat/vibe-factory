@@ -23,7 +23,9 @@ vibe config show --default   # the built-in defaults only
 | `[pipeline]` | table | see below | pipeline tuning |
 | `[security]` | table | see below | tool security policy |
 | `[[plugins]]` | array of tables | none | out-of-process plugins to start |
-| `[pricing."<provider>/<model>"]` | table | none | model prices, to show what a task cost |
+| `[workspace.container]` | table | none | settings of the `container` workspace; see below |
+| `[integrations]` | table | none | GitHub and GitLab access for `vibe task import` and `vibe pr`; see below |
+| `[pricing."<provider>/<model>"]` | table | none | model prices, to show what a task cost in `vibe history`; see below |
 
 Unknown keys are ignored by the TOML reader, so check spelling with `vibe config show`: a
 key that does not appear there had no effect.
@@ -109,8 +111,8 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in [Providers and models](pro
 | `approvals` | list of `"spec"`, `"plan"`, `"merge"` | `[]` | where the run waits for a human decision; see [Human approvals](#human-approvals) |
 | `max_tokens` | integer | none | input plus output tokens of the whole run, including resumes; the run pauses when reached |
 | `max_duration_secs` | integer | none | active time of the whole run in seconds, including resumes; the run pauses when reached |
-| `trace_outputs` | bool | `true` | keep the complete output of every tool call in `.vibe/tool-output/<task>/<run>/<call>.txt` (ignored by git), referenced by the `tool_returned` events ([events](../reference/events.md#trace-store)) |
-| `trace_max_chars` | integer | `100000` | characters kept per traced tool output; longer outputs are cut and end with a marker line |
+| `trace_outputs` | bool | `true` | keep the complete output of every tool call in `.vibe/tool-output/<task dir>/<run>/<call>.txt` (ignored by git), referenced by the `tool_returned` events and read by `vibe trace --full`; see [Tool call trace](trace.md) for disk usage and privacy |
+| `trace_max_chars` | integer | `100000` | characters kept per traced tool output; longer outputs are cut and end with a marker line. Only the trace is affected: what the model sees is truncated separately |
 
 What these limits do at run time is described in [The pipeline](../design/pipeline.md);
 workspaces and merging in [Workspaces and merging](workspaces.md).
@@ -292,7 +294,9 @@ cache_write = 3.75   # optional: prompt tokens written to cache
 | `cache_read` | number | unset | USD per million prompt tokens read from the cache |
 | `cache_write` | number | unset | USD per million prompt tokens written to the cache |
 
-There are no built-in prices: without this table no cost is shown. Every price must be a
+Prices are only used to show the cost of a task in [`vibe history`](history.md) and its
+web, terminal and API equivalents; they change nothing in a run. There are no built-in
+prices: without this table no cost is shown. Every price must be a
 finite number, zero or more; `vibe` refuses a configuration with any other value.
 
 Events name a model by the provider's model id, without the provider. A model id is
@@ -301,7 +305,14 @@ the provider being the part of the key before its first `/`. So `claude-sonnet-5
 matches `"claude-sonnet-5"`, else `"anthropic/claude-sonnet-5"`; a model id that contains a
 `/` itself, such as `meta-llama/llama-3` served by `openrouter`, matches
 `"openrouter/meta-llama/llama-3"`. When two providers price the same model id differently,
-the model counts as unpriced.
+the model counts as unpriced. A local model needs a table too, at zero, or tasks that used
+it show no cost:
+
+```toml
+[pricing."ollama/qwen2.5-coder"]
+input = 0.0
+output = 0.0
+```
 
 A task's cost is shown only when every agent session it ran has a price that covers the
 tokens it used: one model without a price, cache tokens without a `cache_read` or
@@ -371,6 +382,8 @@ auto_merge = false          # stop in `ready` and let me merge
 merge_strategy = "manual"
 max_tokens = 3_000_000      # pause the run beyond this, resumes included
 max_duration_secs = 7200    # and beyond two hours of active work
+trace_outputs = true        # keep every tool output under .vibe/tool-output/ (git-ignored)
+trace_max_chars = 50_000    # at most this many characters per call
 
 # Security ----------------------------------------------------------------
 [security]

@@ -61,6 +61,24 @@ The **pipeline** runs the phases `assess → spec → plan → build → qa → 
 phase reads the artefacts of the previous ones and writes its own into
 `.vibe/tasks/<task>/`. A **run** can be watched live, interrupted, and resumed.
 
+## Events, trace and history
+
+Everything a run does is published as an **event** (a phase started, an agent called a
+tool, a subtask was committed, the run finished with its totals) and appended to the task's
+`events.jsonl`. Events are the contract between the engine and every interface: the live
+output of `vibe run`, `vibe events`, the terminal UI, the web UI and the macOS app all show
+events, and none of them keeps a state of its own ([Events](../reference/events.md)).
+
+What does not fit in an event is referenced by one. The complete output of each tool call
+goes to the **trace store**, `.vibe/tool-output/`, local and ignored by git, and the
+`tool_returned` event points to it ([Tool call trace](trace.md)).
+
+A **read layer** turns events and git back into views: the activity of every task in time
+order, the **history** of what a task delivered (runs, commits, changed files, validations,
+QA verdict, tokens, active time, cost; see [History](history.md)), and the **trace** of a
+run's tool calls. The command line, the terminal UI and `vibe serve` use the same read
+layer, so they always agree.
+
 ## Providers and models
 
 A **provider** is a model vendor or API (Anthropic, OpenAI, a local Ollama…). Models are

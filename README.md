@@ -14,7 +14,8 @@
 You describe a task. A pipeline of cooperating AI agents assesses it, explores your
 codebase, writes a specification, plans the work, implements it in an isolated git
 worktree, reviews the result against the acceptance criteria, fixes what the review found,
-and hands you a branch ready to merge.
+and hands you a branch ready to merge. Afterwards you can see everything it did: what each
+task delivered, the activity of every task, and every tool call with its complete output.
 
 ```text
    task ──▶ assess ──▶ spec ──▶ plan ──▶ build ──▶ qa ──▶ fix ──▶ merge
@@ -57,6 +58,10 @@ documented trait, and plugins can be written in Rust or in any language.
 | Import GitHub/GitLab issues, open pull requests | ✅ |
 | `web_fetch` / `web_search` tools, project memory across tasks | ✅ |
 | VS Code extension on `vibe serve` ([editors/vscode](editors/vscode)) | ✅ |
+| `vibe history`: runs, commits, changed files, validations, QA verdict, tokens, active time and optional cost of each task | ✅ |
+| Global activity: the events of every task in one feed (`vibe events`, web and terminal Activity views) | ✅ |
+| Full trace: every tool call with its complete arguments, exit code and output (`vibe trace`, web and terminal Trace tabs) | ✅ |
+| Native macOS app on `vibe serve` ([apps/macos/VibeFactory](apps/macos/VibeFactory)) | ✅ |
 
 ## Install
 
@@ -65,6 +70,10 @@ Requires Rust 1.88+ and git.
 ```sh
 cargo install --git https://github.com/vincentlauriat/vibe-factory vibe-cli
 ```
+
+The macOS app (macOS 14+) is built from source for now: see
+[apps/macos/VibeFactory](apps/macos/VibeFactory/README.md) (Xcode and `xcodegen`). A signed
+DMG will be attached to its first release. It needs the `vibe` binary above.
 
 ## Quick start
 
@@ -85,6 +94,18 @@ vibe run 1 --provider mock --dry-run
 ```
 
 Full guide: **[vincentlauriat.github.io/vibe-factory](https://vincentlauriat.github.io/vibe-factory/)**.
+
+## See what was done
+
+```sh
+vibe history                 # what each finished task delivered: runs, commits, files, tokens, cost
+vibe trace 1 --full          # every tool call of task 1's last run, with its complete output
+vibe events --follow         # the activity of every task, live
+```
+
+`vibe tui` and `vibe serve` show the same history, activity and trace in a terminal UI and a
+web UI. See [History](https://vincentlauriat.github.io/vibe-factory/user/history.html) and
+[Tool call trace](https://vincentlauriat.github.io/vibe-factory/user/trace.html).
 
 ## Extend it
 
@@ -111,15 +132,19 @@ crates/
   vibe-workspace/   git worktree isolation and merge
   vibe-plugins/     plugin protocol, host, manifests, Rust plugin helper
   vibe-agents/      agentic loop, structured output, prompts, built-in agents
-  vibe-pipeline/    task store, orchestration, resume
-  vibe-cli/         the `vibe` binary
+  vibe-pipeline/    task store, orchestration, resume, read layer (history, trace, events)
+  vibe-cli/         the `vibe` binary: commands, terminal UI, HTTP server and web UI
+apps/macos/         native macOS app, a client of `vibe serve` (SwiftUI)
+editors/vscode/     VS Code extension, a client of `vibe serve`
+evals/              reproducible evaluation suite
 docs/               mdBook: user guide, design book, ADRs
 ```
 
 ## Development
 
 Behaviour is measured with [reproducible evaluations](evals/README.md). Upgrading from an earlier version:
-see [the migration guide](docs/src/user/migration.md).
+see [the migration guide](docs/src/user/migration.md). What is done and what comes next:
+[the roadmap](docs/src/reference/roadmap.md) and [the changelog](CHANGELOG.md).
 
 ```sh
 cargo build --workspace

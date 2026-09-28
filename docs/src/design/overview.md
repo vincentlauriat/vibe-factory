@@ -5,12 +5,12 @@ points downwards; no crate depends on a crate above it.
 
 ```text
                         ┌─────────────┐
-                        │  vibe-cli   │   command line: wires everything together
+                        │  vibe-cli   │   command line, terminal UI, server: wires everything together
                         └──────┬──────┘
         ┌──────────┬───────────┼───────────┬────────────┐
         │          │           │           │            │
         │   ┌──────▼──────┐    │           │            │
-        │   │vibe-pipeline│    │           │            │   orchestration, task store, run state
+        │   │vibe-pipeline│    │           │            │   orchestration, task store, run state, read layer
         │   └──────┬──────┘    │           │            │
         │   ┌──────▼──────┐    │           │            │
         │   │ vibe-agents │    │           │            │   agentic loop, prompts, structured output
@@ -24,7 +24,8 @@ points downwards; no crate depends on a crate above it.
                          └─────────────┘
 ```
 
-Only `vibe-pipeline` depends on `vibe-agents`; every other crate depends on `vibe-core`
+Only `vibe-pipeline` depends on `vibe-agents` (and on `vibe-workspace`, whose git helpers
+its read layer uses to rebuild a task's history); every other crate depends on `vibe-core`
 alone and reaches the others through the traits in the `Registry`. The CLI is the only
 place where concrete implementations meet.
 

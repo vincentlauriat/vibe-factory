@@ -8,12 +8,19 @@ and `vibe <command> --help` print the same information as this page.
 vibe [GLOBAL OPTIONS] <COMMAND>
 
   init          create .vibe/config.toml
-  task          add | list | show | discard
+  task          add | list | show | import | discard
   run           run a task through the pipeline
-  status        project summary
+  approve       approve what a paused run waits for
+  reject        reject it, with a reason for the agents
+  cancel        stop the run of a task, from any terminal
+  pr            push a ready task's branch and open a pull request
+  memory        list | clear the project memory
+  tui           terminal UI: board, activity, history, trace
+  serve         HTTP API and web UI
   events        replay or follow the events of one task or of every task
   history       what finished tasks did: runs, commits, files, tokens, cost
   trace         the tool calls of a run: arguments, results, outputs
+  status        project summary
   config        show | path | set
   agents        list | show | export
   plugins       list | check
@@ -27,9 +34,9 @@ Global options may appear before or after the subcommand.
 
 | Option | Effect |
 |--------|--------|
-| `-C, --project <DIR>` | start directory; the project is this directory (default: the current one) or its nearest parent that contains a `.vibe` directory, without leaving the git repository (the search stops at the first parent that contains `.git`) and never your home directory; `vibe init` never searches parents |
+| `-C, --project <DIR>` | start directory; the project is this directory (default: the current one) or its nearest parent that contains a `.vibe` directory, without leaving the git repository (the search stops at the first parent that contains `.git`) and never climbing up to your home directory; `vibe init` never searches parents |
 | `-v, --verbose` | more logging on standard error: default warnings only; `-v` info, `-vv` debug, `-vvv` trace; a non-empty `RUST_LOG` wins |
-| `--json` | machine-readable output: one JSON document, or one JSON event per line for `vibe run` |
+| `--json` | machine-readable output: one JSON document, or one JSON event per line for `vibe run` and `vibe events` (see [JSON output](#json-output)) |
 | `--no-color` | no colours; also the case when `NO_COLOR` is set or the output is not a terminal |
 | `-h, --help` | help of the command |
 | `-V, --version` | version of `vibe` |
@@ -130,8 +137,9 @@ GitLab.
 vibe task discard <REF> [-y | --yes]
 ```
 
-Removes the task's workspace (worktree and branch; nothing for `in_place`) and deletes the
-task directory. It asks for confirmation on a terminal unless `--yes` is given; when standard
+Removes the task's workspace (worktree and branch; nothing for `in_place`), deletes the
+task directory and the task's traced tool outputs (`.vibe/tool-output/<task dir>/`), so the
+task leaves the history too. It asks for confirmation on a terminal unless `--yes` is given; when standard
 input is not a terminal it refuses to run without `--yes`. Unmerged work on the task branch
 is lost.
 
@@ -380,8 +388,8 @@ with the token controls the agents. `Ctrl-C` stops the server and cancels the ru
 
 `--exit-on-stdin-eof` makes the end of standard input stop the server exactly like `Ctrl-C`
 (runs cancelled, token file removed, exit code 0). An application that starts `vibe serve` as
-a child with a pipe on its standard input uses it so that the server does not outlive it,
-even when the application is killed or crashes. Without the flag, standard input is not
+a child with a pipe on its standard input (the macOS app does) uses it so that the server
+does not outlive it, even when the application is killed or crashes. Without the flag, standard input is not
 read.
 
 | Method and path | Effect |
@@ -467,7 +475,11 @@ feed goes on with the others.
 | `--task REF` | only the events of this task (repeatable); with `<REF>` as well, nothing is printed unless `<REF>` is one of them |
 
 `--after` and `--all` need a `<REF>`. With `--follow` and a `<REF>`, the end of the run stops
-the command even when `--type` or `--since` hide the `run_finished` event. The envelope and
+the command even when `--type` or `--since` hide the `run_finished` event; a run that paused
+and was resumed is followed to its new end. As with `vibe run`, some events are only
+rendered with `-v` (agent text, `committed`, `artefact_written`, subtask integrations without
+conflicts, informational logs): add `-v`, or use `--json`,
+to see them when you filter on them. The envelope and
 every event type are described in [Events](../reference/events.md).
 
 ## `vibe history`
@@ -478,7 +490,8 @@ vibe history <REF>
 ```
 
 What finished tasks did, read from their event logs, `run.json` and git (nothing is
-recomputed by a model). Without `<REF>`, a table of the `ready` and `done` tasks, most
+recomputed by a model). [History of finished work](history.md) explains each figure and
+where it comes from. Without `<REF>`, a table of the `ready` and `done` tasks, most
 recent first — `--all` adds `failed` and `cancelled` ones:
 
 ```text
@@ -524,7 +537,8 @@ vibe trace <REF> [--run RUN | --all] [--tool NAME] [--subtask ID] [--full]
 ```
 
 The tool calls of the task's last run (`--run` picks another by id or id prefix, `--all`
-shows every run), in the order they were made. Each call is a block:
+shows every run), in the order they were made. [Tool call trace](trace.md) describes the
+trace store, its disk usage and what it may contain. Each call is a block:
 
 ```text
 #4 coder · subtask 1/2 Write hello.txt · write_file  2 ms  ok  [call 5f0c2a9e1b7d]
@@ -654,6 +668,17 @@ vibe completions <SHELL>
 
 Prints a completion script for `bash`, `zsh`, `fish`, `elvish` or `powershell`. Installation
 is shown in [Installation](installation.md#shell-completions).
+
+## Exit codes
+
+Every command exits with `0` when it did what was asked and `1` when it failed: an unknown
+task reference or run, a bad configuration, a storage or git error, a `--run` or
+`--subtask` prefix that matches nothing or several ids. A usage error (an unknown option,
+an invalid value such as an unknown `--type`, conflicting options) exits with `2` before
+anything runs. `vibe run` has its own codes (above): `2` there also means the run paused for
+a human, and `130` that it was cancelled. `vibe doctor` and `vibe plugins check` exit with
+`1` when a check fails. `vibe history`, `vibe trace`, `vibe events` and JSON documents exit with
+`0` when their output is closed early (`vibe history | head`).
 
 ## JSON output
 

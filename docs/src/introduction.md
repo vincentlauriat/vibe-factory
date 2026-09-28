@@ -6,7 +6,9 @@ development*, written in Rust.
 You describe what you want. A pipeline of cooperating AI agents assesses the request,
 explores your codebase, writes a specification, plans the work, implements it in an isolated
 git workspace, reviews the result against the acceptance criteria, fixes what the review
-found, and hands you a branch ready to merge.
+found, and hands you a branch ready to merge. Everything it did stays visible afterwards:
+the history of each task, the activity of every task in one feed, and the complete trace of
+every tool call, from the command line, a terminal UI, a local web UI or a macOS app.
 
 ```text
    task ──▶ assess ──▶ spec ──▶ plan ──▶ build ──▶ qa ──▶ fix ──▶ merge
@@ -35,7 +37,16 @@ framework can do, a plugin can do too.
 
 ## What is in the box
 
-- **`vibe` CLI** — create tasks, run the pipeline, inspect progress, manage plugins.
+- **Four interfaces on one engine** — the `vibe` command line, a terminal UI (`vibe tui`), a
+  local web UI and HTTP API (`vibe serve`), and a native macOS app built on that API; they
+  all read the same events, so they always agree. A VS Code extension is a client of
+  `vibe serve` too.
+- **See what was done** — `vibe history` for what each task delivered (runs, commits,
+  changed files, validations, QA verdict, tokens, active time, and a cost when you give
+  prices), `vibe events` for the activity of every task, live or replayed, and `vibe trace`
+  for every tool call of a run with its complete arguments, exit code and output.
+- **Human control** — approvals of the spec, the plan or the merge, token and time budgets,
+  cancellation and resume from any interface.
 - **Providers** — Anthropic, any OpenAI-compatible API (OpenAI, Groq, Mistral, xAI,
   OpenRouter, Ollama), and a scriptable mock for tests and dry runs.
 - **Tools** — read, write, edit, list, glob, grep and a sandboxed shell, all confined to the
@@ -53,7 +64,8 @@ framework can do, a plugin can do too.
 ## Where to go next
 
 - New user: start with [Installation](user/installation.md) and the
-  [Quick start](user/quickstart.md).
+  [Quick start](user/quickstart.md), then see [History](user/history.md) and
+  [Tool call trace](user/trace.md) to look back at what the agents did.
 - Contributor or curious engineer: read the
   [Architecture overview](design/overview.md).
 - Extending the framework: see [Extension points](design/extension-points.md) and

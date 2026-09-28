@@ -17,9 +17,13 @@ vibe doctor              # environment, configuration, keys, plugins
 | `.vibe/tasks/NNN-slug/events.jsonl` | every event of every run: tool calls with their input, tool results, retries, agent stops |
 | `.vibe/tasks/NNN-slug/plan.md` | each subtask's status, attempts and notes |
 | `.vibe/tasks/NNN-slug/qa_report_<n>.md` | the issues of each QA round |
+| `vibe history <ref>` | what each run did: phases, commits, changed files, validations, QA verdict, errors ([History](history.md)) |
+| `vibe trace <ref> [--full]` | every tool call of a run with its arguments, exit code and complete output ([Tool call trace](trace.md)) |
+| `vibe events --since 1h` | the recent activity of every task, in time order |
 | standard error with `-v`, `-vv`, `-vvv` | logs at info, debug, trace level; `RUST_LOG` overrides |
 
 ```sh
+vibe trace 3 --tool bash --full      # every shell command of the last run, with its output
 jq -r 'select(.event.type == "tool_returned" and .event.is_error) | "\(.event.tool): \(.event.preview)"' \
   .vibe/tasks/003-*/events.jsonl
 RUST_LOG=vibe_agents=debug,vibe_plugins=debug vibe run 3 --resume 2> run.log
@@ -235,6 +239,91 @@ subtasks or QA fail.
 remove the program from `blocked_commands`, or add it to `allowed_commands` if you use an
 allowlist. System administration programs (`sudo`, `mount`, …) are always blocked. The rules
 are listed in [Tools and security](security.md).
+
+## `vibe` says your home directory is not a git repository
+
+```text
+error: /Users/me is not a git repository: run `git init`, or use `--workspace in_place`
+```
+
+**Cause.** Before 0.4.0, `vibe` looked for the nearest parent holding a `.vibe` directory
+without limit, and a `~/.vibe` left by another tool made it take your home directory for the
+project. Since 0.4.0 the search stops at the git repository and never climbs up to the home
+directory; running `vibe` from the home directory itself still uses it, like any other
+directory.
+
+**Fix.** Check which binary runs (`vibe --version`, `which -a vibe`) and reinstall if it is
+older than 0.4.0. With a current version, the project is the directory you are in (or the
+nearest parent with `.vibe` inside the same repository): run `vibe` from inside the
+repository, or name it with `-C <dir>`. The other tool's `~/.vibe` does not need to be
+removed.
+
+## `.vibe/tool-output/` keeps growing
+
+**Cause.** The trace store keeps the complete output of every tool call of every run, up to
+`pipeline.trace_max_chars` characters per call (100 000 by default), and nothing removes it
+automatically. Long test suites and verbose builds fill it fastest.
+
+**Fix.**
+
+```sh
+du -sh .vibe/tool-output/*/                  # which tasks use the space
+vibe task discard 3 --yes                   # a task you no longer need, with its outputs
+rm -rf .vibe/tool-output/003-*/<run>        # the outputs of one old run only
+```
+
+To keep less, lower `pipeline.trace_max_chars`; to keep nothing but the previews in the log,
+set `pipeline.trace_outputs = false`. Removed outputs only make `vibe trace --full` fall back
+to the preview. The directory is ignored by git. Details in
+[Tool call trace](trace.md#disk-usage).
+
+## A `vibe serve` started by an application is still running
+
+```text
+error: cannot listen on 127.0.0.1:7777
+  caused by: Address already in use (os error 48)
+```
+
+**Cause.** An application (an editor, the macOS app, a script) started `vibe serve` as a
+child process and died without stopping it, for example after a crash or a `kill -9`. The
+orphan server keeps its port, its token file `.vibe/server.token`, and possibly runs.
+
+**Fix.** Find it and stop it with `SIGINT`, which cancels its runs cleanly (they stay
+resumable) and removes the token file:
+
+```sh
+pgrep -fl "vibe.*serve"
+kill -INT <pid>
+```
+
+An application that starts `vibe serve` should pass `--exit-on-stdin-eof` and keep a pipe
+on the child's standard input: when the application ends, however it ends, the pipe closes
+and the server stops as on `Ctrl-C`. The macOS app does this. For a server you start by
+hand, `--port 0` picks a free port.
+
+## `vibe history` shows `~`, `+` or `-`
+
+```text
+#  title          status  runs  commits  files  tokens  active      cost  finished
+4  Add a cache    done    2     3        5~     84.1k+  3 min 10 s+ -     2 d ago
+```
+
+These marks are not errors:
+
+- **`~` on files**: the list of changed files is approximate. The task branch is gone and
+  no merge was recorded, so the list comes from the commit events or from the files the
+  agents wrote. `vibe history <ref>` names the source.
+- **`+` on tokens or active time**: a lower bound. A run was logged before 0.5 (its totals
+  are unknown) or has not finished; `vibe history <ref>` shows which run.
+- **`+` on the cost**: some tokens were used outside a finished agent session (a session cut
+  by a crash, or the repair of an invalid structured answer) and are not priced.
+- **`-` as the cost**: there is no [`[pricing]`](configuration.md#pricing) table, or a model
+  the task used has no price in it (a local model needs a price of zero), or the task ran
+  before 0.5 and its models are not recorded.
+
+The detail also lists **problems** met while reading, such as a merge commit that git no
+longer has (after a rebase or a garbage collection): the history then falls back to the next
+source. See [History](history.md#changed-files-and-the-approximate-marker).
 
 ## Windows specifics
 

@@ -171,10 +171,13 @@ named temporary file in the same directory (`.<name>.<uuid>.tmp`), which is then
 the target. A crash therefore leaves either the old or the new file, never a truncated one;
 at worst a stray `.tmp` file, safe to delete. JSON is pretty-printed with a trailing newline.
 
-Appends (`progress.md`, memory files) and index updates are serialised by locks inside one
-process; `events.jsonl` has its own lock per sink. There is **no cross-process locking**: do
-not run two `vibe` processes on the same task at once. Different tasks are independent,
-except for `index.json`, so avoid creating tasks from two processes at the same moment.
+Appends (`progress.md`, memory files) are serialised by locks inside one process;
+`events.jsonl` has its own lock per sink. Across processes, an OS lock on `run.lock` lets
+one process at a time run a given task (a second `vibe run` fails with `already being run
+by another process`), and `.index.lock` serialises updates of `index.json`, so a terminal, a
+terminal UI and `vibe serve` can work on the same project. Readers never hold a lock: the
+read layer below only consumes complete lines of the logs, and the history only probes a
+task's run lock for an instant to tell a running run from an interrupted one.
 
 Missing files are normal: a task without `spec.json` simply has no spec yet, and loading it
 returns `None`. A file that exists but does not parse is an error naming the path, so a bad
@@ -226,7 +229,10 @@ entries.
 ## Reading the store: the read layer
 
 Interfaces never parse these files themselves; `vibe-pipeline` gives them a read layer on
-the same files ([ADR-007](adr/007-one-seam-many-interfaces.md)):
+the same files ([ADR-007](adr/007-one-seam-many-interfaces.md),
+[ADR-008](adr/008-trace-store-and-read-layer.md)). It stores nothing of its own:
+histories and traces are rebuilt from the events and git each time they are asked for, and
+followers only remember how far they have read.
 
 | API | Reads | For |
 |-----|-------|-----|
@@ -247,7 +253,8 @@ Events are ordered by `at`, then task number, then `seq`: that triple is the eve
 resumes after the cursor of the last event it saw, which does not lose events of other tasks
 published at the same instant. `AllEventsFollower` re-reads `index.json` at each poll, so
 tasks created later are followed too; a log that cannot be read is reported with the poll's
-result and retried at the next poll, without losing the events of the other logs.
+result and retried at the next poll, without losing the events of the other logs. `vibe serve`
+runs a single follower for all its open event streams, whatever their number.
 
 **Runs.** A run and its resumes share one id: a run is summarised from its first
 `run_started` to its last `run_finished`, whose totals already cover the resumes. A

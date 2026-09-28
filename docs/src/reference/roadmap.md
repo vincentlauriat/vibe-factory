@@ -54,6 +54,24 @@ it, then gets a terminal UI. See [ADR-007](../design/adr/007-one-seam-many-inter
 - [x] Persistent project memory across tasks
 - [x] VS Code extension on `vibe serve`
 
+## 0.5 — visibility: history, global activity, full trace, macOS app (done, unreleased)
+
+See everything that was done, from every interface
+([ADR-008](../design/adr/008-trace-store-and-read-layer.md)).
+
+- [x] Events that tell the whole story: call ids, exit codes and output references on tool
+      calls, the model of each session, `committed` and `merged` events, run totals on
+      `run_finished` (schema stays 2)
+- [x] Trace store: the complete output of every tool call, local and git-ignored
+- [x] Read layer: incremental and project-wide event reading with a stable cursor, history
+      rebuilt from events and git, traces of tool calls
+- [x] `vibe history`, `vibe trace`, `vibe events` across every task, optional `[pricing]`
+- [x] Server routes for the global event stream, history and trace; web views Activity,
+      History and Trace
+- [x] Terminal UI screens Activity and History and a Trace tab
+- [x] Native macOS app on `vibe serve` (SwiftUI, macOS 14+), built from source until its
+      first signed release
+
 ## Later
 
 - OpenAPI description of the server API

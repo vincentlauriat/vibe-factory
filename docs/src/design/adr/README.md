@@ -13,3 +13,4 @@ existing ADR is never edited after acceptance, it is superseded by a new one.
 | [005](005-plugin-protocol.md) | JSON-RPC over stdio plugin protocol | Accepted |
 | [006](006-structured-qa.md) | Structured QA verdicts | Accepted |
 | [007](007-one-seam-many-interfaces.md) | One seam for every user interface | Accepted |
+| [008](008-trace-store-and-read-layer.md) | Trace store and read layer | Accepted |

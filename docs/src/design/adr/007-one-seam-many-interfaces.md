@@ -42,4 +42,5 @@ and each would have to guess the state of a run from files on disk.
   `.vibe/tool-output/<task dir>/<run>/<call>.txt` (ignored by git), and `tool_returned`
   references it by path. Commits and merges are events too (`committed`, `merged`), and
   `run_finished` carries the run's totals, so a history of every run can be rebuilt from
-  events and git alone ([Events](../../reference/events.md#trace-store)).
+  events and git alone ([Events](../../reference/events.md#trace-store); decided in
+  [ADR-008](008-trace-store-and-read-layer.md)).
