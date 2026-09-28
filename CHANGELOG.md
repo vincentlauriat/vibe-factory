@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-28
+
 Visibility release: see everything that was done, from every interface. Configurations and
 runs from 0.4 keep working; see [Upgrading](docs/src/user/migration.md).
 
@@ -195,7 +197,8 @@ Initial public release.
 - `vibe-cli`: `vibe init|task|run|status|config|agents|plugins|doctor`.
 - Documentation: user guide, design book with ADRs, API docs; CI on three platforms.
 
-[Unreleased]: https://github.com/vincentlauriat/vibe-factory/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/vincentlauriat/vibe-factory/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/vincentlauriat/vibe-factory/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vincentlauriat/vibe-factory/compare/v0.2.0...v0.4.0
 [0.2.0]: https://github.com/vincentlauriat/vibe-factory/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/vincentlauriat/vibe-factory/releases/tag/v0.1.0

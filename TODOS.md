@@ -82,7 +82,7 @@ then a terminal UI on top of it.
 - [x] Persistent memory across tasks (`.vibe/memory.jsonl`), deduplicated, `vibe memory`
 - [x] VS Code extension on the server API (editors/vscode)
 
-## 0.5 — visibility: history, global activity, full trace, macOS app (in progress, see PLAN.md)
+## 0.5 — visibility: history, global activity, full trace, macOS app (released in 0.5.0)
 
 ### 1. Events and persistence
 - [x] Call ids, subtask, exit code, output size and output file on tool events; full outputs under `.vibe/tool-output/<task>/<run>/`

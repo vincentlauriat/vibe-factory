@@ -54,7 +54,7 @@ it, then gets a terminal UI. See [ADR-007](../design/adr/007-one-seam-many-inter
 - [x] Persistent project memory across tasks
 - [x] VS Code extension on `vibe serve`
 
-## 0.5 — visibility: history, global activity, full trace, macOS app (done, unreleased)
+## 0.5 — visibility: history, global activity, full trace, macOS app (released)
 
 See everything that was done, from every interface
 ([ADR-008](../design/adr/008-trace-store-and-read-layer.md)).
