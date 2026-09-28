@@ -81,9 +81,9 @@ The host sends the VPP fields and, for MCP servers, the MCP fields:
 ```json
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{
   "protocol_version":"1",
-  "host":{"name":"vibe-factory","version":"0.4.0"},
+  "host":{"name":"vibe-factory","version":"0.5.0"},
   "protocolVersion":"2025-06-18",
-  "clientInfo":{"name":"vibe-factory","version":"0.4.0"},
+  "clientInfo":{"name":"vibe-factory","version":"0.5.0"},
   "capabilities":{}}}
 ```
 

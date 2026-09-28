@@ -9,8 +9,6 @@ app on `vibe serve`. Existing `.vibe/config.toml` files keep working, and runs s
 
 ### Upgrade
 
-Once 0.5.0 is released:
-
 ```sh
 cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.0 vibe-cli --force
 vibe --version    # vibe 0.5.0
