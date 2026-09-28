@@ -8,11 +8,15 @@ public struct SSEMessage: Hashable, Sendable {
     public var data: String
     /// The last event id at dispatch time (the `id:` of this message or an earlier one).
     public var lastEventId: String
+    /// The `id:` of this very message; `nil` when it had none (the global
+    /// stream's `agent_delta`), even though `lastEventId` is kept.
+    public var id: String?
 
-    public init(event: String = "message", data: String, lastEventId: String = "") {
+    public init(event: String = "message", data: String, lastEventId: String = "", id: String? = nil) {
         self.event = event
         self.data = data
         self.lastEventId = lastEventId
+        self.id = id
     }
 }
 
@@ -110,7 +114,8 @@ public struct SSEParser: Sendable {
             hasData = false
         }
         guard hasData else { return nil }
-        return SSEMessage(event: eventType.isEmpty ? "message" : eventType, data: data, lastEventId: lastEventId)
+        return SSEMessage(event: eventType.isEmpty ? "message" : eventType, data: data, lastEventId: lastEventId,
+                          id: pendingId)
     }
 }
 
@@ -131,7 +136,7 @@ public struct Backoff: Sendable {
 
 /// An SSE connection that reconnects with backoff. The caller builds each
 /// request from the last event id seen, so the same connection serves the
-/// task streams (`after=<seq>`) and the global stream (`since=<at>`).
+/// task streams (`after=<seq>`) and the global stream (`after=<cursor>`).
 public struct SSEConnection: Sendable {
     public typealias RequestBuilder = @Sendable (_ lastEventId: String) async throws -> URLRequest
 

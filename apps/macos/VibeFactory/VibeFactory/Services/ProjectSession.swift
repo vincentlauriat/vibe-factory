@@ -3,8 +3,13 @@ import Observation
 import VibeAPI
 
 /// The connection of one project window: the `vibe serve` child it started
-/// (or the remote server it was given), the client, and the board, polled
-/// every 2 s like the web UI until the server has a global stream.
+/// (or the remote server it was given), the client, the board, and the one
+/// project-wide event stream (`/api/stream`) that feeds the Activity feed,
+/// the selected task, board refreshes, the History and notifications.
+///
+/// The board is reloaded when an event changes it, and polled every 10 s
+/// since creating a task is not an event (every 2 s while the stream is
+/// down, like the web UI).
 @Observable
 @MainActor
 final class ProjectSession: Identifiable {
@@ -15,7 +20,15 @@ final class ProjectSession: Identifiable {
         case failed(String)
     }
 
-    static let pollInterval: UInt64 = 2_000_000_000
+    static let pollInterval: UInt64 = 10_000_000_000
+    static let downPollInterval: UInt64 = 2_000_000_000
+    /// Logged events loaded into the feed when the stream starts.
+    static let seedLimit = 500
+    /// Event types after which the board is reloaded.
+    static let boardTypes: Set<String> = [
+        "run_started", "phase_started", "phase_finished", "subtask_updated", "approval_requested",
+        "approval_resolved", "paused", "merged", "run_finished",
+    ]
 
     let ref: ProjectRef
     private(set) var state: State = .idle
@@ -24,22 +37,35 @@ final class ProjectSession: Identifiable {
     private(set) var serverVersion: String?
     /// Last polling error, cleared by the next success.
     private(set) var boardError: String?
+    /// Whether the project-wide stream runs (it reconnects on its own after
+    /// network errors; it stops on answers a retry cannot fix).
+    private(set) var streamUp = false
+    /// Why the stream is not running, if it stopped.
+    private(set) var streamError: String?
+    /// Every task's events, described, the newest last.
+    let feed: ProjectFeed
+    /// Bumped by each `run_finished`: the History reloads on it.
+    private(set) var finishedRuns = 0
     /// A task to show, asked by a notification click; the window consumes it.
     var requestedTask: String?
 
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private var server: ServerProcess?
     @ObservationIgnored private var poller: Task<Void, Never>?
+    @ObservationIgnored private var streamTask: Task<Void, Never>?
+    @ObservationIgnored private var boardReload: Task<Void, Never>?
+    @ObservationIgnored private var listeners: [UUID: (GlobalEvent) -> Void] = [:]
+    @ObservationIgnored private var notices = EventNoticeTracker()
     /// Bumped by every `stop()`: a `start()` that finds it changed after
     /// connecting was cancelled meanwhile and drops what it started.
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var boardLoaded = false
 
     nonisolated var id: ProjectRef { ref }
 
     init(ref: ProjectRef, settings: AppSettings) {
         self.ref = ref
         self.settings = settings
+        feed = ProjectFeed(translate: { settings.t($0) })
     }
 
     // MARK: Board summaries (menu bar, sidebar badges)
@@ -56,7 +82,8 @@ final class ProjectSession: Identifiable {
 
     // MARK: Lifecycle
 
-    /// Start the server (folder) or check the remote one, then poll the board.
+    /// Start the server (folder) or check the remote one, then open the
+    /// event stream and poll the board.
     func start() async {
         if state == .starting || state == .connected { return }
         state = .starting
@@ -73,8 +100,9 @@ final class ProjectSession: Identifiable {
             serverVersion = try? await client.health().version
             guard attempt == generation else { return }
             state = .connected
-            boardLoaded = false
             Notifications.requestAuthorization()
+            await refresh()
+            startStream(client)
             startPolling()
         } catch {
             guard attempt == generation else { return }
@@ -82,12 +110,11 @@ final class ProjectSession: Identifiable {
         }
     }
 
-    /// Stop polling and the server this session started (SIGINT, then SIGTERM
-    /// after the server's grace period).
+    /// Stop the stream, the polling and the server this session started
+    /// (SIGINT, then SIGTERM after the server's grace period).
     func stop() async {
         generation += 1
-        poller?.cancel()
-        poller = nil
+        cancelTasks()
         client = nil
         state = .idle
         if let server {
@@ -100,7 +127,7 @@ final class ProjectSession: Identifiable {
     /// registry waits once for every child.
     func interruptForTermination() -> ServerProcess? {
         generation += 1
-        poller?.cancel()
+        cancelTasks()
         server?.interrupt()
         return server
     }
@@ -108,6 +135,16 @@ final class ProjectSession: Identifiable {
     func retry() async {
         await stop()
         await start()
+    }
+
+    private func cancelTasks() {
+        poller?.cancel()
+        poller = nil
+        streamTask?.cancel()
+        streamTask = nil
+        boardReload?.cancel()
+        boardReload = nil
+        streamUp = false
     }
 
     private func connect() async throws -> (VibeClient, ServerProcess?) {
@@ -136,11 +173,74 @@ final class ProjectSession: Identifiable {
     /// The child ended on its own after it was ready.
     private func serverExited(status: Int32, output: String, attempt: Int) {
         guard attempt == generation else { return }
-        poller?.cancel()
-        poller = nil
+        cancelTasks()
         client = nil
         server = nil
         state = .failed(settings.t("server_exited", "\(status)") + (output.isEmpty ? "" : "\n\n" + output))
+    }
+
+    // MARK: Events
+
+    /// Be told of every event of the stream (the selected task's detail).
+    func subscribe(_ listener: @escaping (GlobalEvent) -> Void) -> UUID {
+        let id = UUID()
+        listeners[id] = listener
+        return id
+    }
+
+    func unsubscribe(_ id: UUID) {
+        listeners[id] = nil
+    }
+
+    /// Load the last logged events into the feed, then stream from the
+    /// cursor of that answer. With no event logged yet there is no cursor:
+    /// the stream starts from the time taken before the call, so what is
+    /// logged in between is not lost.
+    private func startStream(_ client: VibeClient) {
+        streamTask?.cancel()
+        streamTask = Task { [weak self] in
+            let since = VibeJSON.formatDate(Date())
+            let page: EventsPage
+            do {
+                page = try await client.events(limit: Self.seedLimit)
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.streamStopped(error)
+                return
+            }
+            guard let session = self else { return }
+            session.feed.seed(page.events)
+            session.streamUp = true
+            session.streamError = nil
+            let stream = client.globalStream(after: page.cursor, since: page.cursor == nil ? since : nil)
+            do {
+                for try await event in stream.events() {
+                    self?.receive(event)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.streamStopped(error)
+                return
+            }
+            self?.streamUp = false
+        }
+    }
+
+    private func streamStopped(_ error: Error) {
+        streamUp = false
+        streamError = error.localizedDescription
+    }
+
+    private func receive(_ event: GlobalEvent) {
+        let tagged = event.tagged
+        feed.append(tagged)
+        for listener in listeners.values { listener(event) }
+        let type = tagged.event.typeName
+        if Self.boardTypes.contains(type) { scheduleBoardReload() }
+        if case .runFinished = tagged.event { finishedRuns += 1 }
+        if let notice = notices.notice(for: tagged.event) { notify(notice, about: tagged) }
     }
 
     // MARK: Board
@@ -149,50 +249,101 @@ final class ProjectSession: Identifiable {
         poller?.cancel()
         poller = Task { [weak self] in
             while !Task.isCancelled {
-                guard let session = self else { return }
+                guard let interval = self.map({ $0.streamUp ? Self.pollInterval : Self.downPollInterval }) else { return }
+                try? await Task.sleep(nanoseconds: interval)
+                guard let session = self, !Task.isCancelled else { return }
                 await session.refresh()
-                try? await Task.sleep(nanoseconds: Self.pollInterval)
             }
+        }
+    }
+
+    /// Coalesce the reloads a burst of events asks for.
+    private func scheduleBoardReload() {
+        boardReload?.cancel()
+        boardReload = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
         }
     }
 
     func refresh() async {
         guard let client else { return }
         do {
-            let next = try await client.tasks()
-            let previous = rows
-            rows = next
+            rows = try await client.tasks()
             boardError = nil
-            if boardLoaded { notify(BoardTransition.between(previous, next)) }
-            boardLoaded = true
         } catch is CancellationError {
         } catch {
             boardError = error.localizedDescription
         }
     }
 
-    /// Post a notification per transition: a gate starts waiting, a run
-    /// pauses, a run ends.
-    private func notify(_ transitions: [BoardTransition]) {
+    /// Post a notification: a gate starts waiting, a run pauses, a run ends.
+    private func notify(_ notice: EventNotice, about tagged: TaggedEnvelope) {
         guard settings.notificationsEnabled else { return }
-        for transition in transitions {
-            let row = transition.row
-            let title = "\(ref.displayName) — \(row.label) \(row.task.title)"
-            let body: String
-            let kind: String
-            switch transition {
-            case .approvalRequested(_, let gate):
-                body = settings.t("notify_approval", gate.display)
-                kind = "approval"
-            case .paused:
-                body = settings.t("notify_paused")
-                kind = "paused"
-            case .finished(let row):
-                body = settings.t("notify_finished", row.task.status.rawValue)
-                kind = "finished"
-            }
-            Notifications.post(title: title, body: body, identifier: "\(kind)-\(row.id)", project: ref, task: row.id)
+        let name = row(tagged.task).map { "\($0.label) \($0.task.title)" } ?? tagged.label
+        let title = "\(ref.displayName) — \(name)"
+        let body: String
+        let kind: String
+        switch notice {
+        case .approvalRequested(let gate):
+            body = settings.t("notify_approval", gate.display)
+            kind = "approval"
+        case .paused(let reason):
+            body = settings.t("notify_paused") + (reason.isEmpty ? "" : ": \(reason)")
+            kind = "paused"
+        case .finished(let status, _):
+            body = settings.t("notify_finished", status.rawValue)
+            kind = "finished"
         }
+        Notifications.post(title: title, body: body, identifier: "\(kind)-\(tagged.task)", project: ref,
+                           task: tagged.task)
+    }
+}
+
+/// The project-wide Activity feed: every task's events, described, at most
+/// `limit` lines. Streamed text (`agent_delta`) is not kept: it goes to the
+/// selected task only.
+@Observable
+@MainActor
+final class ProjectFeed {
+    /// What the feed keeps of an event.
+    struct Entry: Identifiable, Hashable {
+        let line: ActivityLine
+        let task: String
+        let number: UInt32
+        let type: String
+        var id: Int { line.id }
+    }
+
+    static let limit = 3_000
+
+    private(set) var entries: [Entry] = []
+    @ObservationIgnored private var nextId = 0
+    @ObservationIgnored private let translate: (String) -> String
+
+    init(translate: @escaping (String) -> String) {
+        self.translate = translate
+    }
+
+    /// The events loaded when the stream starts replace the feed.
+    func seed(_ events: [TaggedEnvelope]) {
+        entries = events.suffix(Self.limit).compactMap(entry)
+    }
+
+    func append(_ event: TaggedEnvelope) {
+        guard let entry = entry(event) else { return }
+        entries.append(entry)
+        if entries.count > Self.limit { entries.removeFirst(entries.count - Self.limit) }
+    }
+
+    private func entry(_ event: TaggedEnvelope) -> Entry? {
+        if event.event.isEphemeral { return nil }
+        let id = nextId
+        nextId += 1
+        guard let line = ActivityLine.describe(event.envelope, id: id, detail: nil, verbose: true, t: translate)
+        else { return nil }
+        return Entry(line: line, task: event.task, number: event.number, type: event.event.typeName)
     }
 }
 

@@ -1,0 +1,366 @@
+[
+ {
+  "task": {
+   "id": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d",
+   "title": "Add OAuth login",
+   "description": "",
+   "status": "done",
+   "complexity": "standard",
+   "labels": [],
+   "source": {
+    "kind": "manual"
+   },
+   "created_at": "2026-09-27T09:00:00.000001Z",
+   "updated_at": "2026-09-27T10:00:00Z",
+   "branch": "vibe/003-x"
+  },
+  "number": 3,
+  "runs": [
+   {
+    "run": "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    "started_at": "2026-09-26T08:00:00Z",
+    "finished_at": null,
+    "state": "zombie",
+    "status": null,
+    "success": null,
+    "resumes": 0,
+    "usage": {
+     "input_tokens": 0,
+     "output_tokens": 0,
+     "cache_read_tokens": 0,
+     "cache_write_tokens": 0
+    },
+    "active_ms": 0,
+    "totals_known": false,
+    "phases": [],
+    "commits": [],
+    "merged": null,
+    "validations": [],
+    "approvals": [],
+    "pending_approval": "plan",
+    "last_error": "process died",
+    "last_event_at": "2026-09-26T08:05:00Z"
+   },
+   {
+    "run": "5f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f",
+    "started_at": "2026-09-27T09:10:00.123456Z",
+    "finished_at": "2026-09-27T09:16:12Z",
+    "state": "finished",
+    "status": "done",
+    "success": true,
+    "resumes": 1,
+    "usage": {
+     "input_tokens": 150000,
+     "output_tokens": 34200,
+     "cache_read_tokens": 0,
+     "cache_write_tokens": 0
+    },
+    "active_ms": 372000,
+    "totals_known": true,
+    "phases": [
+     {
+      "phase": "spec",
+      "started_at": "2026-09-27T09:10:00Z",
+      "finished_at": "2026-09-27T09:11:00Z",
+      "success": true,
+      "summary": "3 requirements"
+     },
+     {
+      "phase": "build",
+      "started_at": "2026-09-27T09:11:00Z",
+      "finished_at": null,
+      "success": null,
+      "summary": ""
+     }
+    ],
+    "commits": [
+     {
+      "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "message": "Add OAuth callback",
+      "files": [
+       "src/auth.rs",
+       "src/main.rs"
+      ],
+      "subtask": "st-1",
+      "at": "2026-09-27T09:12:00Z"
+     },
+     {
+      "commit": "b2c3d4e5f60718293a4b5c6d7e8f901234567890",
+      "message": "",
+      "files": [],
+      "subtask": null,
+      "at": "2026-09-27T09:13:00Z"
+     }
+    ],
+    "merged": {
+     "commit": "c3d4e5f6",
+     "branch": "vibe/003-add-login",
+     "base": "main",
+     "at": "2026-09-27T09:16:00Z"
+    },
+    "validations": [
+     {
+      "command": "cargo test",
+      "integration": false,
+      "passed": true,
+      "exit_code": 0,
+      "at": "2026-09-27T09:15:00Z"
+     },
+     {
+      "command": "cargo clippy",
+      "integration": true,
+      "passed": false,
+      "exit_code": null,
+      "at": "2026-09-27T09:15:30Z"
+     }
+    ],
+    "approvals": [
+     {
+      "gate": "merge",
+      "approved": true,
+      "comment": "ship it",
+      "at": "2026-09-27T09:15:50Z"
+     }
+    ],
+    "pending_approval": null,
+    "last_error": null,
+    "last_event_at": "2026-09-27T09:16:12Z"
+   }
+  ],
+  "totals": {
+   "usage": {
+    "input_tokens": 150000,
+    "output_tokens": 34200,
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0
+   },
+   "active_ms": 372000,
+   "runs": 2,
+   "commits": 2,
+   "complete": false
+  },
+  "changed_files": {
+   "source": {
+    "kind": "merge_commit",
+    "commit": "c3d4e5f6",
+    "fast_forward": true
+   },
+   "approximate": false,
+   "files": [
+    {
+     "path": "src/auth.rs",
+     "status": "added"
+    },
+    {
+     "path": "src/new.rs",
+     "status": "renamed",
+     "old_path": "src/old.rs"
+    },
+    {
+     "path": "src/x.rs",
+     "status": "unknown"
+    },
+    {
+     "path": "src/y.rs",
+     "status": "type_changed"
+    }
+   ]
+  },
+  "last_qa": {
+   "round": 2,
+   "verdict": "approved",
+   "summary": "All requirements met",
+   "issues": 0
+  },
+  "validations_passed": false,
+  "cost": {
+   "amount": 1.8349,
+   "currency": "USD",
+   "complete": false
+  },
+  "last_activity": "2026-09-27T09:16:12Z",
+  "errors": [
+   "merge commit c3d4e5f6 not found"
+  ]
+ },
+ {
+  "task": {
+   "id": "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+   "title": "Fix typo in README",
+   "description": "",
+   "status": "ready",
+   "complexity": "standard",
+   "labels": [],
+   "source": {
+    "kind": "manual"
+   },
+   "created_at": "2026-09-27T09:00:00.000001Z",
+   "updated_at": "2026-09-27T10:00:00Z",
+   "branch": "vibe/001-x"
+  },
+  "number": 1,
+  "runs": [
+   {
+    "run": "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    "started_at": "2026-09-27T09:10:00.123456Z",
+    "finished_at": "2026-09-26T07:00:04Z",
+    "state": "finished",
+    "status": "done",
+    "success": true,
+    "resumes": 0,
+    "usage": {
+     "input_tokens": 2000,
+     "output_tokens": 900,
+     "cache_read_tokens": 0,
+     "cache_write_tokens": 0
+    },
+    "active_ms": 4100,
+    "totals_known": true,
+    "phases": [
+     {
+      "phase": "spec",
+      "started_at": "2026-09-27T09:10:00Z",
+      "finished_at": "2026-09-27T09:11:00Z",
+      "success": true,
+      "summary": "3 requirements"
+     },
+     {
+      "phase": "build",
+      "started_at": "2026-09-27T09:11:00Z",
+      "finished_at": null,
+      "success": null,
+      "summary": ""
+     }
+    ],
+    "commits": [
+     {
+      "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "message": "Add OAuth callback",
+      "files": [
+       "src/auth.rs",
+       "src/main.rs"
+      ],
+      "subtask": "st-1",
+      "at": "2026-09-27T09:12:00Z"
+     },
+     {
+      "commit": "b2c3d4e5f60718293a4b5c6d7e8f901234567890",
+      "message": "",
+      "files": [],
+      "subtask": null,
+      "at": "2026-09-27T09:13:00Z"
+     }
+    ],
+    "merged": {
+     "commit": "c3d4e5f6",
+     "branch": "vibe/003-add-login",
+     "base": "main",
+     "at": "2026-09-27T09:16:00Z"
+    },
+    "validations": [
+     {
+      "command": "cargo test",
+      "integration": false,
+      "passed": true,
+      "exit_code": 0,
+      "at": "2026-09-27T09:15:00Z"
+     },
+     {
+      "command": "cargo clippy",
+      "integration": true,
+      "passed": false,
+      "exit_code": null,
+      "at": "2026-09-27T09:15:30Z"
+     }
+    ],
+    "approvals": [
+     {
+      "gate": "merge",
+      "approved": true,
+      "comment": "ship it",
+      "at": "2026-09-27T09:15:50Z"
+     }
+    ],
+    "pending_approval": null,
+    "last_error": null,
+    "last_event_at": "2026-09-27T09:16:12Z"
+   }
+  ],
+  "totals": {
+   "usage": {
+    "input_tokens": 2000,
+    "output_tokens": 900,
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0
+   },
+   "active_ms": 4100,
+   "runs": 1,
+   "commits": 1,
+   "complete": true
+  },
+  "changed_files": {
+   "source": {
+    "kind": "trace"
+   },
+   "approximate": true,
+   "files": [
+    {
+     "path": "README.md",
+     "status": "unknown"
+    }
+   ]
+  },
+  "last_qa": null,
+  "validations_passed": null,
+  "cost": null,
+  "last_activity": "2026-09-26T07:00:05Z",
+  "errors": []
+ },
+ {
+  "task": {
+   "id": "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+   "title": "Future",
+   "description": "",
+   "status": "archived",
+   "complexity": "standard",
+   "labels": [],
+   "source": {
+    "kind": "manual"
+   },
+   "created_at": "2026-09-27T09:00:00.000001Z",
+   "updated_at": "2026-09-27T10:00:00Z",
+   "branch": "vibe/004-x"
+  },
+  "number": 4,
+  "runs": [],
+  "totals": {
+   "usage": {
+    "input_tokens": 2000,
+    "output_tokens": 900,
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0
+   },
+   "active_ms": 4100,
+   "runs": 1,
+   "commits": 1,
+   "complete": true
+  },
+  "changed_files": {
+   "source": {
+    "kind": "telepathy",
+    "hint": 1
+   },
+   "approximate": false,
+   "files": []
+  },
+  "last_qa": null,
+  "validations_passed": null,
+  "cost": {
+   "amount": 0.5,
+   "currency": "EUR",
+   "complete": true
+  },
+  "last_activity": "2026-09-26T07:00:05Z",
+  "errors": []
+ }
+]

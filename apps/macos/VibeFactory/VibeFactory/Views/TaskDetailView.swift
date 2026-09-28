@@ -3,7 +3,7 @@ import VibeAPI
 
 /// Header, budget gauges, approval banner and the tabs of the selected task.
 struct TaskDetailView: View {
-    enum Tab: Hashable { case overview, activity, changes }
+    enum Tab: Hashable { case overview, activity, trace, changes }
 
     let model: TaskDetailViewModel
     let project: ProjectViewModel
@@ -26,6 +26,7 @@ struct TaskDetailView: View {
                 Picker("", selection: $tab) {
                     Text(settings.t("tab_overview")).tag(Tab.overview)
                     Text(settings.t("tab_activity")).tag(Tab.activity)
+                    Text(settings.t("tab_trace")).tag(Tab.trace)
                     Text(settings.t("tab_changes")).tag(Tab.changes)
                 }
                 .pickerStyle(.segmented)
@@ -36,6 +37,7 @@ struct TaskDetailView: View {
                 switch tab {
                 case .overview: OverviewTab(detail: detail)
                 case .activity: ActivityTab(model: model)
+                case .trace: TraceTab(model: model)
                 case .changes: ChangesTab(model: model)
                 }
             } else {
@@ -302,7 +304,7 @@ struct ActivityTab: View {
                                 Text(line.at, format: .dateTime.hour().minute().second())
                                     .foregroundStyle(.tertiary)
                                 Text(line.text)
-                                    .foregroundStyle(color(line.tone))
+                                    .foregroundStyle(line.tone.color)
                                     .textSelection(.enabled)
                             }
                             .id(line.id)
@@ -317,16 +319,6 @@ struct ActivityTab: View {
                 }
             }
             LivePanel(model: model)
-        }
-    }
-
-    private func color(_ tone: ActivityLine.Tone) -> Color {
-        switch tone {
-        case .normal: .primary
-        case .dim: .secondary
-        case .good: .green
-        case .warn: .orange
-        case .bad: .red
         }
     }
 }

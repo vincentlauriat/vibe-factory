@@ -23,6 +23,8 @@ final class ProjectViewModel {
     var decision: Decision?
     var errorMessage: String?
     let evaluations = EvaluationsViewModel()
+    let activity = ActivityViewModel()
+    let history = HistoryViewModel()
 
     @ObservationIgnored private let translate: (String) -> String
 
@@ -38,7 +40,7 @@ final class ProjectViewModel {
         detail?.stop()
         detail = nil
         guard let id = selectedTaskId, let client = session.client else { return }
-        let model = TaskDetailViewModel(taskId: id, client: client, translate: translate)
+        let model = TaskDetailViewModel(taskId: id, client: client, session: session, translate: translate)
         detail = model
         model.start()
     }

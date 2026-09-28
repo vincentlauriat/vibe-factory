@@ -38,6 +38,8 @@ public struct ServerEndpoint: Hashable, Sendable {
         let prefix = components.path.hasSuffix("/") ? components.path : components.path + "/"
         components.path = prefix + "api/" + path
         components.queryItems = query.isEmpty ? nil : query
+        // A literal `+` (an RFC 3339 offset) would reach the server as a space.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         return components.url!
     }
 
@@ -126,6 +128,66 @@ public final class VibeClient: Sendable {
         try await get("evals")
     }
 
+    /// `GET /api/events`: logged events of every task, oldest first, the
+    /// last `limit` (server default 1000) after the filters, with the cursor
+    /// to go on from and the number of logs that could not be read.
+    public func events(after: EventCursor? = nil, since: String? = nil, types: [String] = [],
+                       tasks: [String] = [], limit: Int? = nil) async throws -> EventsPage {
+        let query = GlobalStream.Query(after: after, since: since, types: types, tasks: tasks)
+        let (data, response) = try await fetch(endpoint.request("events", query: query.items(limit: limit)))
+        let events: [TaggedEnvelope] = try decode(data, from: response)
+        return EventsPage(
+            events: events,
+            cursor: response.value(forHTTPHeaderField: "X-Vibe-Cursor").flatMap(EventCursor.init),
+            readErrors: response.value(forHTTPHeaderField: "X-Vibe-Read-Errors").flatMap { Int($0) } ?? 0)
+    }
+
+    /// Every task's events as they happen (`GET /api/stream`), after `after`
+    /// (else `since`, else from now). The token goes in the header.
+    public func globalStream(after: EventCursor? = nil, since: String? = nil, types: [String] = [],
+                             tasks: [String] = [], backoff: Backoff = Backoff()) -> GlobalStream {
+        GlobalStream(endpoint: endpoint, query: GlobalStream.Query(after: after, since: since, types: types, tasks: tasks),
+                     session: session, backoff: backoff)
+    }
+
+    /// `GET /api/history`: finished tasks, most recent first; `all` adds the
+    /// failed and cancelled ones.
+    public func history(all: Bool = false) async throws -> [TaskHistory] {
+        try await get("history", query: all ? [URLQueryItem(name: "all", value: "true")] : [])
+    }
+
+    /// `GET /api/history/{ref}`: the history of any task.
+    public func history(task ref: String) async throws -> TaskHistory {
+        try await get("history/\(ref)")
+    }
+
+    /// `GET /api/tasks/{ref}/trace`: the calls of the last run, of the run
+    /// whose id starts with `run`, or of every run with `all` (the server
+    /// answers one object, or a list with `all`; this is always a list).
+    /// `.notFound` when the task has not been run or no run matches.
+    public func trace(task ref: String, run: String? = nil, all: Bool = false) async throws -> [RunTrace] {
+        var query: [URLQueryItem] = []
+        if let run { query.append(URLQueryItem(name: "run", value: run)) }
+        if all { query.append(URLQueryItem(name: "all", value: "true")) }
+        if all { return try await get("tasks/\(ref)/trace", query: query) }
+        let trace: RunTrace = try await get("tasks/\(ref)/trace", query: query)
+        return [trace]
+    }
+
+    /// `GET /api/tasks/{ref}/trace/{call}/output`: the complete output of a
+    /// call; `nil` when it was not traced, is gone, or the call is unknown.
+    public func traceOutput(task ref: String, call: String) async throws -> CallOutput? {
+        var request = endpoint.request("tasks/\(ref)/trace/\(call)/output")
+        request.setValue("text/plain", forHTTPHeaderField: "Accept")
+        do {
+            let (data, response) = try await fetch(request)
+            return CallOutput(text: String(decoding: data, as: UTF8.self),
+                              truncated: response.value(forHTTPHeaderField: "X-Vibe-Truncated") == "true")
+        } catch VibeError.notFound {
+            return nil
+        }
+    }
+
     /// Live events of a task (`GET /api/tasks/{ref}/stream`).
     public func stream(_ ref: String, after: UInt64 = 0) -> EventStream {
         EventStream(endpoint: endpoint, path: "tasks/\(ref)/stream", after: after, session: session) {
@@ -147,6 +209,12 @@ public final class VibeClient: Sendable {
     }
 
     private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
+        let (data, response) = try await fetch(request)
+        return try decode(data, from: response)
+    }
+
+    /// The body and headers of a 2xx answer; other answers become `VibeError`.
+    private func fetch(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let data: Data
         let response: URLResponse
         do {
@@ -160,10 +228,15 @@ public final class VibeClient: Sendable {
             throw VibeError.transport(error.localizedDescription)
         }
         try Self.check(response, body: data)
+        guard let http = response as? HTTPURLResponse else { throw VibeError.transport("not an HTTP answer") }
+        return (data, http)
+    }
+
+    private func decode<T: Decodable>(_ data: Data, from response: HTTPURLResponse) throws -> T {
         do {
             return try VibeJSON.decoder().decode(T.self, from: data)
         } catch {
-            throw VibeError.transport("unexpected answer from \(request.url?.path ?? ""): \(error)")
+            throw VibeError.transport("unexpected answer from \(response.url?.path ?? ""): \(error)")
         }
     }
 

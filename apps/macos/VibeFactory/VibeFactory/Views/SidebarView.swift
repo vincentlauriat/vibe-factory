@@ -103,13 +103,3 @@ struct TaskRowView: View {
         .padding(.vertical, 2)
     }
 }
-
-/// Placeholder until the server serves `/api/history` (Step 4).
-struct HistoryPlaceholderView: View {
-    @Environment(AppSettings.self) private var settings
-
-    var body: some View {
-        ContentUnavailableView(settings.t("history_title"), systemImage: "clock.arrow.circlepath",
-                               description: Text(settings.t("history_soon")))
-    }
-}

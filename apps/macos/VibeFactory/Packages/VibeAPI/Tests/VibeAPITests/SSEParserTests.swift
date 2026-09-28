@@ -13,7 +13,7 @@ final class SSEParserTests: XCTestCase {
 
     func testTheShapeAxumSends() {
         let messages = parse(["event: phase_started\nid: 2\ndata: {\"seq\":2}\n\n: keep-alive\n\n"])
-        XCTAssertEqual(messages, [SSEMessage(event: "phase_started", data: #"{"seq":2}"#, lastEventId: "2")])
+        XCTAssertEqual(messages, [SSEMessage(event: "phase_started", data: #"{"seq":2}"#, lastEventId: "2", id: "2")])
     }
 
     func testChunkBoundariesAnywhere() {
@@ -83,6 +83,14 @@ final class SSEParserTests: XCTestCase {
         parser.finish()
         XCTAssertEqual(parser.lastEventId, "3")
         XCTAssertEqual(parser.push(Array("id: 8\ndata: b\n\n".utf8)).map(\.lastEventId), ["8"])
+    }
+
+    /// The global stream's `agent_delta` has no `id:`: `lastEventId` keeps
+    /// the previous one, `id` says the message had none.
+    func testAMessageWithoutIdKeepsTheLastIdButHasNoOwnId() {
+        let messages = parse(["id: 5-1-2\ndata: a\n\nevent: agent_delta\ndata: b\n\n"])
+        XCTAssertEqual(messages.map(\.lastEventId), ["5-1-2", "5-1-2"])
+        XCTAssertEqual(messages.map(\.id), ["5-1-2", nil])
     }
 
     func testBackoffDoublesAndCaps() {

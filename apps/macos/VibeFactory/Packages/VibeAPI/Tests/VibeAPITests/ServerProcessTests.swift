@@ -109,10 +109,13 @@ final class ServerProcessTests: XCTestCase {
 
     /// Starts the real `vibe serve` on this repository. Opt-in, and needs
     /// vibe ≥ 0.5 (`--exit-on-stdin-eof`):
-    /// `VIBE_SMOKE=1 swift test --filter ServerProcessTests`.
+    /// `VIBE_SMOKE=1 swift test --filter ServerProcessTests`; `VIBE_EXECUTABLE`
+    /// picks the binary (`<repo>/target/debug/vibe` for the checkout).
     func testSmokeAgainstThisRepository() async throws {
-        try XCTSkipUnless(ProcessInfo.processInfo.environment["VIBE_SMOKE"] == "1", "set VIBE_SMOKE=1")
-        let executable = try XCTUnwrap(ServerProcess.resolveExecutable(setting: nil), "no vibe executable")
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(environment["VIBE_SMOKE"] == "1", "set VIBE_SMOKE=1")
+        let executable = try XCTUnwrap(ServerProcess.resolveExecutable(setting: environment["VIBE_EXECUTABLE"]),
+                                       "no vibe executable")
         // Tests/VibeAPITests/ → Packages/VibeAPI → apps/macos/VibeFactory → repository root.
         var root = URL(fileURLWithPath: #filePath)
         for _ in 0..<8 { root.deleteLastPathComponent() }
@@ -134,10 +137,32 @@ final class ServerProcessTests: XCTestCase {
         let evals = try await client.evals()
         XCTAssertFalse(evals.enabled)
         await assertUnauthorized(VibeClient(endpoint: ServerEndpoint(baseURL: endpoint.baseURL, token: "wrong")))
-        print("smoke: vibe \(health.version) on \(endpoint.baseURL), \(tasks.count) task(s), pid \(server.pid)")
+
+        // The project-wide routes of 0.5.
+        let history = try await client.history(all: true)
+        let page = try await client.events(limit: 50)
+        let streamStatus = try await openStream(endpoint, after: page.cursor)
+        XCTAssertEqual(streamStatus.status, 200)
+        XCTAssertTrue(streamStatus.contentType.hasPrefix("text/event-stream"), streamStatus.contentType)
+        print("smoke: vibe \(health.version) on \(endpoint.baseURL), \(tasks.count) task(s), "
+              + "\(history.count) in history, \(page.events.count) event(s), cursor \(page.cursor?.description ?? "none"), "
+              + "read errors \(page.readErrors), stream \(streamStatus.status) \(streamStatus.contentType), pid \(server.pid)")
 
         await server.stop(grace: 10)
         XCTAssertFalse(server.isRunning)
+    }
+
+    /// Open `/api/stream` and read its headers only. URLSession hands the
+    /// response over with the first bytes of the body, and a quiet project
+    /// sends nothing but a keep-alive comment every 15 s: allow for one.
+    private func openStream(_ endpoint: ServerEndpoint, after: EventCursor?) async throws -> (status: Int, contentType: String) {
+        let query = after.map { [URLQueryItem(name: "after", value: $0.description)] } ?? []
+        var request = endpoint.request("stream", query: query)
+        request.timeoutInterval = 25
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        bytes.task.cancel()
+        let http = try XCTUnwrap(response as? HTTPURLResponse)
+        return (http.statusCode, http.value(forHTTPHeaderField: "Content-Type") ?? "")
     }
 
     private func assertUnauthorized(_ client: VibeClient) async {

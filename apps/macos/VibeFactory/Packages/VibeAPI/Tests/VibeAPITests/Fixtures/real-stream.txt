@@ -1,0 +1,148 @@
+event: run_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":1,"at":"2026-09-28T05:52:52.197209Z","event":{"type":"run_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","task":"a659bab9-7d19-4381-bf16-a3a666e364c7"}}
+id: 1790574772197209000-1-1
+
+event: phase_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":2,"at":"2026-09-28T05:52:52.206038Z","event":{"type":"phase_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"assess"}}
+id: 1790574772206038000-1-2
+
+event: agent_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":3,"at":"2026-09-28T05:52:52.206876Z","event":{"type":"agent_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"complexity_assessor","subtask":null,"model":"mock-model"}}
+id: 1790574772206876000-1-3
+
+event: agent_text
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":4,"at":"2026-09-28T05:52:52.207110Z","event":{"type":"agent_text","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"complexity_assessor","text":"Done.\n\n```json\n{\"complexity\": \"trivial\", \"confidence\": 0.9, \"reasoning\": \"one file\", \"needs_research\": false, \"needs_critique\": false, \"risk_level\": \"low\"}\n```"}}
+id: 1790574772207110000-1-4
+
+event: agent_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":5,"at":"2026-09-28T05:52:52.207245Z","event":{"type":"agent_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"complexity_assessor","steps":1,"usage":{"input_tokens":594,"output_tokens":40,"cache_read_tokens":0,"cache_write_tokens":0},"stop":"{\"reason\":\"completed\"}"}}
+id: 1790574772207245000-1-5
+
+event: budget_updated
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":6,"at":"2026-09-28T05:52:52.208052Z","event":{"type":"budget_updated","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","tokens":634,"token_limit":null,"active_ms":10,"duration_limit_ms":null}}
+id: 1790574772208052000-1-6
+
+event: phase_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":7,"at":"2026-09-28T05:52:52.208150Z","event":{"type":"phase_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"assess","success":true,"summary":"complexity trivial (assessor (confidence 0.90, risk low): one file); phases: plan → build → qa → merge"}}
+id: 1790574772208150000-1-7
+
+event: phase_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":8,"at":"2026-09-28T05:52:52.209253Z","event":{"type":"phase_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"plan"}}
+id: 1790574772209253000-1-8
+
+event: agent_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":9,"at":"2026-09-28T05:52:52.209697Z","event":{"type":"agent_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"planner","subtask":null,"model":"mock-model"}}
+id: 1790574772209697000-1-9
+
+event: agent_text
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":10,"at":"2026-09-28T05:52:52.209927Z","event":{"type":"agent_text","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"planner","text":"Done.\n\n```json\n{\"approach\": \"write one file\", \"phases\": [{\"name\": \"Only\", \"subtasks\": [{\"title\": \"Write hello.txt\", \"description\": \"create the file\", \"files\": [\"hello.txt\"], \"verification\": [\"cat hello.txt\"]}]}]}\n```"}}
+id: 1790574772209927000-1-10
+
+event: agent_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":11,"at":"2026-09-28T05:52:52.210038Z","event":{"type":"agent_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"planner","steps":1,"usage":{"input_tokens":754,"output_tokens":54,"cache_read_tokens":0,"cache_write_tokens":0},"stop":"{\"reason\":\"completed\"}"}}
+id: 1790574772210038000-1-11
+
+event: artefact_written
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":12,"at":"2026-09-28T05:52:52.210635Z","event":{"type":"artefact_written","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","artefact":{"kind":"plan"}}}
+id: 1790574772210635000-1-12
+
+event: budget_updated
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":13,"at":"2026-09-28T05:52:52.210896Z","event":{"type":"budget_updated","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","tokens":1442,"token_limit":null,"active_ms":13,"duration_limit_ms":null}}
+id: 1790574772210896000-1-13
+
+event: phase_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":14,"at":"2026-09-28T05:52:52.210988Z","event":{"type":"phase_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"plan","success":true,"summary":"1 subtask(s) in 1 phase(s)"}}
+id: 1790574772210988000-1-14
+
+event: phase_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":15,"at":"2026-09-28T05:52:52.211980Z","event":{"type":"phase_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"build"}}
+id: 1790574772211980000-1-15
+
+event: subtask_updated
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":16,"at":"2026-09-28T05:52:52.212660Z","event":{"type":"subtask_updated","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","subtask":"60968488-d3d1-4f6d-89af-93c66885fa87","status":"in_progress"}}
+id: 1790574772212660000-1-16
+
+event: agent_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":17,"at":"2026-09-28T05:52:52.213262Z","event":{"type":"agent_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"coder","subtask":"60968488-d3d1-4f6d-89af-93c66885fa87","model":"mock-model"}}
+id: 1790574772213262000-1-17
+
+event: tool_called
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":18,"at":"2026-09-28T05:52:52.213443Z","event":{"type":"tool_called","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"coder","tool":"write_file","input":{"content":"Hello, world!\n","path":"hello.txt"},"call":"e6773c7642a0","subtask":"60968488-d3d1-4f6d-89af-93c66885fa87"}}
+id: 1790574772213443000-1-18
+
+event: tool_returned
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":19,"at":"2026-09-28T05:52:52.214081Z","event":{"type":"tool_returned","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"coder","tool":"write_file","is_error":false,"duration_ms":0,"preview":"Created `hello.txt` (14 bytes).","call":"e6773c7642a0","subtask":"60968488-d3d1-4f6d-89af-93c66885fa87","exit_code":null,"timed_out":false,"output_chars":31,"output_file":".vibe/tool-output/001-write-the-greeting/986edd04-f7ca-4734-9e5f-c9779a4f6473/e6773c7642a0.txt"}}
+id: 1790574772214081000-1-19
+
+event: agent_text
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":20,"at":"2026-09-28T05:52:52.214277Z","event":{"type":"agent_text","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"coder","text":"Done.\n\n```json\n{\"status\": \"done\", \"summary\": \"wrote hello.txt\", \"files_changed\": [\"hello.txt\"], \"notes\": \"\"}\n```"}}
+id: 1790574772214277000-1-20
+
+event: agent_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":21,"at":"2026-09-28T05:52:52.214356Z","event":{"type":"agent_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"coder","steps":2,"usage":{"input_tokens":1849,"output_tokens":43,"cache_read_tokens":0,"cache_write_tokens":0},"stop":"{\"reason\":\"completed\"}"}}
+id: 1790574772214356000-1-21
+
+event: budget_updated
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":22,"at":"2026-09-28T05:52:52.214501Z","event":{"type":"budget_updated","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","tokens":3334,"token_limit":null,"active_ms":16,"duration_limit_ms":null}}
+id: 1790574772214501000-1-22
+
+event: subtask_updated
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":23,"at":"2026-09-28T05:52:52.214973Z","event":{"type":"subtask_updated","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","subtask":"60968488-d3d1-4f6d-89af-93c66885fa87","status":"done"}}
+id: 1790574772214973000-1-23
+
+event: committed
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":24,"at":"2026-09-28T05:52:52.252886Z","event":{"type":"committed","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","subtask":"60968488-d3d1-4f6d-89af-93c66885fa87","commit":"5d6731a10fabd17e684db79f3dec85d474f40c62","message":"vibe: complete subtask 1 - Write hello.txt","files":["err.txt","hello.txt","out.txt"]}}
+id: 1790574772252886000-1-24
+
+event: budget_updated
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":25,"at":"2026-09-28T05:52:52.253681Z","event":{"type":"budget_updated","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","tokens":3334,"token_limit":null,"active_ms":55,"duration_limit_ms":null}}
+id: 1790574772253681000-1-25
+
+event: phase_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":26,"at":"2026-09-28T05:52:52.253768Z","event":{"type":"phase_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"build","success":true,"summary":"1 done, 0 failed, 0 skipped"}}
+id: 1790574772253768000-1-26
+
+event: phase_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":27,"at":"2026-09-28T05:52:52.254577Z","event":{"type":"phase_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"qa"}}
+id: 1790574772254577000-1-27
+
+event: agent_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":28,"at":"2026-09-28T05:52:52.255179Z","event":{"type":"agent_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"qa_reviewer","subtask":null,"model":"mock-model"}}
+id: 1790574772255179000-1-28
+
+event: agent_text
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":29,"at":"2026-09-28T05:52:52.255358Z","event":{"type":"agent_text","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"qa_reviewer","text":"Done.\n\n```json\n{\"verdict\": \"approved\", \"summary\": \"looks good\", \"issues\": []}\n```"}}
+id: 1790574772255358000-1-29
+
+event: agent_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":30,"at":"2026-09-28T05:52:52.255447Z","event":{"type":"agent_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","role":"qa_reviewer","steps":1,"usage":{"input_tokens":1031,"output_tokens":21,"cache_read_tokens":0,"cache_write_tokens":0},"stop":"{\"reason\":\"completed\"}"}}
+id: 1790574772255447000-1-30
+
+event: artefact_written
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":31,"at":"2026-09-28T05:52:52.255869Z","event":{"type":"artefact_written","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","artefact":{"kind":"qa_report","round":1}}}
+id: 1790574772255869000-1-31
+
+event: budget_updated
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":32,"at":"2026-09-28T05:52:52.256083Z","event":{"type":"budget_updated","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","tokens":4386,"token_limit":null,"active_ms":58,"duration_limit_ms":null}}
+id: 1790574772256083000-1-32
+
+event: phase_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":33,"at":"2026-09-28T05:52:52.256164Z","event":{"type":"phase_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"qa","success":true,"summary":"round 1: Approved (0 issue(s))"}}
+id: 1790574772256164000-1-33
+
+event: phase_started
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":34,"at":"2026-09-28T05:52:52.256920Z","event":{"type":"phase_started","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"merge"}}
+id: 1790574772256920000-1-34
+
+event: budget_updated
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":35,"at":"2026-09-28T05:52:52.257145Z","event":{"type":"budget_updated","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","tokens":4386,"token_limit":null,"active_ms":59,"duration_limit_ms":null}}
+id: 1790574772257145000-1-35
+
+event: phase_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":36,"at":"2026-09-28T05:52:52.257236Z","event":{"type":"phase_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","phase":"merge","success":true,"summary":"ready for human review and merge (auto_merge is off)"}}
+id: 1790574772257236000-1-36
+
+event: run_finished
+data: {"task":"a659bab9-7d19-4381-bf16-a3a666e364c7","number":1,"schema":2,"seq":37,"at":"2026-09-28T05:52:52.257777Z","event":{"type":"run_finished","run":"986edd04-f7ca-4734-9e5f-c9779a4f6473","success":true,"status":"ready","usage":{"input_tokens":4228,"output_tokens":158,"cache_read_tokens":0,"cache_write_tokens":0},"active_ms":61,"started_at":"2026-09-28T05:52:52.196554Z"}}
+id: 1790574772257777000-1-37
+

@@ -2,8 +2,9 @@ import Foundation
 import Observation
 import VibeAPI
 
-/// The selected task: its detail, its live events (one `EventStream`), the
-/// budget gauges, the changes, and the actions of the toolbar and banner.
+/// The selected task: its detail, its events (the logged ones of its last
+/// run, then the live ones from the project stream), the budget gauges, the
+/// changes, the trace, and the actions of the toolbar and banner.
 @Observable
 @MainActor
 final class TaskDetailViewModel {
@@ -37,18 +38,31 @@ final class TaskDetailViewModel {
     private(set) var acting = false
     var errorMessage: String?
 
+    /// The Trace tab.
+    let trace: TraceViewModel
+
     @ObservationIgnored private let client: VibeClient
+    @ObservationIgnored private weak var session: ProjectSession?
     @ObservationIgnored private let translate: (String) -> String
+    @ObservationIgnored private var subscription: UUID?
+    /// Live events received before the logged ones were loaded.
+    @ObservationIgnored private var pending: [Envelope]? = []
+    /// Run and `seq` of the last logged envelope applied: the backlog and
+    /// the stream overlap, and `seq` restarts with each run.
+    @ObservationIgnored private var lastRun: String?
+    @ObservationIgnored private var lastSeq: UInt64 = 0
     /// Id of each entry of `envelopes`, same order.
     @ObservationIgnored private var envelopeIds: [Int] = []
     @ObservationIgnored private var nextId = 0
-    @ObservationIgnored private var streamTask: Task<Void, Never>?
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
 
-    init(taskId: String, client: VibeClient, translate: @escaping (String) -> String) {
+    init(taskId: String, client: VibeClient, session: ProjectSession, translate: @escaping (String) -> String) {
         self.taskId = taskId
         self.client = client
+        self.session = session
         self.translate = translate
+        trace = TraceViewModel(taskId: taskId, client: client)
     }
 
     var budget: Budget? {
@@ -68,26 +82,61 @@ final class TaskDetailViewModel {
 
     // MARK: Lifecycle
 
+    /// Listen to the project stream first, then load the detail and the
+    /// logged events of the last run; what arrived meanwhile is applied
+    /// after them, and the `(run, seq)` check drops the overlap.
     func start() {
-        Task { await reload() }
-        streamTask?.cancel()
-        let stream = client.stream(taskId)
-        streamTask = Task { [weak self] in
-            do {
-                for try await envelope in stream.envelopes() {
-                    self?.receive(envelope)
-                }
-            } catch is CancellationError {
-            } catch {
-                self?.errorMessage = error.localizedDescription
-            }
+        let taskId = taskId
+        subscription = session?.subscribe { [weak self] event in
+            guard event.tagged.task == taskId else { return }
+            self?.live(event.tagged.envelope)
+        }
+        loadTask?.cancel()
+        loadTask = Task { [weak self] in
+            await self?.reload()
+            await self?.loadEvents()
         }
     }
 
     func stop() {
-        streamTask?.cancel()
-        streamTask = nil
+        if let subscription { session?.unsubscribe(subscription) }
+        subscription = nil
+        loadTask?.cancel()
+        loadTask = nil
         reloadTask?.cancel()
+        trace.stop()
+    }
+
+    private func loadEvents() async {
+        do {
+            let backlog = try await client.events(taskId)
+            for envelope in backlog { apply(envelope) }
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        let held = pending ?? []
+        pending = nil
+        for envelope in held { apply(envelope) }
+    }
+
+    private func live(_ envelope: Envelope) {
+        if pending != nil, !envelope.event.isEphemeral {
+            pending?.append(envelope)
+        } else {
+            apply(envelope)
+        }
+    }
+
+    /// Whether a logged envelope is new; records its position.
+    private func accept(_ envelope: Envelope) -> Bool {
+        guard let seq = envelope.seq else { return true } // ephemeral, or logged before 0.3
+        let run = envelope.event.runId
+        if run == lastRun, seq <= lastSeq { return false }
+        lastRun = run
+        lastSeq = seq
+        return true
     }
 
     func reload() async {
@@ -142,7 +191,8 @@ final class TaskDetailViewModel {
         }
     }
 
-    private func receive(_ envelope: Envelope) {
+    private func apply(_ envelope: Envelope) {
+        guard accept(envelope) else { return }
         switch envelope.event {
         case .agentDelta(_, _, _, let delta):
             guard delta.kind == "text" else { return }
@@ -162,7 +212,10 @@ final class TaskDetailViewModel {
         case .budgetUpdated(_, let tokens, let tokenLimit, let activeMs, let durationLimitMs):
             budgetFromEvents = Budget(tokens: tokens, tokenLimit: tokenLimit, activeMs: activeMs,
                                       durationLimitMs: durationLimitMs)
-        case .artefactWritten, .subtaskUpdated, .phaseFinished, .runFinished, .approvalRequested,
+        case .runFinished:
+            scheduleReload()
+            trace.runFinished()
+        case .artefactWritten, .subtaskUpdated, .phaseFinished, .approvalRequested,
              .approvalResolved, .paused, .merged:
             scheduleReload()
         default:

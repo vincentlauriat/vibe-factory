@@ -11,9 +11,10 @@ struct ActivityLine: Identifiable, Hashable {
     let tone: Tone
     let text: String
 
-    /// `nil` for events the feed does not show (deltas, successful tool
-    /// returns, info logs, empty texts).
-    static func describe(_ envelope: Envelope, id: Int, detail: TaskDetail?,
+    /// `nil` for events the feed does not show (deltas, empty texts, and
+    /// unless `verbose`, budget updates, successful tool returns and info
+    /// logs). The project-wide feed is verbose: its type filter decides.
+    static func describe(_ envelope: Envelope, id: Int, detail: TaskDetail?, verbose: Bool = false,
                          t: (String) -> String) -> ActivityLine? {
         func line(_ tone: Tone, _ text: String) -> ActivityLine {
             ActivityLine(id: id, at: envelope.at, tone: tone, text: text)
@@ -35,7 +36,9 @@ struct ActivityLine: Identifiable, Hashable {
         case .toolCalled(let call):
             return line(.dim, "    → \(call.tool) \(Format.short(call.input.compactText, 160))")
         case .toolReturned(let ret):
-            guard ret.isError else { return nil }
+            guard ret.isError else {
+                return verbose ? line(.dim, "    ← \(ret.tool) \(Format.duration(ms: ret.durationMs))") : nil
+            }
             let code = ret.exitCode.map { " [\($0)]" } ?? ""
             return line(.warn, "    ← \(ret.tool)\(code) " + t("ev_failed") + ": \(Format.short(ret.preview, 160))")
         case .agentFinished(_, let role, _, let usage, _):
@@ -51,8 +54,11 @@ struct ActivityLine: Identifiable, Hashable {
             return line(.good, "  ⎇ " + t("ev_merged") + " \(branch) → \(base) (\(commit.prefix(8)))")
         case .validationFinished(_, let command, _, let passed, _):
             return line(passed ? .good : .bad, (passed ? "  ✓ " : "  ✗ ") + command)
-        case .budgetUpdated:
-            return nil
+        case .budgetUpdated(_, let tokens, let tokenLimit, let activeMs, let durationLimitMs):
+            guard verbose else { return nil }
+            let tokenText = Format.tokens(tokens) + (tokenLimit.map { " / " + Format.tokens($0) } ?? "")
+            let timeText = Format.duration(ms: activeMs) + (durationLimitMs.map { " / " + Format.duration(ms: $0) } ?? "")
+            return line(.dim, "  " + t("budget_tokens") + " \(tokenText) · " + t("budget_time") + " \(timeText)")
         case .artefactWritten(_, let artefact):
             let name: String
             switch artefact {
@@ -77,33 +83,12 @@ struct ActivityLine: Identifiable, Hashable {
             return line(totals.success ? .good : .warn,
                         "■ " + t("ev_run_finished") + ": \(totals.status.rawValue)\(tokens)\(time)")
         case .log(_, let level, let message):
-            guard level != "info" else { return nil }
+            guard level != "info" else { return verbose ? line(.dim, "  " + message) : nil }
             return line(level == "error" ? .bad : .warn, "  ! " + message)
-        case .agentDelta, .unknown:
+        case .unknown(let type, _):
+            return verbose ? line(.dim, "  " + type) : nil
+        case .agentDelta:
             return nil
         }
-    }
-}
-
-enum Format {
-    static func short(_ text: String, _ limit: Int) -> String {
-        text.count <= limit ? text : String(text.prefix(limit)) + "…"
-    }
-
-    /// 950, 12.3k, 1.2M.
-    static func tokens(_ value: UInt64) -> String {
-        switch value {
-        case ..<1_000: return "\(value)"
-        case ..<1_000_000: return String(format: "%.1fk", Double(value) / 1_000)
-        default: return String(format: "%.1fM", Double(value) / 1_000_000)
-        }
-    }
-
-    /// 42 s, 3 min 10 s, 1 h 05 min.
-    static func duration(ms: UInt64) -> String {
-        let seconds = Int(ms / 1_000)
-        if seconds < 60 { return "\(seconds) s" }
-        if seconds < 3_600 { return "\(seconds / 60) min \(String(format: "%02d", seconds % 60)) s" }
-        return "\(seconds / 3_600) h \(String(format: "%02d", seconds / 60 % 60)) min"
     }
 }

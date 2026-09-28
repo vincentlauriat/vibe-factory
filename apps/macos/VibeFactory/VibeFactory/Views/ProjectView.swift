@@ -11,8 +11,12 @@ struct ProjectView: View {
             SidebarView(model: model)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
         } content: {
-            content
-                .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 460)
+            if model.sidebar == .history {
+                // The History table needs its ten columns.
+                content.navigationSplitViewColumnWidth(min: 520, ideal: 760, max: 1_200)
+            } else {
+                content.navigationSplitViewColumnWidth(min: 260, ideal: 340, max: 520)
+            }
         } detail: {
             detail
         }
@@ -58,7 +62,7 @@ struct ProjectView: View {
         case .activity:
             ActivityFeedView(model: model)
         case .history:
-            HistoryPlaceholderView()
+            HistoryView(model: model.history, session: model.session)
         case .evaluations:
             EvaluationsListView(model: model.evaluations) {
                 await model.evaluations.load(model.session.client)
@@ -72,7 +76,7 @@ struct ProjectView: View {
         case .evaluations:
             EvaluationTableView(suite: model.evaluations.suite, enabled: model.evaluations.response?.enabled ?? true)
         case .history:
-            Color.clear
+            HistoryDetailView(history: model.history.selected)
         default:
             if let detail = model.detail {
                 TaskDetailView(model: detail, project: model)
