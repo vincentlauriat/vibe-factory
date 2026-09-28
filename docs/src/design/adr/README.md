@@ -2,7 +2,9 @@
 
 Significant decisions are recorded here in the lightweight ADR format: context, decision,
 consequences. A new ADR is added when a decision changes the shape of the framework; an
-existing ADR is never edited after acceptance, it is superseded by a new one.
+existing ADR is never edited after acceptance, it is superseded by a new one. The one
+exception is a cross reference: a link to the later ADR that details or supersedes a point
+may be added to an accepted ADR, its text does not change otherwise.
 
 | ADR | Title | Status |
 |-----|-------|--------|

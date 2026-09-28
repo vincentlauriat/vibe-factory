@@ -148,7 +148,7 @@ pub struct PipelineConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_duration_secs: Option<u64>,
     /// Keep the complete output of every tool call under
-    /// `.vibe/tool-output/<task>/<run>/`, referenced by the
+    /// `.vibe/tool-output/<task dir>/<run>/`, referenced by the
     /// `tool_returned` events.
     #[serde(default = "default_true")]
     pub trace_outputs: bool,
