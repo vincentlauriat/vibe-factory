@@ -240,8 +240,12 @@ The task is `ready`: nothing reached your branch yet. Merge it as any branch:
 ```sh
 git switch main
 git merge vibe/add-a-json-flag-to-the-export-command-6f1c3e0a
-vibe task discard 1 --yes          # remove the worktree and the branch
 ```
+
+The worktree and the branch stay until you discard the task. `vibe task discard 1 --yes`
+removes them, together with the task directory and its traced tool outputs, so the task no
+longer appears in its history: run it once you no longer need to look back at the task
+(step 8).
 
 To let Vibe Factory merge by itself as soon as QA approves, run with `--auto-merge`, or
 set it for the project:
@@ -255,6 +259,34 @@ Auto-merge fast-forwards when it can, otherwise creates a merge commit. It refus
 while tracked files of your checkout have uncommitted changes, and it leaves the task
 `ready` with the list of conflicting files when the branches conflict. Details in
 [Workspaces and merging](workspaces.md#merge-behaviour).
+
+## 8. See what was done
+
+Everything a run did stays readable after it ended, rebuilt from the task's events and git:
+
+```sh
+vibe history                 # every finished task: runs, commits, files, tokens, time, cost
+vibe history 1               # one task: its runs, commits, changed files, validations, QA
+vibe trace 1                 # every tool call of the last run, with its result
+vibe trace 1 --full          # … and the complete output of each call
+vibe events --since 1d       # what happened on every task today, in time order
+vibe events --follow         # the activity of every task from now on (Ctrl-C to stop)
+```
+
+`vibe history` shows a cost only once you give model prices in
+[`[pricing]`](configuration.md#pricing). The complete tool outputs `vibe trace --full` reads
+are kept under `.vibe/tool-output/`, ignored by git; see [Tool call trace](trace.md) for
+their disk usage and [History](history.md) for where each figure comes from.
+
+The same views exist outside the command line:
+
+- `vibe tui` opens a terminal UI: the task board (`T`), the activity of every task (`A`),
+  the history (`H`), and a **Trace** tab in the task detail;
+- `vibe serve` serves a web UI on `http://127.0.0.1:7777` (open the link it prints, which
+  carries the access token) with the **Tasks**, **Activity**, **History** and
+  **Evaluations** views and a **Trace** tab per task, and the HTTP API they use;
+- the macOS app in [`apps/macos/VibeFactory`](https://github.com/vincentlauriat/vibe-factory/tree/main/apps/macos/VibeFactory)
+  opens a project folder and starts `vibe serve` for it, or connects to one already running.
 
 ## Try it with no API key
 
@@ -311,4 +343,6 @@ reviews again with the canned approval, and the task ends `ready`.
 
 - [Concepts](concepts.md) explains tasks, profiles, specs, plans and workspaces.
 - [Configuration](configuration.md) lists every setting, including models per phase.
+- [History](history.md) and [Tool call trace](trace.md) explain what `vibe history` and
+  `vibe trace` show and where it comes from.
 - [Troubleshooting](troubleshooting.md) covers what to do when a run pauses or fails.

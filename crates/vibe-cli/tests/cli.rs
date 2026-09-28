@@ -72,6 +72,21 @@ impl Project {
         cmd
     }
 
+    /// `vibe` as a plain process, with the same environment as
+    /// [`Project::vibe`], for tests that manage its pipes or signals.
+    fn vibe_process(&self) -> StdCommand {
+        let home = self.root().join(".home");
+        std::fs::create_dir_all(&home).unwrap();
+        let mut cmd = StdCommand::new(assert_cmd::cargo::cargo_bin("vibe"));
+        cmd.current_dir(self.root())
+            .env_remove("ANTHROPIC_API_KEY")
+            .env_remove("OPENAI_API_KEY")
+            .env_remove("RUST_LOG")
+            .env("NO_COLOR", "1")
+            .env("HOME", &home);
+        cmd
+    }
+
     fn init(&self) {
         self.vibe().arg("init").assert().success();
     }
@@ -145,6 +160,9 @@ fn help_lists_every_command() {
         "plugins",
         "doctor",
         "completions",
+        "events",
+        "history",
+        "trace",
     ] {
         assert!(out.contains(cmd), "missing {cmd} in help:\n{out}");
     }
@@ -504,6 +522,8 @@ fn dry_run_with_mock_then_resume_then_discard() {
     assert!(exists(&dir.join("qa_report_1.json")));
     let branches = p.git(&["branch", "--list", "vibe/*"]);
     assert!(branches.contains("vibe/add-a-json-flag"), "{branches}");
+    let recorded = p.task_json(1)["branch"].as_str().unwrap().to_string();
+    assert!(branches.contains(&recorded), "{recorded} in {branches}");
 
     let status = p.json(&["status"]);
     assert_eq!(status["by_status"]["ready"], 1);
@@ -527,11 +547,21 @@ fn dry_run_with_mock_then_resume_then_discard() {
         .stderr(predicate::str::contains("--yes"));
     assert!(exists(&dir));
 
+    // Traced tool outputs are filed under the task directory's name.
+    let trace = p
+        .root()
+        .join(".vibe")
+        .join("tool-output")
+        .join(dir.file_name().unwrap());
+    std::fs::create_dir_all(trace.join("run")).unwrap();
+    std::fs::write(trace.join("run").join("c.txt"), "output").unwrap();
+
     p.vibe()
         .args(["task", "discard", "1", "--yes"])
         .assert()
         .success();
     assert!(!exists(&dir));
+    assert!(!exists(&trace), "tool outputs removed");
     assert!(p.git(&["branch", "--list", "vibe/*"]).trim().is_empty());
     assert!(!exists(&worktree), "worktree removed");
     assert!(
@@ -1352,4 +1382,447 @@ fn memory_list_query_and_clear() {
         .assert()
         .success();
     assert_eq!(p.json(&["memory", "list"]).as_array().unwrap().len(), 0);
+}
+
+/// A run in place that writes `hello.txt` through one `write_file` call.
+fn greeting_script() -> Value {
+    json!([
+        fenced(json!({"complexity": "trivial", "confidence": 0.9, "reasoning": "one file",
+                      "needs_research": false, "needs_critique": false, "risk_level": "low"})),
+        fenced(json!({"approach": "write one file", "phases": [{"name": "Only", "subtasks": [
+            {"title": "Write hello.txt", "description": "create the file",
+             "files": ["hello.txt"], "verification": ["cat hello.txt"]}
+        ]}]})),
+        {"tool": "write_file", "input": {"path": "hello.txt", "content": "Hello, world!\n"}},
+        fenced(json!({"status": "done", "summary": "wrote hello.txt",
+                      "files_changed": ["hello.txt"], "notes": ""})),
+        fenced(json!({"verdict": "approved", "summary": "looks good", "issues": []})),
+    ])
+}
+
+fn stdout_of(p: &Project, args: &[&str]) -> String {
+    let out = p.vibe().args(args).output().unwrap();
+    assert!(
+        out.status.success(),
+        "vibe {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+fn json_lines(p: &Project, args: &[&str]) -> Vec<Value> {
+    let mut all = vec!["--json"];
+    all.extend_from_slice(args);
+    stdout_of(p, &all)
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+/// Two tasks: #1 ran to `ready` in place (one commit), #2 only planned.
+fn project_with_two_runs() -> Project {
+    let p = Project::new();
+    p.init();
+    p.add_task(
+        "Write the greeting module for the demo application",
+        "Create hello.txt containing a friendly greeting so the demo can print it.",
+    );
+    let script = p.write_script("script.json", &greeting_script());
+    p.vibe()
+        .args(["run", "1", "--workspace", "in_place", "--script"])
+        .arg(&script)
+        .assert()
+        .success();
+    p.add_task("Fix typo in README", "teh -> the");
+    p.vibe()
+        .args([
+            "run",
+            "2",
+            "--provider",
+            "mock",
+            "--dry-run",
+            "--workspace",
+            "in_place",
+        ])
+        .assert()
+        .success();
+    p
+}
+
+#[test]
+fn history_lists_finished_tasks_with_their_commits_and_files() {
+    let p = project_with_two_runs();
+
+    let table = stdout_of(&p, &["history"]);
+    assert!(table.contains("Write the greeting module"), "{table}");
+    assert!(table.lines().next().unwrap().contains("commits"), "{table}");
+    // #2 only planned: it is not finished.
+    assert!(!table.contains("Fix typo"), "{table}");
+
+    let list = p.json(&["history"]);
+    let list = list.as_array().unwrap();
+    assert_eq!(list.len(), 1);
+    let h = &list[0];
+    assert_eq!(h["number"], 1);
+    assert_eq!(h["task"]["status"], "ready");
+    assert_eq!(h["runs"].as_array().unwrap().len(), 1);
+    assert_eq!(h["runs"][0]["state"], "finished");
+    assert!(h["totals"]["commits"].as_u64().unwrap() >= 1, "{h}");
+    assert!(h["totals"]["usage"]["input_tokens"].as_u64().unwrap() > 0);
+    let files: Vec<&str> = h["changed_files"]["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    assert!(files.contains(&"hello.txt"), "{h}");
+    assert!(h["cost"].is_null(), "no pricing, no cost");
+
+    let one = p.json(&["history", "1"]);
+    assert_eq!(one["number"], 1);
+    assert_eq!(one["changed_files"], h["changed_files"]);
+    let detail = stdout_of(&p, &["history", "1"]);
+    for part in [
+        "Runs (1)",
+        "finished",
+        "Commits (",
+        "complete subtask 1",
+        "hello.txt",
+        "QA round 1: approved",
+    ] {
+        assert!(detail.contains(part), "missing {part:?} in:\n{detail}");
+    }
+    // Any task can be detailed, finished or not.
+    assert!(stdout_of(&p, &["history", "2"]).contains("Fix typo"));
+}
+
+#[test]
+fn trace_lists_calls_and_reads_full_outputs() {
+    let p = project_with_two_runs();
+
+    let text = stdout_of(&p, &["trace", "1"]);
+    assert!(text.contains("write_file"), "{text}");
+    assert!(text.contains("\"path\": \"hello.txt\""), "{text}");
+    assert!(text.contains("files written: hello.txt"), "{text}");
+    let call_ids: Vec<&str> = text
+        .lines()
+        .filter_map(|l| l.split("[call ").nth(1))
+        .map(|rest| &rest[..12])
+        .collect();
+    assert!(!call_ids.is_empty(), "{text}");
+    assert!(
+        call_ids
+            .iter()
+            .all(|id| id.bytes().all(|b| b.is_ascii_hexdigit())),
+        "{call_ids:?}"
+    );
+
+    // `--json` is a `RunTrace`.
+    let value = p.json(&["trace", "1"]);
+    let trace: vibe_pipeline::RunTrace = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&trace).unwrap(), value);
+    let write = trace.calls.iter().find(|c| c.tool == "write_file").unwrap();
+    assert_eq!(trace.files_written, ["hello.txt"]);
+
+    // `--full` reads the trace store; the default shows the logged preview.
+    let file = write.output_file.clone().expect("output traced");
+    std::fs::write(&file, "SENTINEL OUTPUT").unwrap();
+    assert!(stdout_of(&p, &["trace", "1", "--full"]).contains("SENTINEL OUTPUT"));
+    assert!(!stdout_of(&p, &["trace", "1"]).contains("SENTINEL OUTPUT"));
+    std::fs::remove_file(&file).unwrap();
+    assert!(stdout_of(&p, &["trace", "1", "--full"]).contains("output file missing"));
+
+    // Filters and run selection.
+    let only = p.json(&["trace", "1", "--tool", "write_file"]);
+    let calls = only["calls"].as_array().unwrap();
+    assert_eq!(calls.len(), 1);
+    let run = trace.run.to_string();
+    let by_prefix = p.json(&["trace", "1", "--run", &run[..8]]);
+    assert_eq!(by_prefix["run"], run.as_str());
+    let all = p.json(&["trace", "1", "--all"]);
+    assert_eq!(all.as_array().unwrap().len(), 1);
+    p.vibe()
+        .args(["trace", "1", "--run", "zzzz"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("no run of this task matches"));
+
+    // A call whose result is not logged (interrupted run) has no result,
+    // whatever the trace store holds.
+    let log_path = p.task_dir(1).join("events.jsonl");
+    let log = std::fs::read_to_string(&log_path).unwrap();
+    let kept: String = log
+        .lines()
+        .filter(|l| !l.contains("\"tool_returned\""))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&log_path, kept).unwrap();
+    let full = stdout_of(&p, &["trace", "1", "--full"]);
+    assert!(
+        full.contains("no result: the call never returned"),
+        "{full}"
+    );
+    assert!(!full.contains("output not traced"), "{full}");
+}
+
+#[test]
+fn global_events_are_tagged_filtered_and_ordered() {
+    let p = project_with_two_runs();
+
+    let lines = json_lines(&p, &["events"]);
+    assert!(
+        lines
+            .iter()
+            .all(|l| l["task"].is_string() && l["schema"] == 2)
+    );
+    let numbers: std::collections::BTreeSet<u64> = lines
+        .iter()
+        .map(|l| l["number"].as_u64().unwrap())
+        .collect();
+    assert_eq!(numbers.into_iter().collect::<Vec<_>>(), [1, 2]);
+    let times: Vec<&str> = lines.iter().map(|l| l["at"].as_str().unwrap()).collect();
+    let parsed: Vec<chrono::DateTime<chrono::Utc>> =
+        times.iter().map(|t| t.parse().unwrap()).collect();
+    assert!(parsed.windows(2).all(|w| w[0] <= w[1]), "time order");
+
+    let finished = json_lines(&p, &["events", "--type", "run_finished"]);
+    assert_eq!(finished.len(), 2);
+    assert!(
+        finished
+            .iter()
+            .all(|l| l["event"]["type"] == "run_finished")
+    );
+
+    let second = json_lines(&p, &["events", "--task", "2"]);
+    assert!(!second.is_empty());
+    assert!(second.iter().all(|l| l["number"] == 2));
+
+    assert_eq!(
+        json_lines(&p, &["events", "--since", "1h"]).len(),
+        lines.len()
+    );
+    assert!(json_lines(&p, &["events", "--since", "2999-01-01T00:00:00Z"]).is_empty());
+
+    let text = stdout_of(&p, &["events"]);
+    assert!(text.lines().any(|l| l.starts_with("#1 ")), "{text}");
+    assert!(text.lines().any(|l| l.starts_with("#2 ")), "{text}");
+
+    // `--task` and `REF` that do not overlap: nothing.
+    assert!(stdout_of(&p, &["events", "1", "--task", "2"]).is_empty());
+
+    // One task: the envelopes as before, `--type` applies.
+    let one = json_lines(&p, &["events", "1", "--type", "run_finished"]);
+    assert_eq!(one.len(), 1);
+    assert!(one[0].get("task").is_none());
+    p.vibe()
+        .args(["events", "--type", "run_done"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("run_done"));
+}
+
+/// Wait for `child` at most `secs` seconds. Used by the unix-only `--follow` tests.
+#[cfg(unix)]
+fn wait_for(child: &mut std::process::Child, secs: u64) -> std::process::ExitStatus {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            panic!("vibe did not stop within {secs} s");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn following_a_resumed_run_waits_for_its_new_end() {
+    let p = Project::new();
+    p.init();
+    p.add_task("Fix typo in README", "teh -> the");
+    p.vibe()
+        .args([
+            "run",
+            "1",
+            "--provider",
+            "mock",
+            "--workspace",
+            "in_place",
+            "--until",
+            "plan",
+        ])
+        .assert()
+        .success();
+    p.vibe()
+        .args([
+            "run",
+            "1",
+            "--provider",
+            "mock",
+            "--workspace",
+            "in_place",
+            "--resume",
+        ])
+        .assert()
+        .success();
+    // Cut the log right after the resume started: the run is in progress
+    // again, after the `run_finished` of its first part.
+    let log_path = p.task_dir(1).join("events.jsonl");
+    let log = std::fs::read_to_string(&log_path).unwrap();
+    let lines: Vec<&str> = log.lines().collect();
+    let starts: Vec<usize> = (0..lines.len())
+        .filter(|i| lines[*i].contains("\"run_started\""))
+        .collect();
+    assert_eq!(starts.len(), 2, "one run and its resume");
+    let run_of = |l: &str| serde_json::from_str::<Value>(l).unwrap()["event"]["run"].clone();
+    assert_eq!(
+        run_of(lines[starts[0]]),
+        run_of(lines[starts[1]]),
+        "a resume keeps the run id"
+    );
+    let cut = starts[1] + 1;
+    assert!(lines[..cut].iter().any(|l| l.contains("\"run_finished\"")));
+    std::fs::write(&log_path, lines[..cut].join("\n") + "\n").unwrap();
+
+    let out_path = p.root().join("follow.out");
+    let mut child = p
+        .vibe_process()
+        .args(["events", "1", "--follow"])
+        .stdout(std::fs::File::create(&out_path).unwrap())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "stopped at the pause's run_finished"
+    );
+    let rest: String = lines[cut..].iter().map(|l| format!("{l}\n")).collect();
+    use std::io::Write;
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(&log_path)
+        .unwrap()
+        .write_all(rest.as_bytes())
+        .unwrap();
+    assert!(wait_for(&mut child, 10).success());
+    let out = std::fs::read_to_string(&out_path).unwrap();
+    assert_eq!(out.matches("run finished").count(), 2, "{out}");
+}
+
+#[test]
+fn a_closed_standard_output_is_not_a_crash() {
+    let p = project_with_two_runs();
+    let cases: [&[&str]; 7] = [
+        &["--json", "history"],
+        &["--json", "history", "1"],
+        &["--json", "trace", "1"],
+        &["trace", "1"],
+        &["events", "1"],
+        &["--json", "events", "1"],
+        &["events"],
+    ];
+    for args in cases {
+        let mut child = p
+            .vibe_process()
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        // Closed before vibe writes anything.
+        drop(child.stdout.take());
+        let out = child.wait_with_output().unwrap();
+        assert!(
+            out.status.success(),
+            "vibe {args:?}: {:?}\n{}",
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn following_every_task_survives_an_unreadable_log_and_sees_new_tasks() {
+    let p = project_with_two_runs();
+    let broken = p.task_dir(2).join("events.jsonl");
+    std::fs::remove_file(&broken).unwrap();
+    std::fs::create_dir(&broken).unwrap();
+
+    let out_path = p.root().join("follow.out");
+    let err_path = p.root().join("follow.err");
+    let mut child = p
+        .vibe_process()
+        .args(["events", "--follow"])
+        .stdout(std::fs::File::create(&out_path).unwrap())
+        .stderr(std::fs::File::create(&err_path).unwrap())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "stopped: {}",
+        std::fs::read_to_string(&err_path).unwrap()
+    );
+    p.add_task("A third task", "created while following");
+    p.vibe()
+        .args([
+            "run",
+            "3",
+            "--provider",
+            "mock",
+            "--dry-run",
+            "--workspace",
+            "in_place",
+        ])
+        .assert()
+        .success();
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+    let killed = StdCommand::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .unwrap();
+    assert!(killed.success());
+    assert_eq!(wait_for(&mut child, 5).code(), Some(0));
+
+    let out = std::fs::read_to_string(&out_path).unwrap();
+    assert!(out.contains("#3 ▶ run"), "{out}");
+    assert!(
+        !out.lines().any(|l| l.starts_with("#1 ")),
+        "from now on only:\n{out}"
+    );
+    let err = std::fs::read_to_string(&err_path).unwrap();
+    assert_eq!(
+        err.matches("cannot read the events of task").count(),
+        1,
+        "{err}"
+    );
+}
+
+#[test]
+fn history_outside_git_uses_the_trace() {
+    let p = Project::plain();
+    p.init();
+    p.add_task(
+        "Write the greeting module for the demo application",
+        "Create hello.txt containing a friendly greeting so the demo can print it.",
+    );
+    let script = p.write_script("script.json", &greeting_script());
+    p.vibe()
+        .args(["run", "1", "--workspace", "in_place", "--script"])
+        .arg(&script)
+        .assert()
+        .success();
+    let list = p.json(&["history"]);
+    let h = &list.as_array().unwrap()[0];
+    assert_eq!(h["totals"]["commits"], 0);
+    assert_eq!(h["changed_files"]["source"]["kind"], "trace");
+    assert_eq!(h["changed_files"]["files"][0]["path"], "hello.txt");
+    let table = stdout_of(&p, &["history"]);
+    assert!(table.contains("Write the greeting module"), "{table}");
+    assert!(stdout_of(&p, &["history", "1"]).contains("from files written by the agents"));
 }

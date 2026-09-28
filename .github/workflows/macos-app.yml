@@ -1,0 +1,30 @@
+name: macOS app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/macos/**"
+      - ".github/workflows/macos-app.yml"
+  pull_request:
+    paths:
+      - "apps/macos/**"
+      - ".github/workflows/macos-app.yml"
+
+jobs:
+  macos-app:
+    name: Package tests and app build
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/macos/VibeFactory
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: xcodegen generate
+      - name: Package tests
+        run: swift test --package-path Packages/VibeAPI
+      - name: Build the app
+        run: xcodebuild -scheme VibeFactory -configuration Debug -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO

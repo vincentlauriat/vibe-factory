@@ -299,6 +299,27 @@ impl Git {
         self.run(&["worktree", "prune"]).await.map(|_| ())
     }
 
+    /// Whether `ancestor` is an ancestor of (or equal to) `descendant`.
+    pub async fn is_ancestor(&self, ancestor: &str, descendant: &str) -> Result<bool> {
+        let out = self
+            .output(&[
+                "merge-base",
+                "--is-ancestor",
+                "--end-of-options",
+                ancestor,
+                descendant,
+            ])
+            .await?;
+        match out.code {
+            Some(0) => Ok(true),
+            Some(1) => Ok(false),
+            _ => Err(Error::workspace(format!(
+                "git merge-base --is-ancestor {ancestor} {descendant}: {}",
+                out.stderr.trim()
+            ))),
+        }
+    }
+
     /// Number of commits reachable from `head` but not from `base`.
     pub async fn commits_ahead(&self, base: &str, head: &str) -> Result<u64> {
         let range = format!("{base}..{head}");

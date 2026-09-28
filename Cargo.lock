@@ -3111,6 +3111,7 @@ dependencies = [
  "uuid",
  "vibe-agents",
  "vibe-core",
+ "vibe-workspace",
 ]
 
 [[package]]

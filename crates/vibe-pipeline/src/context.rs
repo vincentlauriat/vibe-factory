@@ -1,17 +1,17 @@
 //! The state shared by the phases of one run.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures::future::BoxFuture;
 use tokio::sync::watch;
-use vibe_agents::AgentRunner;
+use vibe_agents::{AgentRunner, ToolTrace};
 use vibe_core::{
     AgentOutcome, AgentRole, AgentSpec, AgentStop, Complexity, Error, ErrorKind, EventBus,
     ModelProvider, ModelRef, ModelSelection, Permissions, Phase, Plan, Registry, Result, RunBudget,
-    RunId, SecurityConfig, SharedProvider, Spec, SubtaskWorkspaces, Task, TaskStatus, ToolContext,
-    ToolRegistry, ToolSelection, Usage, VibeConfig, Workspace, WorkspaceProvider,
+    RunId, SecurityConfig, SharedProvider, Spec, SubtaskId, SubtaskWorkspaces, Task, TaskStatus,
+    ToolContext, ToolRegistry, ToolSelection, Usage, VibeConfig, Workspace, WorkspaceProvider,
 };
 
 use crate::complexity::Profile;
@@ -260,6 +260,9 @@ pub struct RunContext {
     pub subtask_workspaces: Option<Arc<dyn SubtaskWorkspaces>>,
     /// Cancellation token.
     pub cancel: Option<watch::Receiver<bool>>,
+    /// Where agents keep the complete output of their tool calls, when
+    /// `pipeline.trace_outputs` is on.
+    pub tool_trace: Option<ToolTrace>,
     /// Token and duration budget of the run, shared with its agents. A
     /// reached limit stops the run like a cancellation; the pipeline then
     /// pauses it instead of cancelling it.
@@ -356,6 +359,9 @@ impl RunContext {
         .budget(Arc::clone(&self.budget));
         if let Some(c) = &self.cancel {
             runner = runner.cancel_token(c.clone());
+        }
+        if let Some(trace) = &self.tool_trace {
+            runner = runner.tool_trace(trace.clone());
         }
         Ok(runner)
     }
@@ -483,12 +489,20 @@ impl RunContext {
         self.store.append_progress(self.task.id, text).await
     }
 
-    /// Commit the workspace through the injected committer, if any. A
-    /// failed commit is logged and noted, never fatal.
-    pub async fn commit(&self, message: &str) -> Option<String> {
+    /// Commit the workspace through the injected committer, if any, and
+    /// publish [`vibe_core::Event::Committed`] (attributed to `subtask` when
+    /// the commit holds the work of one subtask). A failed commit is logged
+    /// and noted, never fatal.
+    pub async fn commit(&self, message: &str, subtask: Option<SubtaskId>) -> Option<String> {
         let committer = self.committer.as_ref()?;
         match committer(self.workspace.root.clone(), message.to_string()).await {
-            Ok(sha) => sha,
+            Ok(sha) => {
+                if let Some(sha) = &sha {
+                    self.committed(&self.workspace.root, subtask, sha, message)
+                        .await;
+                }
+                sha
+            }
             Err(e) => {
                 self.events
                     .log(Some(self.run_id), "warn", format!("commit failed: {e}"))
@@ -501,6 +515,26 @@ impl RunContext {
 }
 
 impl RunContext {
+    /// Publish [`vibe_core::Event::Committed`] for `commit`, made in the git
+    /// repository at `root`.
+    pub async fn committed(
+        &self,
+        root: &Path,
+        subtask: Option<SubtaskId>,
+        commit: &str,
+        message: &str,
+    ) {
+        self.events
+            .publish(vibe_core::Event::Committed {
+                run: self.run_id,
+                subtask,
+                commit: commit.to_string(),
+                message: message.lines().next().unwrap_or_default().to_string(),
+                files: commit_files(root, commit).await,
+            })
+            .await;
+    }
+
     /// Discard the workspace changes through the injected resetter. Returns
     /// `false` (after a progress note) when no resetter is configured or
     /// the reset failed.
@@ -533,6 +567,44 @@ impl RunContext {
             }
         }
     }
+}
+
+/// Files changed by `commit` (against its first parent) in the git
+/// repository at `root`. Empty when they cannot be listed: not a git
+/// repository, or a committer that does not use git.
+pub async fn commit_files(root: &Path, commit: &str) -> Vec<String> {
+    async fn git(root: &Path, args: &[&str]) -> Option<Vec<String>> {
+        let out = tokio::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .stdin(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .output()
+            .await
+            .ok()?;
+        out.status.success().then(|| {
+            String::from_utf8_lossy(&out.stdout)
+                .split('\0')
+                .filter(|f| !f.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+    }
+    let parent = format!("{commit}^1");
+    let diff = ["diff", "--name-only", "-z", "--no-renames", &parent, commit];
+    if let Some(files) = git(root, &diff).await {
+        return files;
+    }
+    // A root commit has no parent.
+    let show = [
+        "show",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--format=",
+        commit,
+    ];
+    git(root, &show).await.unwrap_or_default()
 }
 
 /// `after - before`, field by field.
@@ -627,6 +699,49 @@ mod tests {
             context_window_for(&config, &ModelRef::new("unknown", "y")),
             vibe_agents::DEFAULT_CONTEXT_WINDOW
         );
+    }
+
+    fn git(root: &std::path::Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}");
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    #[tokio::test]
+    async fn commit_files_lists_the_files_of_a_commit() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        for (k, v) in [
+            ("user.name", "t"),
+            ("user.email", "t@t"),
+            ("commit.gpgsign", "false"),
+        ] {
+            git(root, &["config", k, v]);
+        }
+        std::fs::write(root.join("a.txt"), "a").unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-q", "-m", "first"]);
+        let first = git(root, &["rev-parse", "HEAD"]);
+        std::fs::create_dir(root.join("src")).unwrap();
+        std::fs::write(root.join("src/b c.rs"), "b").unwrap();
+        std::fs::write(root.join("a.txt"), "changed").unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-q", "-m", "second"]);
+        let second = git(root, &["rev-parse", "HEAD"]);
+
+        assert_eq!(commit_files(root, &first).await, vec!["a.txt"]);
+        assert_eq!(
+            commit_files(root, &second).await,
+            vec!["a.txt", "src/b c.rs"]
+        );
+        assert!(commit_files(root, "not-a-commit").await.is_empty());
+        let elsewhere = tempfile::tempdir().unwrap();
+        assert!(commit_files(elsewhere.path(), &second).await.is_empty());
     }
 
     #[test]

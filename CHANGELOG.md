@@ -6,6 +6,68 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Visibility release: see everything that was done, from every interface. Configurations and
+runs from 0.4 keep working; see [Upgrading](docs/src/user/migration.md).
+
+### Added
+- `vibe history [REF] [--all]`: what each task delivered — runs with their state, phases,
+  commits, changed files (from git, including fast-forward merges, else from the events,
+  flagged approximate), validations, last QA verdict, tokens and active time.
+- `[pricing."<provider>/<model>"]` in `config.toml`: prices per million tokens; the history
+  shows a cost only when every model a task used has one, never an estimate.
+- `vibe trace <REF> [--run ID | --all] [--tool NAME] [--subtask ID] [--full]`: every tool
+  call of a run with its complete arguments, duration, exit code and output.
+- Trace store: the complete output of every tool call is kept in
+  `.vibe/tool-output/<task dir>/<run>/<call>.txt`, git-ignored, removed by
+  `vibe task discard` (`pipeline.trace_outputs`, default on; `pipeline.trace_max_chars`,
+  default 100 000 per call).
+- `vibe events` without a task: the activity of every task in time order, prefixed with the
+  task number, with `--since`, `--type` and `--task` filters (also `--since` and `--type`
+  with a task) and `--follow` from now on; `--json` prints envelopes tagged with the task.
+- Events that tell the whole story (schema stays 2, older logs still load): a `call` id,
+  the subtask, exit code, output length and output path on `tool_called`/`tool_returned`;
+  the model on `agent_started`; new `committed` and `merged` events; the run's usage,
+  active time and start on `run_finished`.
+- `vibe serve`: `GET /api/events` and `GET /api/stream` for every task (filters, event
+  cursor, replay from `Last-Event-ID`), `GET /api/history[/{ref}]`,
+  `GET /api/tasks/{ref}/trace` and `GET /api/tasks/{ref}/trace/{call}/output`;
+  `--exit-on-stdin-eof` for clients that start the server as a child process.
+- Web UI: Activity view (every task, type-group filters, task filter, pause), History view
+  (table and per-task detail), and a Trace tab in the task detail (arguments, complete
+  output on demand, run selector).
+- `vibe tui`: Activity screen (`A`), History screen (`H`) and a Trace tab in the task
+  detail (`Enter` expands a call, `o` loads its complete output).
+- A native macOS app, `apps/macos/VibeFactory` (SwiftUI, macOS 14+), a client of
+  `vibe serve`: opens a project and starts a server for it, or connects to a running one;
+  task board, task detail, approvals, live activity, menu bar item and notifications. Built
+  and tested by its own CI workflow.
+- The task record keeps its `branch`; `vibe pr`, `vibe task show` and `vibe task discard`
+  use it instead of recomputing it.
+- Library: a read layer in `vibe-pipeline` (`events_log`, `history`, `trace`), `CallId`,
+  `ToolTrace`, `ModelPrice`, and `PipelineStore::{task_dir_name, task_numbers, is_running}`;
+  `vibe-pipeline` now depends on `vibe-workspace`.
+
+### Changed
+- The web UI reads one event stream for the whole project instead of one per selected task.
+  The per-task routes are unchanged.
+- `vibe tui` reads the selected task's log incrementally instead of re-parsing it every tick,
+  and loads history and traces in the background.
+- `vibe events <REF> --follow` stops at the end of the run even when `--after` (or the new
+  `--type` and `--since`) hide the `run_finished` event; an `--after` beyond it used to
+  follow forever.
+
+### Fixed
+- `vibe events <REF> --follow` follows a resumed run to its end; it used to stop at the
+  `run_finished` left by the pause.
+- A run that stops on an error it did not report itself (a storage failure, for instance)
+  now also ends with a `run_finished` event.
+- The run lock is released explicitly when a run ends. It was only released when its file
+  closed, and a child process started meanwhile by another thread (git, a validation
+  command) kept a copy of the descriptor open until its `exec`, so an immediate resume
+  could be refused with "already being run by another process" naming the caller's own pid.
+- `vibe serve` answers 400 instead of 500 to a task reference that matches several tasks.
+- JSON output no longer panics when standard output is closed early (`| head`).
+
 ## [0.4.0] — 2026-09-27
 
 Interaction release, covering the work planned for 0.3 and 0.4 (there was no 0.3 release):

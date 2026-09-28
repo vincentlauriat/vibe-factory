@@ -8,8 +8,18 @@ and `vibe <command> --help` print the same information as this page.
 vibe [GLOBAL OPTIONS] <COMMAND>
 
   init          create .vibe/config.toml
-  task          add | list | show | discard
+  task          add | list | show | import | discard
   run           run a task through the pipeline
+  approve       approve what a paused run waits for
+  reject        reject it, with a reason for the agents
+  cancel        stop the run of a task, from any terminal
+  pr            push a ready task's branch and open a pull request
+  memory        list | clear the project memory
+  tui           terminal UI: board, activity, history, trace
+  serve         HTTP API and web UI
+  events        replay or follow the events of one task or of every task
+  history       what finished tasks did: runs, commits, files, tokens, cost
+  trace         the tool calls of a run: arguments, results, outputs
   status        project summary
   config        show | path | set
   agents        list | show | export
@@ -24,9 +34,9 @@ Global options may appear before or after the subcommand.
 
 | Option | Effect |
 |--------|--------|
-| `-C, --project <DIR>` | start directory; the project is this directory (default: the current one) or its nearest parent that contains a `.vibe` directory, without leaving the git repository (the search stops at the first parent that contains `.git`) and never your home directory; `vibe init` never searches parents |
+| `-C, --project <DIR>` | start directory; the project is this directory (default: the current one) or its nearest parent that contains a `.vibe` directory, without leaving the git repository (the search stops at the first parent that contains `.git`) and never climbing up to your home directory; `vibe init` never searches parents |
 | `-v, --verbose` | more logging on standard error: default warnings only; `-v` info, `-vv` debug, `-vvv` trace; a non-empty `RUST_LOG` wins |
-| `--json` | machine-readable output: one JSON document, or one JSON event per line for `vibe run` |
+| `--json` | machine-readable output: one JSON document, or one JSON event per line for `vibe run` and `vibe events` (see [JSON output](#json-output)) |
 | `--no-color` | no colours; also the case when `NO_COLOR` is set or the output is not a terminal |
 | `-h, --help` | help of the command |
 | `-V, --version` | version of `vibe` |
@@ -101,7 +111,7 @@ array of `{"number": …, "task": {…}}` objects. `done` and
 vibe task show <REF>
 ```
 
-Shows the task: description, status and complexity, spec summary and requirements, plan
+Shows the task: description, status and complexity, the branch its last run recorded, spec summary and requirements, plan
 with subtask statuses, the latest QA verdict and issues, the state of the last run
 (`run.json`) and the workspace branch and directory. The files it reads are listed in
 [Persistence layout](../design/persistence.md).
@@ -127,8 +137,9 @@ GitLab.
 vibe task discard <REF> [-y | --yes]
 ```
 
-Removes the task's workspace (worktree and branch; nothing for `in_place`) and deletes the
-task directory. It asks for confirmation on a terminal unless `--yes` is given; when standard
+Removes the task's workspace (worktree and branch; nothing for `in_place`), deletes the
+task directory and the task's traced tool outputs (`.vibe/tool-output/<task dir>/`), so the
+task leaves the history too. It asks for confirmation on a terminal unless `--yes` is given; when standard
 input is not a terminal it refuses to run without `--yes`. Unmerged work on the task branch
 is lost.
 
@@ -267,11 +278,15 @@ memory stores.
 vibe tui
 ```
 
-A terminal board of the project: tasks on the left (a `●` marks the ones a process is
-running, whichever terminal started them), the selected task on the right with its run
-state, a budget gauge and three tabs: **Activity** (phases, agents, tools, validations,
-approvals, and the text of the current step as the model writes it), **Plan** (subtasks and
-their status) and **Changes** (the workspace diff summary).
+A terminal view of the project with three screens, listed in the title bar: **Tasks** (`T`),
+**Activity** (`A`) and **History** (`H`). `q` quits from any of them; `Esc` closes what is
+open, then goes back to Tasks, and quits only from Tasks (not from its Trace tab).
+
+**Tasks** is the board: tasks on the left (a `●` marks the ones a process is running,
+whichever terminal started them), the selected task on the right with its run state, a
+budget gauge and four tabs: **Activity** (phases, agents, tools, validations, approvals, and
+the text of the current step as the model writes it), **Plan** (subtasks and their status),
+**Changes** (the workspace diff summary) and **Trace** (the tool calls of the last run).
 
 | Key | Action |
 |-----|--------|
@@ -281,7 +296,47 @@ their status) and **Changes** (the workspace diff summary).
 | `c` | cancel its run (also one started in another terminal) |
 | `a` / `x` | approve / reject what the run waits for (a rejection asks for a reason) |
 | `Tab` | next tab |
+| `g` | read the tasks again |
 | `q` | quit; runs started from the UI are cancelled and stay resumable |
+
+The **Trace** tab lists the calls of a run, one per line: `seq role subtask tool duration exit
+err` (`error` when the tool failed, `timeout`, or `no result` for a call that never
+returned). While it is shown, `↑` `↓` move among the calls instead of the tasks (`Tab` to
+another tab to select tasks again); the other task keys keep working.
+
+| Key (Trace tab) | Action |
+|-----------------|--------|
+| `↑` `↓` | select a call (in an expanded call or its output: scroll) |
+| `[` / `]` | previous / next run, when the task has several |
+| `Enter` | expand the call: its arguments as JSON and a preview of its output |
+| `o` | load its complete output from `.vibe/tool-output/` into a scrollable pane (`PgUp` `PgDn`); a note says when it was not traced or is gone, and when the call was paired with its result by order (logs from before 0.5) |
+| `Esc` | close the output, then collapse the call |
+| `g` | load the calls again (they are also loaded each time the tab is entered) |
+
+**Activity** is the feed of every task's events, oldest first, each prefixed with the task
+number (`#003`). It opens on the last 200 events and follows new ones.
+
+| Key (Activity) | Action |
+|----------------|--------|
+| `↑` `↓` (`PgUp` `PgDn`) | select an event; the feed stops following |
+| `f` | follow the newest event again, or stop |
+| `1` … `7` | show or hide agents, tools, phases, git, approvals, budget, logs |
+| `Enter` | open the event's task on the Tasks screen |
+| `g` | load the last 200 events again (also done each time the screen is entered) |
+
+A log that cannot be read is reported once in the status line; the other tasks keep coming.
+
+**History** lists the finished tasks (ready and done; `a` adds failed and cancelled ones) as
+`vibe history` does: number, title, status, runs, commits, changed files, tokens, active time,
+cost (`-` without a `[pricing]` table), with the notation of `vibe history`: `+` marks a lower
+bound, `~` an approximate file count; `finished` is the end of the last run, else the last
+activity. `Enter` opens the task: its runs (state, start, duration, tokens), commits, changed
+files (status, where the list comes from, whether it is approximate), validations, last QA
+report and errors; `↑` `↓` scroll it and `Esc` closes it. The list is loaded each time the
+screen is entered; `g` loads it again.
+
+History and trace data are loaded in the background on entry, so the screen stays responsive
+on large projects ("Loading…" shows meanwhile).
 
 The UI reads the same files and events as the other commands, so `vibe run`, `vibe approve`
 or `vibe cancel` in another terminal show up in it. Runs use the project configuration
@@ -291,25 +346,51 @@ interactive terminal.
 ## `vibe serve`
 
 ```sh
-vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR]
+vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR] [--exit-on-stdin-eof]
 ```
 
 Serves an HTTP API and a web UI for the project. It prints the address and a link that
 carries the access token (`http://127.0.0.1:7777/#token=…`); open it in a browser. The web
 UI shows the task board, the selected task with its run, budget, a live activity feed with
-the text as the model writes it, the plan, spec, QA reports and workspace changes, and lets
-you create, run, resume and cancel tasks and approve or reject what a run waits for. With
-`--evals DIR`, an **Evaluations** view shows every `summary.json` that
-`evals/run_suite.py` wrote under `DIR` (success rate, time, tokens per case and model).
+the text as the model writes it, the plan, spec, QA reports, tool-call trace and workspace
+changes, and lets you create, run, resume and cancel tasks and approve or reject what a run
+waits for. Its views:
+
+- **Tasks**: the board and the selected task. Its **Trace** tab lists every tool call of a
+  run (role, subtask, tool, duration, exit code, a badge for errors and for calls logged
+  before 0.5 that were `paired by order`); a call expands to its arguments as JSON and its
+  output preview, and **Load complete output** fetches the whole traced output. A selector
+  picks the run when there are several; the footer counts calls and errors and lists the
+  files written.
+- **Activity**: every task's events as they happen, with toggles per group of event types
+  (agents, tools, phases, git, approvals, budget, logs), a task filter and a pause button.
+  Clicking a line opens its task.
+- **History**: what each finished task delivered (the columns of `vibe history`), with
+  failed and cancelled tasks on demand; a row expands to its runs, commits, changed files
+  (with their source and whether the list is approximate), validations, last QA verdict
+  and problems.
+- **Evaluations**: with `--evals DIR`, every `summary.json` that `evals/run_suite.py` wrote
+  under `DIR` (success rate, time, tokens per case and model).
+
+The page reads one event stream, `GET /api/stream`, for the whole project; it resumes from
+the last event id when the connection comes back, and polls the task list every 10 s
+(every 2 s while the stream is down) since creating a task is not an event.
 
 Security: the server listens on the loopback interface by default and then only accepts its
 own host names (`127.0.0.1`, `localhost`, `[::1]`), which blocks DNS rebinding. Every API
 call needs `Authorization: Bearer <token>`; the token is random per start, printed once and
-written to `.vibe/server.token` (owner-only on Unix), and removed on exit. Event streams also
-accept `?token=`, because browsers cannot set headers on them. The API never returns the
+written to `.vibe/server.token` (owner-only on Unix), and removed on exit. The two event
+streams, `/api/stream` and `/api/tasks/{ref}/stream`, also accept `?token=`, because browsers
+cannot set headers on them; no other route does. The API never returns the
 configuration or keys. `--bind` with another address prints a warning: anyone who reaches it
 with the token controls the agents. `Ctrl-C` stops the server and cancels the runs it started
 (they stay resumable).
+
+`--exit-on-stdin-eof` makes the end of standard input stop the server exactly like `Ctrl-C`
+(runs cancelled, token file removed, exit code 0). An application that starts `vibe serve` as
+a child with a pipe on its standard input (the macOS app does) uses it so that the server
+does not outlive it, even when the application is killed or crashes. Without the flag, standard input is not
+read.
 
 | Method and path | Effect |
 |-----------------|--------|
@@ -325,21 +406,172 @@ with the token controls the agents. `Ctrl-C` stops the server and cancels the ru
 | `GET /api/tasks/{ref}/events?after=SEQ&all=bool` | logged events |
 | `GET /api/evals` | evaluation summaries found under `--evals` |
 | `GET /api/tasks/{ref}/stream?after=SEQ` | server-sent events: logged events after `SEQ`, then new ones and streamed text; each SSE event is named by its type and carries the envelope, with the sequence number as id |
+| `GET /api/events?after=CURSOR&since=TIME&type=T&task=REF&limit=N` | logged events of every task as tagged envelopes (`{"task", "number", "schema", "seq", "at", "event"}`), oldest first, the last `N` (default 1000, at most 10000) after the filters; see below |
+| `GET /api/stream?after=CURSOR&since=TIME&type=T&task=REF` | server-sent events of every task: logged events after the starting point, then new ones (tasks created later included) and the streamed text of runs this server started; see below |
+| `GET /api/history?all=bool` | history of every finished task (`vibe history --json`); `all` adds failed and cancelled ones |
+| `GET /api/history/{ref}` | history of one task, finished or not (`vibe history REF --json`) |
+| `GET /api/tasks/{ref}/trace?run=RUN&all=bool` | tool calls of the last run, of the run whose id starts with `RUN`, or of every run with `all` (a list), as `vibe trace --json`; 404 when the task has not been run (where `vibe trace --json` prints `null` or `[]`) or no run matches `RUN`, 400 when `RUN` matches several runs or comes with `all` |
+| `GET /api/tasks/{ref}/trace/{call}/output` | complete output of a call, as `text/plain`, cut at 8 MiB (then marked at the end and with `X-Vibe-Truncated: true`); 400 for an id that is not 12 hex digits, 404 when the call is unknown or its output was not traced, is gone or cannot be read |
 
-`{ref}` is a task number, directory name or id prefix, as on the command line. Errors are
-`{"error": "…"}` with 400, 401, 403, 404 or 409.
+`{ref}` is a task number, directory name or id prefix, as on the command line; a prefix
+that matches several tasks is a 400. Errors are `{"error": "…"}` with 400 (including an
+unknown event type, a malformed cursor, time or limit in `/api/events` and `/api/stream`),
+401, 403, 404, 409, or 503 when too many event streams are open.
+
+Project-wide events are ordered by an **event cursor**, `<nanoseconds since the
+epoch>-<task number>-<seq>` (`1790000000123456789-3-17`): by time, then task, then sequence
+number, so events of two tasks logged at the same instant are neither lost nor repeated on
+resume. In `/api/events` and `/api/stream`, `after=CURSOR` keeps the events after it and
+`since=TIME` those after that time (RFC 3339, or an age such as `30m`, `2h`, `1d`, as
+`vibe events --since`); `type` (an event type) and `task` (a task
+reference) repeat, and each list keeps events that match one of its values. `/api/events`
+answers with two headers: `X-Vibe-Cursor`, the cursor of the last event read before the
+filters (the value to pass as `after` to go on from there, absent when nothing was read),
+and `X-Vibe-Read-Errors`, the number of task logs that could not be read (their events are
+missing; the server logs why). In `/api/stream`, each SSE event is named by its type and
+its data is the tagged envelope; logged events carry their cursor as `id`, and a client that
+reconnects with `Last-Event-ID` resumes after it (the header wins over `after`). Streamed
+text (`agent_delta`) has no id and is not replayed. Without `after`, `since` or
+`Last-Event-ID`, the stream starts from now. A comment line is sent every 15 s to keep an
+idle connection open. All streams share one reader of the logs, which runs while at least
+one is open; at most 32 streams are open at once (503 beyond).
+
+Cursor order is the order of the `at` times each process writes. Events of one task always
+come in order, but a `vibe run` in another process whose clock reads earlier than the
+server's can log an event with a cursor below one already sent for another task. An open
+stream still sends it, once, so ids are not always increasing; but a client that was
+disconnected while it was logged and resumes from its last id does not get it, since it
+sorts before that id. Reload the events of a task (`/api/tasks/{ref}/events`) when its
+state must be exact.
+
+Trace outputs are only read from `.vibe/tool-output/`: paths recorded elsewhere are
+ignored, and a file there that is a link leading out of it is answered like a missing
+output (404, the reason in the server's log).
 
 ## `vibe events`
 
 ```sh
-vibe events <REF> [--after SEQ] [--follow] [--all]
+vibe events <REF> [--after SEQ] [--follow | --all] [--since TIME] [--type TYPE]...
+vibe events [--follow] [--since TIME] [--type TYPE]... [--task REF]...
 ```
 
-Replays the logged events of the task's last run, rendered like `vibe run` (or as JSON
-envelopes with `--json`). `--after SEQ` skips events up to that sequence number,
+With a `<REF>`, replays the logged events of the task's last run, rendered like `vibe run`
+(or as JSON envelopes with `--json`). `--after SEQ` skips events up to that sequence number,
 `--follow` keeps printing new events until the run ends (use it from another terminal while
-`vibe run` works), and `--all` shows every run of the task. The envelope and every event
-type are described in [Events](../reference/events.md).
+`vibe run` works), and `--all` shows every run of the task.
+
+Without `<REF>`, it prints the activity of every task, merged in time order, each line
+prefixed with the task number (`#3 ✓ plan: …`). `--follow` prints the events logged from
+now on, including those of tasks created meanwhile, until `Ctrl-C` (exit code 0); with
+`--since`, it first prints what was logged since then. With `--json`, each line is an
+envelope carrying its task: `{"task": "<id>", "number": 3, "schema": 2, "seq": …, "at": …,
+"event": {…}}`. A task whose log cannot be read is reported once on standard error and the
+feed goes on with the others.
+
+| Option | Effect |
+|--------|--------|
+| `--since TIME` | only events logged after `TIME`: RFC 3339 (`2026-09-27T10:00:00Z`) or an age (`90s`, `30m`, `2h`, `1d`) |
+| `--type TYPE` | only events of this type (repeatable), e.g. `--type run_finished --type committed`; an unknown type is an error |
+| `--task REF` | only the events of this task (repeatable); with `<REF>` as well, nothing is printed unless `<REF>` is one of them |
+
+`--after` and `--all` need a `<REF>`. With `--follow` and a `<REF>`, the end of the run stops
+the command even when `--type` or `--since` hide the `run_finished` event; a run that paused
+and was resumed is followed to its new end. As with `vibe run`, some events are only
+rendered with `-v` (agent text, `committed`, `artefact_written`, subtask integrations without
+conflicts, informational logs): add `-v`, or use `--json`,
+to see them when you filter on them. The envelope and
+every event type are described in [Events](../reference/events.md).
+
+## `vibe history`
+
+```sh
+vibe history [--all]
+vibe history <REF>
+```
+
+What finished tasks did, read from their event logs, `run.json` and git (nothing is
+recomputed by a model). [History of finished work](history.md) explains each figure and
+where it comes from. Without `<REF>`, a table of the `ready` and `done` tasks, most
+recent first — `--all` adds `failed` and `cancelled` ones:
+
+```text
+#  title               status  runs  commits  files  tokens  active      cost      finished
+3  Add OAuth login     done    2     5        7      184.2k  6 min 12 s  1.84 USD  2 h ago
+1  Fix typo in README  ready   1     1        1      2.9k    4.1 s       -         1 d ago
+```
+
+`tokens` counts input plus output tokens of every run, `active` the time the runs were
+working (pauses excluded); a `+` on them marks a lower bound: some run was logged before 0.5
+(its totals are unknown) or did not finish. `cost` is `-` without a
+[`[pricing]`](configuration.md#pricing) table, or when a model the task used has no price in
+it; a `+` on it marks a lower bound: some tokens were used outside a finished agent session
+(a session cut by a crash, or calls such as the repair of an invalid structured answer) and
+are not priced.
+`files` is marked `~` when the list is approximate.
+
+With `<REF>` (any task, finished or not), the detail:
+
+- the task, its branch (the one its run recorded, or the task branch git still has) and its
+  totals;
+- one block per run: its state (`running`, `finished`, or `interrupted` when the process
+  died), when it started, how many times it was resumed, its active time, tokens and cost,
+  its phases with their result, the merge, a pending approval and the last error;
+- the commits (short sha, first line of the message, number of files, subtask);
+- the changed files with their status (`A`, `M`, `D`, `R`, `C`, `?` when unknown) and where
+  the list comes from: the recorded merge, the diff of the task branch against its base,
+  the commit events, or the files the agents wrote (the last two are marked approximate);
+- the validation commands of the last run that ran them, and whether they passed;
+- the last QA verdict and its summary;
+- problems met while reading (a missing merge commit, an unreadable file).
+
+With `--json`, the output is the `TaskHistory` document (an array of them without `<REF>`):
+`task`, `number`, `runs` (with `state`, `usage`, `active_ms`, `totals_known`, `phases`,
+`commits`, `merged`, `validations`, `approvals`, `last_error`), `totals`, `changed_files`
+(`source`, `approximate`, `files`), `last_qa`, `validations_passed`, `cost`,
+`last_activity` and `errors`.
+
+## `vibe trace`
+
+```sh
+vibe trace <REF> [--run RUN | --all] [--tool NAME] [--subtask ID] [--full]
+```
+
+The tool calls of the task's last run (`--run` picks another by id or id prefix, `--all`
+shows every run), in the order they were made. [Tool call trace](trace.md) describes the
+trace store, its disk usage and what it may contain. Each call is a block:
+
+```text
+#4 coder · subtask 1/2 Write hello.txt · write_file  2 ms  ok  [call 5f0c2a9e1b7d]
+    {
+      "content": "Hello, world!\n",
+      "path": "hello.txt"
+    }
+  ⟵ output
+    Created `hello.txt` (14 bytes).
+```
+
+The number is the call's position in the run (it stays the same when filters hide other
+calls), then the agent role, the subtask, the tool, the duration and the result: `ok`,
+`exit N` for commands, `error`, `timed out`, or `no result` for a call that never returned
+(the run was interrupted). The call id pairs the call with its result; logs recorded before
+0.5 have none (`-`) and are paired by order, which is shown as `paired: by order`. Errors
+are shown in red.
+
+The arguments are printed as JSON, with strings longer than 2 000 characters cut. The
+output is the preview logged with the event; `--full` prints the complete arguments and the
+complete output from the trace store (`.vibe/tool-output/`, see
+[`pipeline.trace_outputs`](configuration.md#pipeline)), or says why it is not there: tracing was off
+or the run predates 0.5, or the file was removed (`vibe task discard`, manual cleanup). A
+footer counts the calls and the errors and lists the files written by `write_file` and
+`edit_file`.
+
+`--tool` and `--subtask` (id or id prefix) keep only the matching calls. With `--json`, the
+output is the `RunTrace` document — `run`, `calls` (each with `run`, `call`, `role`,
+`subtask`, `tool`, `input`, `called_at`, `returned_at`, `duration_ms`, `is_error`,
+`exit_code`, `timed_out`, `preview`, `output_chars`, `output_file`, `paired`) and
+`files_written` — or an array of them with `--all`; `--full` does not change it (read
+`output_file` for the complete output). A task that has not been run prints `Task has not been run yet.`
+(`null`, or `[]` with `--all`, with `--json`).
 
 ## `vibe status`
 
@@ -437,6 +669,17 @@ vibe completions <SHELL>
 Prints a completion script for `bash`, `zsh`, `fish`, `elvish` or `powershell`. Installation
 is shown in [Installation](installation.md#shell-completions).
 
+## Exit codes
+
+Every command exits with `0` when it did what was asked and `1` when it failed: an unknown
+task reference or run, a bad configuration, a storage or git error, a `--run` or
+`--subtask` prefix that matches nothing or several ids. A usage error (an unknown option,
+an invalid value such as an unknown `--type`, conflicting options) exits with `2` before
+anything runs. `vibe run` has its own codes (above): `2` there also means the run paused for
+a human, and `130` that it was cancelled. `vibe doctor` and `vibe plugins check` exit with
+`1` when a check fails. `vibe history`, `vibe trace`, `vibe events` and JSON documents exit with
+`0` when their output is closed early (`vibe history | head`).
+
 ## JSON output
 
 `--json` replaces human-oriented output with one JSON document on standard output, suitable
@@ -444,5 +687,7 @@ for scripts; logs still go to standard error. Field names follow the persisted t
 ([Domain model](../design/domain-model.md)) and statuses are the `snake_case` names listed
 above. `task add` prints `number`, `id`, `dir` and `task`; `task list` an array of
 `{number, task}`; `task show` the `number`, `task`, `dir`, `spec`, `plan`, `qa_reports`,
-`run` and `worktree` (branch, path and whether each exists); `init` the paths it wrote.
-`vibe run --json` is the exception: a stream of events, one per line, then the summary.
+`run` and `worktree` (branch, path and whether each exists); `history` the `TaskHistory`
+documents and `trace` the `RunTrace` documents described above; `init` the paths it wrote.
+`vibe run --json` and `vibe events --json` are the exceptions: a stream of events, one per
+line (then the summary for `vibe run`).

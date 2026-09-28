@@ -60,6 +60,16 @@ pub struct FileLock {
     _file: std::fs::File,
 }
 
+impl Drop for FileLock {
+    fn drop(&mut self) {
+        // Closing the file is not enough: the lock belongs to the open file,
+        // which a child process being spawned by another thread shares until
+        // it execs, so the lock would outlive this value. Unlocking releases
+        // it for every copy at once.
+        let _ = fs4::fs_std::FileExt::unlock(&self._file);
+    }
+}
+
 impl FileLock {
     /// Take the lock on `path` (created if needed), waiting for it.
     pub async fn acquire(path: PathBuf) -> Result<Self> {
@@ -163,6 +173,26 @@ pub trait PipelineStore: TaskStore {
         let _ = id;
         Ok(Vec::new())
     }
+
+    /// Name of the task's directory (`NNN-slug`), which also names its
+    /// directory of tool outputs under `.vibe/tool-output/`. Default: none
+    /// (the task id is used instead).
+    async fn task_dir_name(&self, id: TaskId) -> Result<Option<String>> {
+        let _ = id;
+        Ok(None)
+    }
+
+    /// Sequence number of every task (`3` for `003-add-login`). Default:
+    /// none (interfaces then show no number).
+    async fn task_numbers(&self) -> Result<BTreeMap<TaskId, u32>> {
+        Ok(BTreeMap::new())
+    }
+
+    /// Whether a process currently runs the task. Default: never known.
+    async fn is_running(&self, id: TaskId) -> Result<bool> {
+        let _ = id;
+        Ok(false)
+    }
 }
 
 /// Shared handle to a pipeline store.
@@ -207,6 +237,15 @@ impl FileTaskStore {
         })
     }
 
+    /// Store at `root` (`<project>/.vibe/tasks`), without creating it.
+    pub(crate) fn at_root(root: PathBuf) -> Self {
+        Self {
+            root,
+            index_lock: Mutex::new(()),
+            append_lock: Mutex::new(()),
+        }
+    }
+
     /// Directory holding every task (`<project>/.vibe/tasks`).
     #[must_use]
     pub fn root(&self) -> &Path {
@@ -248,6 +287,11 @@ impl FileTaskStore {
 
     async fn write_index(&self, index: &Index) -> Result<()> {
         write_json(&self.root.join(INDEX_FILE), index).await
+    }
+
+    /// Every task of the index with its location, by task id.
+    pub async fn entries(&self) -> Result<BTreeMap<TaskId, IndexEntry>> {
+        Ok(self.read_index().await?.tasks)
     }
 
     /// Index entry of a task, if it exists.
@@ -593,6 +637,23 @@ impl PipelineStore for FileTaskStore {
         }
     }
 
+    async fn task_dir_name(&self, id: TaskId) -> Result<Option<String>> {
+        Ok(self.entry(id).await?.map(|e| e.dir))
+    }
+
+    async fn task_numbers(&self) -> Result<BTreeMap<TaskId, u32>> {
+        Ok(self
+            .entries()
+            .await?
+            .into_iter()
+            .map(|(id, e)| (id, e.number))
+            .collect())
+    }
+
+    async fn is_running(&self, id: TaskId) -> Result<bool> {
+        FileTaskStore::is_running(self, id).await
+    }
+
     async fn load_events(&self, id: TaskId) -> Result<Vec<Envelope>> {
         let path = self.task_dir(id).await?.join(EVENTS_FILE);
         let text = match tokio::fs::read_to_string(&path).await {
@@ -771,6 +832,19 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use vibe_core::{Event, Phase, PlanPhase, QaVerdict, Subtask};
+
+    #[test]
+    fn dropping_a_lock_releases_it_even_while_its_descriptor_is_shared() {
+        // A child process spawned by another thread holds a copy of every
+        // descriptor until it execs; the lock must not wait for it.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(RUN_LOCK_FILE);
+        let lock = FileLock::try_acquire(&path).unwrap().unwrap();
+        let shared = lock._file.try_clone().unwrap();
+        drop(lock);
+        assert!(FileLock::try_acquire(&path).unwrap().is_some());
+        drop(shared);
+    }
 
     fn store() -> (tempfile::TempDir, FileTaskStore) {
         let dir = tempfile::tempdir().unwrap();

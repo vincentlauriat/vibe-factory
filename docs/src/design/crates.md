@@ -7,29 +7,30 @@ map.
 
 ## Dependency graph
 
-The graph below is the one declared in the `Cargo.toml` files today. Every implementation
-crate depends on `vibe-core` and on nothing else from the workspace: `vibe-agents` reaches
-models, tools and hooks only through the core traits, so it does not link any concrete
-provider, tool set, workspace or plugin transport. Wiring concrete implementations together
-is the job of the layers above it.
+The graph below is the one declared in the `Cargo.toml` files. The implementation crates
+depend on `vibe-core` and on nothing else from the workspace: `vibe-agents` reaches models,
+tools and hooks only through the core traits, so it does not link any concrete provider,
+tool set, workspace or plugin transport. `vibe-pipeline` builds on `vibe-agents`, and on
+`vibe-workspace` for the git reads of its read layer (the history of a task: its branch, its
+merge commit, the files it changed); the pipeline itself still reaches workspaces through
+the `WorkspaceProvider` trait. Wiring concrete implementations together is the job of
+`vibe-cli`.
 
 ```text
-                 vibe-cli            (binary `vibe`)
-                    │
-                 vibe-pipeline       (orchestration, task store)
-                    │
-   ┌────────────┬───┴────────┬──────────────┬──────────────┬─────────────┐
-   │            │            │              │              │             │
-vibe-agents  vibe-providers vibe-tools  vibe-workspace  vibe-plugins     │
-   │            │            │              │              │             │
-   └────────────┴────────────┴──────┬───────┴──────────────┴─────────────┘
-                                    │
-                                vibe-core      (types + traits, no I/O)
+   vibe-cli        (binary `vibe`: commands, terminal UI, HTTP server and web UI)
+      │   depends on every crate below
+      ├──────────────────────────────┬────────────────┬──────────────┐
+      │                              │                │              │
+   vibe-pipeline                     │                │              │
+      │                              │                │              │
+      ├──────────────┐               │                │              │
+      │              │               │                │              │
+   vibe-agents   vibe-workspace   vibe-providers   vibe-tools   vibe-plugins
+      │              │               │                │              │
+      └──────────────┴───────┬───────┴────────────────┴──────────────┘
+                             │
+                         vibe-core      (types + traits, no I/O)
 ```
-
-`vibe-pipeline` and `vibe-cli` currently declare only `vibe-core` (both are placeholders);
-the edges from the pipeline to the five middle crates are the intended wiring described in
-`ARCHITECTURE_EN.md`.
 
 | Crate | Workspace dependencies | Notable external dependencies |
 |-------|------------------------|-------------------------------|
@@ -39,8 +40,8 @@ the edges from the pipeline to the five middle crates are the intended wiring de
 | `vibe-workspace` | `vibe-core` | `tokio` (process); shells out to `git` |
 | `vibe-plugins` | `vibe-core` | `tokio` (process, io), `futures`, `dirs`, `indexmap` |
 | `vibe-agents` | `vibe-core` | `futures`, `tokio`, `chrono`, `uuid`, `toml` |
-| `vibe-pipeline` | `vibe-core` | none yet |
-| `vibe-cli` | `vibe-core` | none yet |
+| `vibe-pipeline` | `vibe-core`, `vibe-agents`, `vibe-workspace` | `tokio`, `fs4` (file locks), `futures`, `chrono`, `uuid`, `regex` |
+| `vibe-cli` | every crate above | `clap`, `ratatui`, `axum`, `reqwest`, `tokio`, `console`, `toml_edit` |
 
 Workspace-wide rules apply to every crate: `unsafe_code = "forbid"`, `missing_docs = "warn"`
 (promoted to an error in CI), `clippy::all = "warn"`, edition 2024. See
@@ -179,16 +180,31 @@ events, and a smoke run of every built-in agent.
 
 ## vibe-pipeline
 
-**Responsibility** (from `ARCHITECTURE_EN.md`; not written yet). File-backed `TaskStore`
-under `.vibe/tasks/NNN-slug/`, complexity profiles, phase orchestration, parallel subtask
-execution honouring `depends_on`, the QA/fix loop with escalation, run state and resume, and
-the event log. See [The pipeline](pipeline.md).
+**Responsibility.** The file-backed `TaskStore` under `.vibe/tasks/NNN-slug/`
+(`FileTaskStore`), complexity profiles, phase orchestration, parallel subtask execution
+honouring `depends_on`, the QA/fix loop with escalation, human approvals, budgets, run state
+and resume, and the event log. `RunManager` is the seam every interface uses to start,
+resume, cancel and list runs ([ADR-007](adr/007-one-seam-many-interfaces.md)). See
+[The pipeline](pipeline.md).
+
+**Read layer** ([ADR-008](adr/008-trace-store-and-read-layer.md)): `events_log`
+(`EventReader`, `TaggedEnvelope`, `EventCursor`, `AllEventsFollower`) reads one log
+incrementally or every task's log in cursor order; `history` rebuilds what a task did
+(`TaskHistory`, `project_history`, `task_history`); `trace` pairs the tool calls of a run
+(`RunTrace`, `Call`, `run_trace`, `read_output`). They are described in
+[Persistence layout](persistence.md#reading-the-store-the-read-layer).
+
+**Tests.** `tests/pipeline.rs` runs whole pipelines on the scripted provider and a temporary
+git repository; `tests/history.rs` builds histories from logs of both schemas and from real
+git histories (branch, fast-forward, merge, reset).
 
 ## vibe-cli
 
-**Responsibility** (from `ARCHITECTURE_EN.md`; not written yet). The `vibe` binary with
-`init`, `task add|list|show|discard`, `run`, `status`, `config`, `agents`, `plugins` and
-`doctor`, and live rendering of events. See [Command line reference](../user/cli.md).
+**Responsibility.** The `vibe` binary: every command of the
+[Command line reference](../user/cli.md), the live rendering of events, the terminal UI
+(`vibe tui`, module `tui`) and the HTTP server with its embedded web UI (`vibe serve`,
+module `server`). Every interface goes through `RunManager` and the read layer; none keeps
+a state of its own.
 
 ## Where to add code
 

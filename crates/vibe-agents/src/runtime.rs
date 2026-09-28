@@ -13,7 +13,7 @@ use futures::future::join_all;
 use tokio::sync::watch;
 use vibe_core::agent::ThinkingLevel;
 use vibe_core::{
-    AgentOutcome, AgentRole, AgentSpec, AgentStop, CompletionRequest, CompletionResponse,
+    AgentOutcome, AgentRole, AgentSpec, AgentStop, CallId, CompletionRequest, CompletionResponse,
     ContentBlock, Error, ErrorKind, Event, EventBus, HookDecision, Message, ModelProvider,
     Permissions, PromptTemplate, Registry, Result, Role, RunBudget, RunId, StopReason, StreamDelta,
     SubtaskId, Task, ToolContext, ToolOutput, ToolRegistry, Usage,
@@ -78,6 +78,46 @@ pub const RAW_ARGUMENTS_KEY: &str = "_raw";
 pub const INVALID_ARGUMENTS_MESSAGE: &str = "the arguments of this call were not valid JSON \
 (possibly truncated); repeat the call with complete JSON arguments";
 
+/// Where a runner keeps the complete output of every tool call, for later
+/// inspection (see [`AgentRunner::tool_trace`]). Independent of the
+/// truncation of what the model sees.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolTrace {
+    /// Directory receiving one `<call id>.txt` file per call (created on
+    /// first use).
+    pub dir: PathBuf,
+    /// How `dir` is named in [`Event::ToolReturned`] `output_file` (the
+    /// pipeline uses a path relative to the project root, with `/`).
+    pub reference: String,
+    /// Maximum number of characters kept per output; longer outputs are cut
+    /// and end with a marker line.
+    pub max_chars: usize,
+}
+
+impl ToolTrace {
+    /// Save `content` (`total` characters) as the output of `call`;
+    /// returns its reference.
+    async fn save(&self, call: CallId, content: &str, total: usize) -> Result<String> {
+        let name = format!("{call}.txt");
+        let text = if total > self.max_chars {
+            format!(
+                "{}\n[vibe: output cut to the first {} of {total} characters]\n",
+                truncate_chars(content, self.max_chars),
+                self.max_chars
+            )
+        } else {
+            content.to_string()
+        };
+        tokio::fs::create_dir_all(&self.dir).await?;
+        tokio::fs::write(self.dir.join(&name), text).await?;
+        Ok(if self.reference.is_empty() {
+            name
+        } else {
+            format!("{}/{name}", self.reference.trim_end_matches('/'))
+        })
+    }
+}
+
 /// Runs an [`AgentSpec`] against a [`ModelProvider`] with a set of tools.
 ///
 /// The runner is cheap to clone and can be reused for any number of runs;
@@ -119,6 +159,7 @@ pub struct AgentRunner {
     subtask: Option<SubtaskId>,
     tool_context: ToolContext,
     max_tool_output_chars: usize,
+    tool_trace: Option<ToolTrace>,
     extra_vars: BTreeMap<String, String>,
     cancel: Option<watch::Receiver<bool>>,
     budget: Option<Arc<RunBudget>>,
@@ -178,6 +219,7 @@ impl AgentRunner {
             subtask: None,
             tool_context: ToolContext::new("."),
             max_tool_output_chars: DEFAULT_MAX_TOOL_OUTPUT_CHARS,
+            tool_trace: None,
             extra_vars: BTreeMap::new(),
             cancel: None,
             budget: None,
@@ -238,6 +280,14 @@ impl AgentRunner {
     #[must_use]
     pub fn max_tool_output_chars(mut self, chars: usize) -> Self {
         self.max_tool_output_chars = chars.max(1);
+        self
+    }
+
+    /// Keep the complete output of every tool call where `trace` says, and
+    /// reference it in [`Event::ToolReturned`] (default: no trace).
+    #[must_use]
+    pub fn tool_trace(mut self, trace: ToolTrace) -> Self {
+        self.tool_trace = Some(trace);
         self
     }
 
@@ -445,6 +495,12 @@ impl AgentRunner {
                 run: self.run_id,
                 role: role.clone(),
                 subtask: self.subtask,
+                // An empty id means the provider's default model.
+                model: if self.model.is_empty() {
+                    self.provider.info().default_model
+                } else {
+                    self.model.clone()
+                },
             })
             .await;
         tracing::debug!(role = %role, tools = ?selected, "agent run started");
@@ -721,12 +777,15 @@ impl AgentRunner {
         ctx: &ToolContext,
         call: &ToolCall,
     ) -> ContentBlock {
+        let call_id = CallId::new();
         self.events
             .publish(Event::ToolCalled {
                 run: self.run_id,
                 role: role.clone(),
                 tool: call.name.clone(),
                 input: call.input.clone(),
+                call: call_id,
+                subtask: self.subtask,
             })
             .await;
         let started = Instant::now();
@@ -781,7 +840,29 @@ impl AgentRunner {
                 }
             },
         };
-        let output = self.truncate_output(ctx, output).await;
+        let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let total = output.content.chars().count();
+        let output_chars = u64::try_from(total).unwrap_or(u64::MAX);
+        let exit_code = output
+            .metadata
+            .get("exit_code")
+            .and_then(serde_json::Value::as_i64);
+        let timed_out = output
+            .metadata
+            .get("timed_out")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let output_file = match &self.tool_trace {
+            Some(trace) => match trace.save(call_id, &output.content, total).await {
+                Ok(file) => Some(file),
+                Err(e) => {
+                    tracing::warn!(tool = %call.name, error = %e, "cannot save the tool output");
+                    None
+                }
+            },
+            None => None,
+        };
+        let output = self.truncate_output(ctx, output, total).await;
 
         self.events
             .publish(Event::ToolReturned {
@@ -789,8 +870,14 @@ impl AgentRunner {
                 role: role.clone(),
                 tool: call.name.clone(),
                 is_error: output.is_error,
-                duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                duration_ms,
                 preview: truncate_chars(&output.content, PREVIEW_CHARS).to_string(),
+                call: call_id,
+                subtask: self.subtask,
+                exit_code,
+                timed_out,
+                output_chars,
+                output_file,
             })
             .await;
 
@@ -801,10 +888,14 @@ impl AgentRunner {
         }
     }
 
-    /// Truncate an oversized output, saving the full text to
-    /// `.vibe/tool-output/` under the workspace root.
-    async fn truncate_output(&self, ctx: &ToolContext, mut output: ToolOutput) -> ToolOutput {
-        let total = output.content.chars().count();
+    /// Truncate an oversized output of `total` characters, saving the full
+    /// text to `.vibe/tool-output/` under the workspace root.
+    async fn truncate_output(
+        &self,
+        ctx: &ToolContext,
+        mut output: ToolOutput,
+        total: usize,
+    ) -> ToolOutput {
         if total <= self.max_tool_output_chars {
             return output;
         }

@@ -53,6 +53,11 @@
 //! full text is saved to `.vibe/tool-output/UUID.txt` in the workspace and the
 //! model is told where.
 //!
+//! Independently, a runner given a [`ToolTrace`] keeps the complete output of
+//! every call (up to the trace's own limit) in one file per call, named after
+//! the [`vibe_core::CallId`] that pairs the `tool_called` and `tool_returned`
+//! events; `tool_returned` references the file in `output_file`.
+//!
 //! ## Prompt variables
 //!
 //! The runner provides `task_title`, `task_description`, `workspace_root` and
@@ -144,7 +149,7 @@ pub use prompts::{builtin_prompt, documented_variables, strip_doc_comment};
 pub use runtime::{
     AgentRunner, CONTEXT_WARNING_MESSAGE, CONTINUE_NUDGE, CONVERGE_MESSAGE, DEFAULT_CONTEXT_WINDOW,
     DEFAULT_MAX_TOOL_OUTPUT_CHARS, INVALID_ARGUMENTS_MESSAGE, MAX_RETRY_DELAY, RAW_ARGUMENTS_KEY,
-    TRUNCATED_TWICE_MESSAGE,
+    TRUNCATED_TWICE_MESSAGE, ToolTrace,
 };
 pub use structured::{
     extract_json, invalid_json_message, parse_structured, repair_json, run_structured,

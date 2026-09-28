@@ -1,7 +1,7 @@
 //! `merge`: integrate the workspace (when `auto_merge` is on).
 
 use vibe_core::{
-    Error, ErrorKind, MergeOutcome, MergeValidator, Phase, Result, TaskStatus, Workspace,
+    Error, ErrorKind, Event, MergeOutcome, MergeValidator, Phase, Result, TaskStatus, Workspace,
 };
 
 use crate::context::{PhaseResult, RunContext, Transition};
@@ -58,6 +58,16 @@ pub async fn run_merge(ctx: &mut RunContext) -> Result<PhaseResult> {
     };
     match outcome {
         Ok(MergeOutcome::Merged { commit }) => {
+            if let Some(c) = &commit {
+                ctx.events
+                    .publish(Event::Merged {
+                        run: ctx.run_id,
+                        commit: c.clone(),
+                        branch: ctx.workspace.branch.clone().unwrap_or_default(),
+                        base: ctx.workspace.base_branch.clone().unwrap_or_default(),
+                    })
+                    .await;
+            }
             let reason = match commit {
                 Some(c) => format!("merged ({c})"),
                 None => "merged".to_string(),

@@ -37,3 +37,10 @@ and each would have to guess the state of a run from files on disk.
 - Streaming, approvals and new events must land before any interface that relies on them.
 - The event schema becomes a public, versioned API; changing an event is a breaking change.
 - A crash loses no decision: approvals and sequence numbers are on disk.
+- Content too large for an event stays out of the log but not out of reach: the complete
+  output of each tool call is written to the trace store,
+  `.vibe/tool-output/<task dir>/<run>/<call>.txt` (ignored by git), and `tool_returned`
+  references it by path. Commits and merges are events too (`committed`, `merged`), and
+  `run_finished` carries the run's totals, so a history of every run can be rebuilt from
+  events and git alone ([Events](../../reference/events.md#trace-store); decided in
+  [ADR-008](008-trace-store-and-read-layer.md)).

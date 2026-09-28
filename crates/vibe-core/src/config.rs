@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::agent::ThinkingLevel;
 use crate::error::Result;
 use crate::phase::Phase;
-use crate::provider::ModelRef;
+use crate::provider::{ModelRef, Usage};
 pub use crate::sandbox::{ContainerConfig, ContainerMount, WorkspaceConfig};
 
 /// Name of the directory holding framework data inside a project.
@@ -14,6 +14,12 @@ pub const VIBE_DIR: &str = ".vibe";
 
 /// Name of the configuration file inside [`VIBE_DIR`].
 pub const CONFIG_FILE: &str = "config.toml";
+
+/// Directory inside [`VIBE_DIR`] holding saved tool outputs (ignored by git).
+pub const TOOL_OUTPUT_DIR: &str = "tool-output";
+
+/// Default of [`PipelineConfig::trace_max_chars`].
+pub const DEFAULT_TRACE_MAX_CHARS: usize = 100_000;
 
 /// Configuration of one model provider.
 #[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
@@ -141,6 +147,15 @@ pub struct PipelineConfig {
     /// (time spent paused is not counted). When reached the run pauses.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_duration_secs: Option<u64>,
+    /// Keep the complete output of every tool call under
+    /// `.vibe/tool-output/<task dir>/<run>/`, referenced by the
+    /// `tool_returned` events.
+    #[serde(default = "default_true")]
+    pub trace_outputs: bool,
+    /// Maximum number of characters kept per traced tool output; longer
+    /// outputs are cut and end with a marker line.
+    #[serde(default = "default_trace_max_chars")]
+    pub trace_max_chars: usize,
 }
 
 impl PipelineConfig {
@@ -202,6 +217,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_trace_max_chars() -> usize {
+    DEFAULT_TRACE_MAX_CHARS
+}
+
 fn default_validation_fix_attempts() -> u32 {
     2
 }
@@ -239,6 +258,8 @@ impl Default for PipelineConfig {
             approvals: Vec::new(),
             max_tokens: None,
             max_duration_secs: None,
+            trace_outputs: true,
+            trace_max_chars: DEFAULT_TRACE_MAX_CHARS,
         }
     }
 }
@@ -349,6 +370,50 @@ pub struct VibeConfig {
     /// Issue trackers and code forges (`[integrations.github]`, …).
     #[serde(default, skip_serializing_if = "IntegrationsConfig::is_empty")]
     pub integrations: IntegrationsConfig,
+    /// Prices of models by `"<provider>/<model>"`, used to show the cost of
+    /// a task (`[pricing."anthropic/claude-sonnet-5"]`). Empty by default:
+    /// no cost is shown for a model without a price.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub pricing: BTreeMap<String, ModelPrice>,
+}
+
+/// Price of one model, in US dollars per million tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelPrice {
+    /// Prompt tokens.
+    pub input: f64,
+    /// Completion tokens.
+    pub output: f64,
+    /// Prompt tokens served from cache. Without it, a session that read
+    /// from the cache has no known cost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read: Option<f64>,
+    /// Prompt tokens written to cache. Without it, a session that wrote to
+    /// the cache has no known cost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write: Option<f64>,
+}
+
+impl ModelPrice {
+    /// Cost of `usage` in US dollars, or `None` when it used a kind of
+    /// token this price does not cover.
+    #[must_use]
+    pub fn cost(&self, usage: Usage) -> Option<f64> {
+        let per_token = |tokens: u64, price: Option<f64>| -> Option<f64> {
+            match (tokens, price) {
+                (0, _) => Some(0.0),
+                (n, Some(p)) => Some(n as f64 * p / 1_000_000.0),
+                (_, None) => None,
+            }
+        };
+        Some(
+            per_token(usage.input_tokens, Some(self.input))?
+                + per_token(usage.output_tokens, Some(self.output))?
+                + per_token(usage.cache_read_tokens, self.cache_read)?
+                + per_token(usage.cache_write_tokens, self.cache_write)?,
+        )
+    }
 }
 
 /// Issue trackers and code forges.
@@ -437,6 +502,7 @@ impl Default for VibeConfig {
             base_branch: None,
             workspace: WorkspaceConfig::default(),
             integrations: IntegrationsConfig::default(),
+            pricing: BTreeMap::new(),
         }
     }
 }
@@ -444,7 +510,31 @@ impl Default for VibeConfig {
 impl VibeConfig {
     /// Parse from TOML text.
     pub fn from_toml(text: &str) -> Result<Self> {
-        Ok(toml::from_str(text)?)
+        let config: Self = toml::from_str(text)?;
+        config.validate_pricing()?;
+        Ok(config)
+    }
+
+    /// Every price must be a finite, non-negative number.
+    fn validate_pricing(&self) -> Result<()> {
+        for (key, price) in &self.pricing {
+            let fields = [
+                ("input", Some(price.input)),
+                ("output", Some(price.output)),
+                ("cache_read", price.cache_read),
+                ("cache_write", price.cache_write),
+            ];
+            for (name, value) in fields {
+                if let Some(v) = value
+                    && !(v.is_finite() && v >= 0.0)
+                {
+                    return Err(crate::Error::config(format!(
+                        "pricing.\"{key}\".{name} must be a non-negative number, not {v}"
+                    )));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Serialise to TOML text.
@@ -493,6 +583,36 @@ impl VibeConfig {
     pub fn provider(&self, name: &str) -> Option<&ProviderConfig> {
         self.providers.get(name)
     }
+
+    /// Price of a model named as events name it: `model` is the provider's
+    /// model id, without the `provider/` prefix.
+    ///
+    /// Matching, in order: the `[pricing]` key equal to `model`, then every
+    /// key `"<provider>/<model>"`, where the provider is the part before the
+    /// key's first `/`. A model id that contains `/` itself
+    /// (`meta-llama/llama-3` through `openrouter`) is therefore priced by
+    /// `"openrouter/meta-llama/llama-3"`, or by the key `"meta-llama/llama-3"`,
+    /// which the first rule matches whatever its provider. `None` when no key
+    /// matches or when several providers price that model differently.
+    #[must_use]
+    pub fn price_of(&self, model: &str) -> Option<ModelPrice> {
+        if model.is_empty() {
+            return None;
+        }
+        if let Some(price) = self.pricing.get(model) {
+            return Some(*price);
+        }
+        let mut found: Option<ModelPrice> = None;
+        for (key, price) in &self.pricing {
+            if key.split_once('/').is_some_and(|(_, m)| m == model) {
+                match found {
+                    Some(p) if p != *price => return None,
+                    _ => found = Some(*price),
+                }
+            }
+        }
+        found
+    }
 }
 
 #[cfg(test)]
@@ -530,6 +650,65 @@ thinking = "high"
         assert!(cfg.providers.contains_key("anthropic"));
         assert!(cfg.providers.contains_key("ollama"));
         assert_eq!(cfg.pipeline.merge_strategy, MergeStrategy::Manual);
+    }
+
+    #[test]
+    fn pricing_by_model_id() {
+        let text = r#"
+[pricing."anthropic/claude-sonnet-5"]
+input = 3.0
+output = 15.0
+cache_read = 0.3
+[pricing."a/shared"]
+input = 1.0
+output = 1.0
+[pricing."b/shared"]
+input = 2.0
+output = 2.0
+"#;
+        let cfg = VibeConfig::from_toml(text).unwrap();
+        let price = cfg.price_of("claude-sonnet-5").unwrap();
+        assert_eq!(price.cache_write, None);
+        let usage = Usage {
+            input_tokens: 1_000_000,
+            output_tokens: 100_000,
+            cache_read_tokens: 1_000_000,
+            cache_write_tokens: 0,
+        };
+        assert!((price.cost(usage).unwrap() - 4.8).abs() < 1e-9);
+        // Cache writes without a price: no cost rather than a wrong one.
+        let writes = Usage {
+            cache_write_tokens: 1,
+            ..usage
+        };
+        assert_eq!(price.cost(writes), None);
+        // Two providers, two prices: ambiguous.
+        assert_eq!(cfg.price_of("shared"), None);
+        assert_eq!(cfg.price_of("unknown"), None);
+        assert_eq!(cfg.price_of(""), None);
+        let back = VibeConfig::from_toml(&cfg.to_toml().unwrap()).unwrap();
+        assert_eq!(back, cfg);
+
+        // A model id with a `/`: the provider is the part before the first.
+        let cfg = VibeConfig::from_toml(
+            "[pricing.\"openrouter/meta/llama\"]\ninput = 1.0\noutput = 2.0\n",
+        )
+        .unwrap();
+        assert_eq!(cfg.price_of("meta/llama").unwrap().output, 2.0);
+        assert_eq!(cfg.price_of("llama"), None);
+    }
+
+    #[test]
+    fn prices_must_be_finite_and_non_negative() {
+        for bad in [
+            "input = -1.0\noutput = 1.0",
+            "input = 1.0\noutput = nan",
+            "input = 1.0\noutput = 1.0\ncache_read = inf",
+        ] {
+            let text = format!("[pricing.\"a/m\"]\n{bad}\n");
+            let err = VibeConfig::from_toml(&text).unwrap_err();
+            assert!(err.to_string().contains("pricing.\"a/m\""), "{err}");
+        }
     }
 
     #[test]

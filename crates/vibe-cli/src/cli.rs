@@ -92,8 +92,13 @@ pub enum Command {
     Tui,
     /// Serve the HTTP API and the web UI on this machine.
     Serve(ServeArgs),
-    /// Replay the logged events of a task's run, optionally following new ones.
+    /// Replay the logged events of a task's run, or of every task, optionally
+    /// following new ones.
     Events(EventsArgs),
+    /// Finished tasks: runs, commits, changed files, tokens and cost.
+    History(HistoryArgs),
+    /// The tool calls of a task's run: arguments, results and outputs.
+    Trace(TraceArgs),
     /// Project summary: tasks per status, last runs, active worktrees.
     Status,
     /// Show or edit the configuration.
@@ -304,23 +309,121 @@ pub struct ServeArgs {
     /// shown in the web UI.
     #[arg(long, value_name = "DIR")]
     pub evals: Option<std::path::PathBuf>,
+    /// Stop (as on `Ctrl-C`) when standard input is closed: for a parent
+    /// process that starts the server with a pipe and may die without
+    /// stopping it.
+    #[arg(long)]
+    pub exit_on_stdin_eof: bool,
 }
 
 /// `vibe events …`
 #[derive(Debug, Args)]
 pub struct EventsArgs {
-    /// Task number, `NNN-slug` directory name, or id prefix.
+    /// Task number, `NNN-slug` directory name, or id prefix; without it,
+    /// the events of every task.
     #[arg(value_name = "REF")]
-    pub reference: String,
+    pub reference: Option<String>,
     /// Only events whose sequence number is greater than this.
-    #[arg(long, value_name = "SEQ", default_value_t = 0)]
+    #[arg(long, value_name = "SEQ", default_value_t = 0, requires = "reference")]
     pub after: u64,
-    /// Keep printing new events until the run finishes or pauses.
+    /// Keep printing new events: until the run finishes or pauses with
+    /// `REF`, until `Ctrl-C` without it.
     #[arg(short, long)]
     pub follow: bool,
     /// Every run of the task, not only the last one.
-    #[arg(long, conflicts_with = "follow")]
+    #[arg(long, conflicts_with = "follow", requires = "reference")]
     pub all: bool,
+    /// Only events after this time: RFC 3339 (`2026-09-27T10:00:00Z`) or an
+    /// age (`30m`, `2h`, `1d`).
+    #[arg(long, value_name = "TIME", value_parser = parse_since)]
+    pub since: Option<chrono::DateTime<chrono::Utc>>,
+    /// Only events of this type (repeatable), e.g. `run_finished`.
+    #[arg(
+        long = "type",
+        value_name = "TYPE",
+        value_parser = clap::builder::PossibleValuesParser::new(vibe_core::Event::TYPES),
+        hide_possible_values = true
+    )]
+    pub types: Vec<String>,
+    /// Only events of this task (repeatable): number, `NNN-slug` or id
+    /// prefix.
+    #[arg(long = "task", value_name = "REF")]
+    pub tasks: Vec<String>,
+}
+
+/// Parse `--since`: an RFC 3339 time, or an age before now (`90s`, `30m`,
+/// `2h`, `1d`).
+pub fn parse_since(text: &str) -> Result<chrono::DateTime<chrono::Utc>, String> {
+    parse_since_at(text, chrono::Utc::now())
+}
+
+/// [`parse_since`] against an explicit "now" (for tests).
+pub fn parse_since_at(
+    text: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<chrono::DateTime<chrono::Utc>, String> {
+    let text = text.trim();
+    if let Ok(at) = chrono::DateTime::parse_from_rfc3339(text) {
+        return Ok(at.with_timezone(&chrono::Utc));
+    }
+    let invalid = || {
+        format!(
+            "invalid time `{text}`: expected RFC 3339 (2026-09-27T10:00:00Z) or an age (30m, 2h, 1d)"
+        )
+    };
+    let Some((i, unit)) = text.char_indices().last() else {
+        return Err(invalid());
+    };
+    let factor: i64 = match unit.to_ascii_lowercase() {
+        's' => 1,
+        'm' => 60,
+        'h' => 3600,
+        'd' => 86_400,
+        _ => return Err(invalid()),
+    };
+    let value: i64 = text[..i].trim().parse().map_err(|_| invalid())?;
+    let secs = value
+        .checked_mul(factor)
+        .filter(|s| *s >= 0)
+        .ok_or_else(invalid)?;
+    chrono::Duration::try_seconds(secs)
+        .and_then(|d| now.checked_sub_signed(d))
+        .ok_or_else(|| format!("age `{text}` is too large"))
+}
+
+/// `vibe history …`
+#[derive(Debug, Args)]
+pub struct HistoryArgs {
+    /// Task number, `NNN-slug` directory name, or id prefix; without it,
+    /// every ready and done task.
+    #[arg(value_name = "REF")]
+    pub reference: Option<String>,
+    /// Include failed and cancelled tasks.
+    #[arg(long, conflicts_with = "reference")]
+    pub all: bool,
+}
+
+/// `vibe trace …`
+#[derive(Debug, Args)]
+pub struct TraceArgs {
+    /// Task number, `NNN-slug` directory name, or id prefix.
+    #[arg(value_name = "REF")]
+    pub reference: String,
+    /// Run id or prefix (default: the last run).
+    #[arg(long, value_name = "RUN", conflicts_with = "all")]
+    pub run: Option<String>,
+    /// Every run of the task.
+    #[arg(long)]
+    pub all: bool,
+    /// Only calls of this tool.
+    #[arg(long, value_name = "NAME")]
+    pub tool: Option<String>,
+    /// Only calls made for this subtask (id or prefix).
+    #[arg(long, value_name = "ID")]
+    pub subtask: Option<String>,
+    /// Complete arguments and outputs (read from the trace store).
+    #[arg(long)]
+    pub full: bool,
 }
 
 /// `vibe config …`
@@ -514,5 +617,57 @@ mod tests {
         assert_eq!(parse_duration_secs("2H"), Ok(7200));
         assert!(parse_duration_secs("3d").is_err());
         assert!(parse_duration_secs("m").is_err());
+    }
+
+    #[test]
+    fn since_accepts_times_and_ages() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-27T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let at = |s: &str| parse_since_at(s, now).map(|t| t.to_rfc3339());
+        assert_eq!(
+            at("2026-09-27T10:00:00+02:00"),
+            Ok("2026-09-27T08:00:00+00:00".into())
+        );
+        assert_eq!(at("30m"), Ok("2026-09-27T11:30:00+00:00".into()));
+        assert_eq!(at("2H"), Ok("2026-09-27T10:00:00+00:00".into()));
+        assert_eq!(at("1d"), Ok("2026-09-26T12:00:00+00:00".into()));
+        assert_eq!(at("45s"), Ok("2026-09-27T11:59:15+00:00".into()));
+        for bad in ["", "d", "30", "3w", "-2h", "yesterday", "2026-09-27"] {
+            assert!(at(bad).is_err(), "{bad:?} accepted");
+        }
+        assert!(at("99999999999999d").is_err());
+    }
+
+    #[test]
+    fn events_flags_and_type_validation() {
+        let Command::Events(args) = Cli::try_parse_from([
+            "vibe",
+            "events",
+            "--type",
+            "run_finished",
+            "--type",
+            "committed",
+            "--task",
+            "2",
+            "--since",
+            "1h",
+        ])
+        .unwrap()
+        .command
+        else {
+            panic!("not an events command");
+        };
+        assert_eq!(args.reference, None);
+        assert_eq!(args.types, ["run_finished", "committed"]);
+        assert_eq!(args.tasks, ["2"]);
+        assert!(args.since.is_some());
+        assert!(Cli::try_parse_from(["vibe", "events", "--type", "run_done"]).is_err());
+        // `--after` and `--all` need a task.
+        assert!(Cli::try_parse_from(["vibe", "events", "--after", "3"]).is_err());
+        assert!(Cli::try_parse_from(["vibe", "events", "--all"]).is_err());
+        assert!(Cli::try_parse_from(["vibe", "events", "1", "--all", "--type", "log"]).is_ok());
+        assert!(Cli::try_parse_from(["vibe", "trace", "1", "--run", "ab", "--all"]).is_err());
+        assert!(Cli::try_parse_from(["vibe", "history", "1", "--all"]).is_err());
     }
 }

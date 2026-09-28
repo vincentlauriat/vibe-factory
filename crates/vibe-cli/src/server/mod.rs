@@ -112,11 +112,11 @@ pub async fn run(root: &Path, args: ServeArgs, ui: Ui) -> Result<u8> {
         token,
         allowed_hosts,
         evals: args.evals.clone(),
+        streams: Arc::new(api::StreamHub::new()),
     });
+    let stdin_closed = args.exit_on_stdin_eof.then(stdin_eof);
     axum::serve(listener, api::router(state))
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .with_graceful_shutdown(stop_signal(stdin_closed))
         .await?;
 
     for task in manager.active() {
@@ -131,4 +131,44 @@ pub async fn run(root: &Path, args: ServeArgs, ui: Ui) -> Result<u8> {
         ctx.shutdown().await;
     }
     Ok(0)
+}
+
+/// Resolves when the server should stop: `Ctrl-C`, or the end of standard
+/// input when `stdin_closed` is given (`--exit-on-stdin-eof`).
+async fn stop_signal(stdin_closed: Option<tokio::sync::oneshot::Receiver<()>>) {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    match stdin_closed {
+        Some(closed) => {
+            tokio::select! {
+                () = ctrl_c => {}
+                _ = closed => {}
+            }
+        }
+        None => ctrl_c.await,
+    }
+}
+
+/// A receiver that completes once standard input reaches its end or fails:
+/// the parent that holds its other end has gone (even killed outright).
+///
+/// Read on a plain thread rather than the runtime's blocking pool, whose
+/// shutdown would wait for a read that never returns.
+fn stdin_eof() -> tokio::sync::oneshot::Receiver<()> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    std::thread::spawn(move || {
+        use std::io::Read;
+        let mut stdin = std::io::stdin().lock();
+        let mut buf = [0u8; 1024];
+        loop {
+            match stdin.read(&mut buf) {
+                Ok(n) if n > 0 => {}
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                _ => break,
+            }
+        }
+        let _ = tx.send(());
+    });
+    rx
 }

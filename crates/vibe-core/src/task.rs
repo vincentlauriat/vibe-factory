@@ -111,6 +111,9 @@ pub struct Task {
     pub created_at: DateTime<Utc>,
     /// Last modification timestamp.
     pub updated_at: DateTime<Utc>,
+    /// Branch of the task workspace, recorded when a run opens it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
 }
 
 impl Task {
@@ -127,6 +130,7 @@ impl Task {
             source: TaskSource::Manual,
             created_at: now,
             updated_at: now,
+            branch: None,
         }
     }
 

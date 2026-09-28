@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tokio::sync::{OnceCell, watch};
+use vibe_agents::ToolTrace;
+use vibe_core::config::{TOOL_OUTPUT_DIR, VIBE_DIR};
 use vibe_core::{
     ApprovalGate, Complexity, Envelope, Error, ErrorKind, Event, EventBus, EventSink, HookDecision,
     Phase, QaIssue, QaReport, QaVerdict, Registry, Result, RunBudget, RunId, Severity,
@@ -156,6 +158,18 @@ fn sync_accounting(ctx: &mut RunContext, base: (Usage, u64), started: Instant) {
     ctx.state.usage = base.0.combined(ctx.usage);
     let now = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     ctx.state.active_ms = base.1.saturating_add(now);
+}
+
+/// The [`Event::RunFinished`] of a run whose persisted state is `state`.
+fn run_finished(state: &RunState, success: bool, status: TaskStatus) -> Event {
+    Event::RunFinished {
+        run: state.run_id,
+        success,
+        status,
+        usage: state.usage,
+        active_ms: state.active_ms,
+        started_at: state.started_at,
+    }
 }
 
 /// How often a run checks for a cancellation requested by another process.
@@ -408,6 +422,36 @@ impl Pipeline {
         self.execute(task, state, options).await
     }
 
+    /// Where the tool outputs of `run` are kept, when
+    /// `pipeline.trace_outputs` is on:
+    /// `<project>/.vibe/tool-output/<task dir>/<run>/`. Tracing never fails
+    /// a run: without a directory name, the task id names the directory.
+    async fn tool_trace(&self, task: TaskId, run: RunId) -> Option<ToolTrace> {
+        if !self.config.pipeline.trace_outputs {
+            return None;
+        }
+        let task_dir = match self.deps.store.task_dir_name(task).await {
+            Ok(Some(name)) => name,
+            Ok(None) => task.to_string(),
+            Err(e) => {
+                tracing::warn!(%task, error = %e, "no task directory name for the trace");
+                task.to_string()
+            }
+        };
+        let run = run.to_string();
+        Some(ToolTrace {
+            dir: self
+                .deps
+                .project_root
+                .join(VIBE_DIR)
+                .join(TOOL_OUTPUT_DIR)
+                .join(&task_dir)
+                .join(&run),
+            reference: format!("{VIBE_DIR}/{TOOL_OUTPUT_DIR}/{task_dir}/{run}"),
+            max_chars: self.config.pipeline.trace_max_chars,
+        })
+    }
+
     async fn execute(
         &self,
         task: Task,
@@ -456,6 +500,44 @@ impl Pipeline {
             })
             .await;
 
+        // From here on every exit publishes `RunFinished`: an error the run
+        // did not report itself ends it as failed, with the last persisted
+        // totals.
+        let task_id = task.id;
+        let initial = state.clone();
+        let mut finished = false;
+        let result = self
+            .execute_started(task, state, options, started, &mut finished)
+            .await;
+        if result.is_err() && !finished {
+            let state = store
+                .load_run_state(task_id)
+                .await
+                .ok()
+                .flatten()
+                .filter(|s| s.run_id == run_id)
+                .unwrap_or(initial);
+            events
+                .publish(run_finished(&state, false, TaskStatus::Failed))
+                .await;
+        }
+        self.router.set(run_id, None);
+        result
+    }
+
+    /// The body of [`Pipeline::execute`] once `RunStarted` is published.
+    /// Sets `finished` when it published `RunFinished` itself.
+    async fn execute_started(
+        &self,
+        mut task: Task,
+        state: RunState,
+        options: RunOptions,
+        started: Instant,
+        finished: &mut bool,
+    ) -> Result<RunReport> {
+        let store = Arc::clone(&self.deps.store);
+        let events = self.deps.events.clone();
+        let run_id = state.run_id;
         let workspace = match self
             .deps
             .workspace
@@ -464,17 +546,30 @@ impl Pipeline {
         {
             Ok(w) => w,
             Err(e) => {
+                // The task keeps its status: nothing ran.
                 events
-                    .publish(Event::RunFinished {
-                        run: run_id,
-                        success: false,
-                        status: task.status,
-                    })
+                    .publish(run_finished(&state, false, task.status))
                     .await;
-                self.router.set(run_id, None);
+                *finished = true;
                 return Err(e);
             }
         };
+        // Commands run later (`vibe pr`, `task discard`) find the branch
+        // without recomputing it.
+        // A failed save is retried with the next status change.
+        if workspace.branch.is_some() && task.branch != workspace.branch {
+            task.branch = workspace.branch.clone();
+            if let Err(e) = store.save_task(&task).await {
+                events
+                    .log(
+                        Some(run_id),
+                        "warn",
+                        format!("cannot record the branch: {e}"),
+                    )
+                    .await;
+            }
+        }
+        let tool_trace = self.tool_trace(task.id, run_id).await;
         let spec = store.load_spec(task.id).await?;
         let plan = store.load_plan(task.id).await?;
 
@@ -511,6 +606,7 @@ impl Pipeline {
             resetter: self.deps.resetter.clone(),
             subtask_workspaces: self.deps.subtask_workspaces.clone(),
             cancel: options.cancel.clone(),
+            tool_trace,
             budget,
             complexity_override: options.complexity_override,
             spec,
@@ -791,13 +887,13 @@ impl Pipeline {
         ctx.state.touch();
         store.save_run_state(&ctx.state).await?;
         events
-            .publish(Event::RunFinished {
-                run: run_id,
-                success: matches!(final_status, TaskStatus::Ready | TaskStatus::Done),
-                status: final_status,
-            })
+            .publish(run_finished(
+                &ctx.state,
+                matches!(final_status, TaskStatus::Ready | TaskStatus::Done),
+                final_status,
+            ))
             .await;
-        self.router.set(run_id, None);
+        *finished = true;
 
         Ok(RunReport {
             run_id,

@@ -194,7 +194,7 @@ async fn run_fixer(
     );
     ctx.note(&format!("QA fix {summary}.\n\n{}", out.summary.trim()))
         .await?;
-    ctx.commit(&commit_message).await;
+    ctx.commit(&commit_message, None).await;
     Ok(PhaseResult::ok(Phase::Fix, summary)
         .with_success(ok)
         .then(Transition::Goto { phase: Phase::Qa }))

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 
 use crate::agent::AgentRole;
-use crate::ids::{RunId, SubtaskId, TaskId};
+use crate::ids::{CallId, RunId, SubtaskId, TaskId};
 use crate::phase::Phase;
 use crate::provider::{StreamDelta, Usage};
 
@@ -46,6 +46,9 @@ pub enum Event {
         role: AgentRole,
         /// Subtask being worked on, if any.
         subtask: Option<SubtaskId>,
+        /// Model id the session uses (empty in logs recorded before 0.5).
+        #[serde(default)]
+        model: String,
     },
     /// The model produced text.
     AgentText {
@@ -79,6 +82,13 @@ pub enum Event {
         tool: String,
         /// Arguments.
         input: serde_json::Value,
+        /// Id of the call, repeated by its [`Event::ToolReturned`]. Nil in
+        /// logs recorded before 0.5, where calls pair by order.
+        #[serde(default)]
+        call: CallId,
+        /// Subtask being worked on, if any.
+        #[serde(default)]
+        subtask: Option<SubtaskId>,
     },
     /// A tool returned.
     ToolReturned {
@@ -94,6 +104,25 @@ pub enum Event {
         duration_ms: u64,
         /// Preview of the output.
         preview: String,
+        /// Id of the call (see [`Event::ToolCalled`]).
+        #[serde(default)]
+        call: CallId,
+        /// Subtask being worked on, if any.
+        #[serde(default)]
+        subtask: Option<SubtaskId>,
+        /// Exit code, for tools that run a command.
+        #[serde(default)]
+        exit_code: Option<i64>,
+        /// Whether the command was stopped by its timeout.
+        #[serde(default)]
+        timed_out: bool,
+        /// Length of the complete output, in characters.
+        #[serde(default)]
+        output_chars: u64,
+        /// Complete output, relative to the project root
+        /// (`.vibe/tool-output/<task>/<run>/<call>.txt`), when traced.
+        #[serde(default)]
+        output_file: Option<String>,
     },
     /// An agent session ended.
     AgentFinished {
@@ -141,6 +170,31 @@ pub enum Event {
         commit: Option<String>,
         /// Conflicting files; empty when the integration succeeded.
         conflicts: Vec<String>,
+    },
+    /// The pipeline committed work in a workspace (checkpoints, subtask
+    /// and fix commits, subtask integrations).
+    Committed {
+        /// Run id.
+        run: RunId,
+        /// Subtask the commit belongs to, if any.
+        subtask: Option<SubtaskId>,
+        /// Commit id.
+        commit: String,
+        /// First line of the commit message.
+        message: String,
+        /// Files changed by the commit, relative to the repository root.
+        files: Vec<String>,
+    },
+    /// The task branch was merged into its base branch.
+    Merged {
+        /// Run id.
+        run: RunId,
+        /// Resulting commit on the base branch.
+        commit: String,
+        /// Merged branch.
+        branch: String,
+        /// Branch merged into.
+        base: String,
     },
     /// The consumption of the run budget changed.
     BudgetUpdated {
@@ -206,6 +260,15 @@ pub enum Event {
         success: bool,
         /// Final task status.
         status: crate::task::TaskStatus,
+        /// Tokens used by the whole run, resumes included.
+        #[serde(default)]
+        usage: Usage,
+        /// Active time of the whole run in milliseconds, resumes included.
+        #[serde(default)]
+        active_ms: u64,
+        /// When the run started (the Unix epoch in logs recorded before 0.5).
+        #[serde(default)]
+        started_at: DateTime<Utc>,
     },
     /// Free-form diagnostic.
     Log {
@@ -233,6 +296,8 @@ impl Event {
         "subtask_updated",
         "validation_finished",
         "subtask_integrated",
+        "committed",
+        "merged",
         "budget_updated",
         "artefact_written",
         "approval_requested",
@@ -259,6 +324,8 @@ impl Event {
             Event::SubtaskUpdated { .. } => "subtask_updated",
             Event::ValidationFinished { .. } => "validation_finished",
             Event::SubtaskIntegrated { .. } => "subtask_integrated",
+            Event::Committed { .. } => "committed",
+            Event::Merged { .. } => "merged",
             Event::BudgetUpdated { .. } => "budget_updated",
             Event::ArtefactWritten { .. } => "artefact_written",
             Event::ApprovalRequested { .. } => "approval_requested",
@@ -286,6 +353,8 @@ impl Event {
             | Event::SubtaskUpdated { run, .. }
             | Event::ValidationFinished { run, .. }
             | Event::SubtaskIntegrated { run, .. }
+            | Event::Committed { run, .. }
+            | Event::Merged { run, .. }
             | Event::BudgetUpdated { run, .. }
             | Event::ArtefactWritten { run, .. }
             | Event::ApprovalRequested { run, .. }
@@ -565,6 +634,111 @@ mod tests {
         };
         assert_eq!(serde_json::to_value(&paused).unwrap()["type"], "paused");
         assert_eq!(paused.type_name(), "paused");
+    }
+
+    #[test]
+    fn schema_two_logs_without_the_new_fields_still_read() {
+        let run = RunId::new();
+        let lines = [
+            format!(
+                r#"{{"schema":2,"seq":1,"at":"2026-09-26T10:00:00Z","event":{{"type":"agent_started","run":"{run}","role":"coder","subtask":null}}}}"#
+            ),
+            format!(
+                r#"{{"schema":2,"seq":2,"at":"2026-09-26T10:00:00Z","event":{{"type":"tool_called","run":"{run}","role":"coder","tool":"bash","input":{{"command":"ls"}}}}}}"#
+            ),
+            format!(
+                r#"{{"schema":2,"seq":3,"at":"2026-09-26T10:00:01Z","event":{{"type":"tool_returned","run":"{run}","role":"coder","tool":"bash","is_error":false,"duration_ms":5,"preview":"a"}}}}"#
+            ),
+            format!(
+                r#"{{"schema":2,"seq":4,"at":"2026-09-26T10:00:02Z","event":{{"type":"run_finished","run":"{run}","success":true,"status":"ready"}}}}"#
+            ),
+        ];
+        let events: Vec<Event> = lines
+            .iter()
+            .map(|l| serde_json::from_str::<Envelope>(l).unwrap().event)
+            .collect();
+        match &events[0] {
+            Event::AgentStarted { model, .. } => assert_eq!(model, ""),
+            e => panic!("unexpected {e:?}"),
+        }
+        match &events[1] {
+            Event::ToolCalled { call, subtask, .. } => {
+                assert!(call.is_nil());
+                assert_eq!(*subtask, None);
+            }
+            e => panic!("unexpected {e:?}"),
+        }
+        match &events[2] {
+            Event::ToolReturned {
+                call,
+                exit_code,
+                timed_out,
+                output_chars,
+                output_file,
+                ..
+            } => {
+                assert!(call.is_nil());
+                assert_eq!(*exit_code, None);
+                assert!(!timed_out);
+                assert_eq!(*output_chars, 0);
+                assert_eq!(*output_file, None);
+            }
+            e => panic!("unexpected {e:?}"),
+        }
+        match &events[3] {
+            Event::RunFinished {
+                usage,
+                active_ms,
+                started_at,
+                ..
+            } => {
+                assert_eq!(*usage, Usage::default());
+                assert_eq!(*active_ms, 0);
+                assert_eq!(*started_at, DateTime::<Utc>::default());
+            }
+            e => panic!("unexpected {e:?}"),
+        }
+    }
+
+    #[test]
+    fn new_events_roundtrip() {
+        let run = RunId::new();
+        for event in [
+            Event::Committed {
+                run,
+                subtask: Some(SubtaskId::new()),
+                commit: "abc".into(),
+                message: "vibe: s1".into(),
+                files: vec!["src/lib.rs".into()],
+            },
+            Event::Merged {
+                run,
+                commit: "def".into(),
+                branch: "vibe/x-1".into(),
+                base: "main".into(),
+            },
+            Event::ToolReturned {
+                run,
+                role: crate::AgentRole::Coder,
+                tool: "bash".into(),
+                is_error: true,
+                duration_ms: 1,
+                preview: String::new(),
+                call: CallId::new(),
+                subtask: None,
+                exit_code: Some(2),
+                timed_out: false,
+                output_chars: 10,
+                output_file: Some(".vibe/tool-output/001-x/r/c.txt".into()),
+            },
+        ] {
+            let json = serde_json::to_value(&event).unwrap();
+            assert_eq!(json["type"], event.type_name());
+            assert!(Event::TYPES.contains(&event.type_name()));
+            assert_eq!(event.run_id(), Some(run));
+            let back: Event = serde_json::from_value(json).unwrap();
+            assert_eq!(back, event);
+        }
     }
 
     #[test]

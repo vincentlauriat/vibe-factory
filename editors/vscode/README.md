@@ -23,7 +23,10 @@ nothing to configure for a server on the default address. Settings:
   reject (asks for the reason). Refreshes every 3 seconds.
 * **Follow events**: selecting a task streams its events into the "Vibe Factory" output
   channel, with the model's text as it is written.
-* **New task** and **Open the web UI** in the view's title bar.
+* **New task** and **Open the web UI** in the view's title bar. The web UI has what the
+  extension does not show: the activity of every task, the history of finished tasks and
+  the trace of each run's tool calls with their complete outputs (see
+  [`vibe serve`](https://vincentlauriat.github.io/vibe-factory/user/cli.html#vibe-serve)).
 
 Approving or rejecting resumes the run, as the web UI does.
 

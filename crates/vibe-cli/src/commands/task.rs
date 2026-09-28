@@ -192,6 +192,9 @@ async fn show(root: &Path, store: &Arc<FileTaskStore>, reference: &str, ui: Ui) 
     if !task.labels.is_empty() {
         println!("  labels      {}", task.labels.join(", "));
     }
+    if let Some(branch) = &task.branch {
+        println!("  branch      {branch}");
+    }
     println!("  id          {}", task.id);
     println!("  created     {}", relative_time(task.created_at));
     println!("  updated     {}", relative_time(task.updated_at));
@@ -363,6 +366,24 @@ async fn discard(
         }
     }
 
+    // The traced tool outputs are filed under the task directory's name,
+    // which the index forgets with the task: remove them first. A failure
+    // only warns, so the task is never left half discarded.
+    if let Some(entry) = store.entry(task.id).await? {
+        let dir = root
+            .join(vibe_core::config::VIBE_DIR)
+            .join(vibe_core::config::TOOL_OUTPUT_DIR)
+            .join(entry.dir);
+        match tokio::fs::remove_dir_all(&dir).await {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => eprintln!(
+                "{} cannot remove the tool outputs in {}: {e}",
+                style::warn().apply_to("warning:"),
+                dir.display()
+            ),
+        }
+    }
     store.delete_task(task.id).await?;
     if ui.json {
         ui.print_json(&json!({

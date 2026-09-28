@@ -369,6 +369,10 @@ async fn integrate_attempt(
             SubtaskIntegration::Integrated { commit } => (commit.clone(), Vec::new()),
             SubtaskIntegration::Conflict { files } => (None, files.clone()),
         };
+        if let Some(sha) = &commit {
+            ctx.committed(&ctx.workspace.root, Some(id), sha, message)
+                .await;
+        }
         ctx.events
             .publish(Event::SubtaskIntegrated {
                 run: ctx.run_id,
@@ -500,6 +504,7 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
     // Subtasks done but not committed yet: the committer stages the whole
     // workspace, so commits wait until no other session is editing it.
     let mut to_commit: Vec<(usize, String)> = Vec::new();
+    let mut to_commit_ids: Vec<SubtaskId> = Vec::new();
     // Failed attempts whose leftovers must be discarded once no session is
     // editing the workspace. While any is pending, no session starts, so a
     // retry never begins from a dirty tree.
@@ -514,7 +519,7 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
     if isolated {
         // Attempts fork from the last commit: record what earlier phases or
         // a human left, and drop attempt workspaces of a crashed process.
-        ctx.commit("vibe: checkpoint before build").await;
+        ctx.commit("vibe: checkpoint before build", None).await;
         discard_all_attempts(ctx, isolation.as_ref()).await;
     }
 
@@ -668,6 +673,7 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
                     .await?;
                     if !isolated {
                         to_commit.push((n, title));
+                        to_commit_ids.push(id);
                     }
                 }
                 Some(why) => {
@@ -726,8 +732,14 @@ pub async fn run_build(ctx: &mut RunContext) -> Result<PhaseResult> {
             // never discard it; the reset then removes whatever the failed
             // attempts left behind.
             if !to_commit.is_empty() {
-                ctx.commit(&commit_message(&to_commit)).await;
+                // A commit shared by several subtasks belongs to none.
+                let subtask = match to_commit_ids.as_slice() {
+                    [id] => Some(*id),
+                    _ => None,
+                };
+                ctx.commit(&commit_message(&to_commit), subtask).await;
                 to_commit.clear();
+                to_commit_ids.clear();
             }
             if !to_reset.is_empty() {
                 ctx.reset_workspace(&to_reset.join(", ")).await;

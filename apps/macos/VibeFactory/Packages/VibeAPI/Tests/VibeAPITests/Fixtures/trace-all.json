@@ -1,0 +1,119 @@
+[
+ {
+  "run": "6a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+  "calls": [],
+  "files_written": []
+ },
+ {
+  "run": "5f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f",
+  "calls": [
+   {
+    "run": "5f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f",
+    "call": "5f0c2a9e1b7d",
+    "role": "coder",
+    "subtask": "st-1",
+    "tool": "write_file",
+    "input": {
+     "path": "hello.txt",
+     "content": "Hello\n"
+    },
+    "called_at": "2026-09-27T09:12:01Z",
+    "returned_at": "2026-09-27T09:12:01.002Z",
+    "duration_ms": 2,
+    "is_error": false,
+    "exit_code": null,
+    "timed_out": false,
+    "preview": "Created `hello.txt` (6 bytes).",
+    "output_chars": 30,
+    "output_file": "/repo/.vibe/tool-output/5f0c2a9e1b7d.txt",
+    "paired": "id"
+   },
+   {
+    "run": "5f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f",
+    "call": "6a1d3b0f2c8e",
+    "role": "qa_fixer",
+    "subtask": null,
+    "tool": "run_command",
+    "input": {
+     "command": "cargo test"
+    },
+    "called_at": "2026-09-27T09:12:02Z",
+    "returned_at": "2026-09-27T09:12:02.002Z",
+    "duration_ms": 2,
+    "is_error": true,
+    "exit_code": 101,
+    "timed_out": true,
+    "preview": "Created `hello.txt` (6 bytes).",
+    "output_chars": 30,
+    "output_file": "/repo/.vibe/tool-output/6a1d3b0f2c8e.txt",
+    "paired": "id"
+   },
+   {
+    "run": "5f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f",
+    "call": "000000000000",
+    "role": "coder",
+    "subtask": "st-1",
+    "tool": "read_file",
+    "input": {
+     "path": "hello.txt",
+     "content": "Hello\n"
+    },
+    "called_at": "2026-09-27T09:12:03Z",
+    "returned_at": "2026-09-27T09:12:03.002Z",
+    "duration_ms": 2,
+    "is_error": false,
+    "exit_code": null,
+    "timed_out": false,
+    "preview": "Created `hello.txt` (6 bytes).",
+    "output_chars": 0,
+    "output_file": null,
+    "paired": "order"
+   },
+   {
+    "run": "5f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f",
+    "call": "7b2e4c1a3d9f",
+    "role": "coder",
+    "subtask": "st-1",
+    "tool": "list_dir",
+    "input": {
+     "path": "hello.txt",
+     "content": "Hello\n"
+    },
+    "called_at": "2026-09-27T09:12:04Z",
+    "returned_at": null,
+    "duration_ms": null,
+    "is_error": null,
+    "exit_code": null,
+    "timed_out": false,
+    "preview": "",
+    "output_chars": 30,
+    "output_file": "/repo/.vibe/tool-output/7b2e4c1a3d9f.txt",
+    "paired": "unmatched"
+   },
+   {
+    "run": "5f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f",
+    "call": "8c3f5d2b4e0a",
+    "role": "coder",
+    "subtask": "st-1",
+    "tool": "grep",
+    "input": {
+     "path": "hello.txt",
+     "content": "Hello\n"
+    },
+    "called_at": "2026-09-27T09:12:05Z",
+    "returned_at": "2026-09-27T09:12:05.002Z",
+    "duration_ms": 2,
+    "is_error": false,
+    "exit_code": null,
+    "timed_out": false,
+    "preview": "Created `hello.txt` (6 bytes).",
+    "output_chars": 30,
+    "output_file": "/repo/.vibe/tool-output/8c3f5d2b4e0a.txt",
+    "paired": "psychic"
+   }
+  ],
+  "files_written": [
+   "hello.txt"
+  ]
+ }
+]

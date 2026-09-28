@@ -1,0 +1,64 @@
+name: VibeFactory
+options:
+  bundleIdPrefix: fr.vincentlauriat
+  deploymentTarget:
+    macOS: "14.0"
+
+# Local Swift package: models, API client, SSE stream, `vibe serve` child process.
+packages:
+  VibeAPI:
+    path: Packages/VibeAPI
+
+# Explicit scheme (otherwise xcodegen generates none and schemes are lost on regeneration).
+schemes:
+  VibeFactory:
+    build:
+      targets:
+        VibeFactory: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - package: VibeAPI/VibeAPITests
+
+targets:
+  VibeFactory:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: VibeFactory
+        excludes:
+          - "**/*.entitlements"
+          - "Info.plist"
+    dependencies:
+      - package: VibeAPI
+    settings:
+      base:
+        PRODUCT_NAME: Vibe Factory
+        PRODUCT_BUNDLE_IDENTIFIER: fr.vincentlauriat.vibefactory
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "5.9"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        # No sandbox: the app spawns `vibe serve` and reads project folders (see README).
+        CODE_SIGN_ENTITLEMENTS: VibeFactory/VibeFactory.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+    info:
+      path: VibeFactory/Info.plist
+      properties:
+        CFBundleName: Vibe Factory
+        CFBundleDisplayName: Vibe Factory
+        CFBundleIdentifier: fr.vincentlauriat.vibefactory
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, fr]
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHumanReadableCopyright: ""
