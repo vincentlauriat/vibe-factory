@@ -2,7 +2,7 @@
   "name": "vibe-factory",
   "displayName": "Vibe Factory",
   "description": "Drive Vibe Factory tasks from VS Code: board, runs, approvals and live events, through `vibe serve`.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "vibe-factory",
   "license": "MIT OR Apache-2.0",
   "repository": { "type": "git", "url": "https://github.com/vincentlauriat/vibe-factory" },

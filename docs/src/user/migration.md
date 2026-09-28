@@ -10,8 +10,8 @@ app on `vibe serve`. Existing `.vibe/config.toml` files keep working, and runs s
 ### Upgrade
 
 ```sh
-cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.0 vibe-cli --force
-vibe --version    # vibe 0.5.0
+cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.1 vibe-cli --force
+vibe --version    # vibe 0.5.1
 vibe doctor
 ```
 
@@ -79,7 +79,7 @@ without a task (with `--since`, `--type`, `--task`, `--follow`), `--since` and `
 
 `apps/macos/VibeFactory` is a SwiftUI client of `vibe serve` for macOS 14 and later. It
 starts `vibe serve --exit-on-stdin-eof` for the project it opens, so it needs the 0.5
-`vibe` on the machine. A signed, notarized DMG is attached to the v0.5.0 release; the app
+`vibe` on the machine. A signed, notarized DMG is attached to each release since v0.5.0; the app
 then updates itself (Check for Updates…). Its README explains how to build it from source.
 
 ### For library users

@@ -38,7 +38,7 @@ The first build downloads and compiles the dependencies and takes a few minutes.
 To install a tagged release or a branch (replace the tag with one that exists):
 
 ```sh
-cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.0 vibe-cli
+cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.1 vibe-cli
 cargo install --git https://github.com/vincentlauriat/vibe-factory --branch main vibe-cli
 ```
 
@@ -78,7 +78,7 @@ vibe --version
 ```
 
 ```text
-vibe 0.5.0
+vibe 0.5.1
 ```
 
 Then, inside a project:
