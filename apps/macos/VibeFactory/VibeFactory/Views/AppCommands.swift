@@ -12,8 +12,8 @@ extension FocusedValues {
     }
 }
 
-/// File and Task menus: Open Project ⌘O, New Task ⌘N, Run ⌘R, Resume ⇧⌘R,
-/// Cancel ⌘., Approve ⌥⌘A, Reject ⌥⌘J.
+/// App, File and Task menus: Check for Updates…, Open Project ⌘O, New Task ⌘N,
+/// Run ⌘R, Resume ⇧⌘R, Cancel ⌘., Approve ⌥⌘A, Reject ⌥⌘J.
 struct AppCommands: Commands {
     let settings: AppSettings
     let recents: RecentProjects
@@ -21,6 +21,10 @@ struct AppCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button(settings.t("menu_check_updates")) { Updater.shared.checkForUpdates() }
+                .disabled(!Updater.shared.canCheckForUpdates)
+        }
         CommandGroup(replacing: .newItem) {
             Button(settings.t("menu_open_project")) {
                 if let ref = WelcomeViewModel().chooseFolder(prompt: settings.t("open")) {

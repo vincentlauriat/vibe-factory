@@ -8,6 +8,10 @@ options:
 packages:
   VibeAPI:
     path: Packages/VibeAPI
+  # Auto-update (EdDSA-signed appcast, see Scripts/release.sh).
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.9.1
 
 # Explicit scheme (otherwise xcodegen generates none and schemes are lost on regeneration).
 schemes:
@@ -34,6 +38,7 @@ targets:
           - "Info.plist"
     dependencies:
       - package: VibeAPI
+      - package: Sparkle
     settings:
       base:
         PRODUCT_NAME: Vibe Factory
@@ -62,3 +67,8 @@ targets:
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: ""
+        # Sparkle. SUPublicEDKey pairs with the private key in the login keychain
+        # under account "VibeFactory": never change it (see Scripts/release.sh).
+        SUFeedURL: https://raw.githubusercontent.com/vincentlauriat/vibe-factory/main/apps/macos/VibeFactory/appcast.xml
+        SUPublicEDKey: lnbeM5Vs5cK+gFpOLx3qf6nIw+BAPRKQtul811Te3sk=
+        SUEnableAutomaticChecks: true

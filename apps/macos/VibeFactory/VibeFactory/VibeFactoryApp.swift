@@ -56,7 +56,10 @@ enum WindowID {
 /// does not run reliably on ⌘Q.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        MainActor.assumeIsolated { Notifications.install() }
+        MainActor.assumeIsolated {
+            Notifications.install()
+            _ = Updater.shared
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

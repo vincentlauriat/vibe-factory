@@ -85,7 +85,8 @@ Packages/VibeAPI/           Swift package: Codable models (tasks, events, Tagged
                             GlobalStream and EventStream (reconnecting), ServerProcess,
                             the Activity filter, History row text, notices; XCTest + fixtures
 Scripts/make-app-icon.swift placeholder icon generator (from Templates/AppKitTemplate)
-Scripts/release.sh          sign + DMG + notarize (release/…); not run yet
+Scripts/release.sh          sign + DMG + notarize + Sparkle signature, writes appcast.xml
+appcast.xml                 Sparkle update feed (SUFeedURL reads it from main)
 ```
 
 ## Requirements
@@ -112,6 +113,19 @@ open VibeFactory.xcodeproj                          # run from Xcode (⌘R)
 
 The `.github/workflows/macos-app.yml` workflow regenerates the project, runs the package tests and builds the
 app. It only does so when `apps/macos/**` or the workflow changes.
+
+## Release
+
+`./Scripts/release.sh <version>` (from this folder, on the merged `main`) builds Release, signs with the
+Developer ID and Hardened Runtime (Sparkle's nested binaries first), makes the DMG in `release/`,
+notarizes and staples it, then EdDSA-signs it for Sparkle and rewrites `appcast.xml`. Then:
+
+1. `gh release upload v<version> release/VibeFactory-<version>.dmg` (the appcast's enclosure points there);
+2. commit `appcast.xml` to `main`: installed apps read `SUFeedURL` from
+   `raw.githubusercontent.com/…/main/apps/macos/VibeFactory/appcast.xml`.
+
+The Sparkle private key lives in the login keychain under account `VibeFactory`; its public half is
+`SUPublicEDKey` in `project.yml`. Never regenerate it: installed apps would refuse every later update.
 
 ## Decisions
 
@@ -157,5 +171,4 @@ app. It only does so when `apps/macos/**` or the workflow changes.
   are built and the data layer is tested, but nobody has clicked through them.
 - Out of scope for the first version: plan editing, the settings editor and multiple
   servers per window.
-- Release: `Scripts/release.sh` is ready but has not been run. The DMG layout and
-  Sparkle updates come with the first tagged release.
+- The DMG has an `/Applications` alias but no Finder background layout.

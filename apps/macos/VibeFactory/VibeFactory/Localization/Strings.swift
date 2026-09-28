@@ -24,6 +24,7 @@ enum Strings {
             // Menus
             "menu_open_project": "Ouvrir un projet…",
             "menu_welcome": "Fenêtre de bienvenue",
+            "menu_check_updates": "Rechercher des mises à jour…",
             "menu_task": "Tâche",
             "menubar_summary": "%@ en cours · %@ en attente d'approbation",
             "menubar_no_project": "Aucun projet ouvert",
@@ -257,6 +258,7 @@ enum Strings {
 
             "menu_open_project": "Open Project…",
             "menu_welcome": "Welcome Window",
+            "menu_check_updates": "Check for Updates…",
             "menu_task": "Task",
             "menubar_summary": "%@ running · %@ awaiting approval",
             "menubar_no_project": "No open project",

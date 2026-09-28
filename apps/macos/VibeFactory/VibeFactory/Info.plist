@@ -31,5 +31,11 @@
 	<string>14.0</string>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/vincentlauriat/vibe-factory/main/apps/macos/VibeFactory/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>lnbeM5Vs5cK+gFpOLx3qf6nIw+BAPRKQtul811Te3sk=</string>
 </dict>
 </plist>

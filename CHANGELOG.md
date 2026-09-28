@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- macOS app: Sparkle auto-update (Vibe Factory → Check for Updates…, background checks),
+  fed by `apps/macos/VibeFactory/appcast.xml`. `Scripts/release.sh` signs Sparkle's nested
+  binaries, EdDSA-signs the DMG and writes the appcast.
+
 ## [0.5.0] — 2026-09-28
 
 Visibility release: see everything that was done, from every interface. Configurations and
