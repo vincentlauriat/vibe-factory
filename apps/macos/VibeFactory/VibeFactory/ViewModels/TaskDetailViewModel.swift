@@ -49,8 +49,7 @@ final class TaskDetailViewModel {
     @ObservationIgnored private var pending: [Envelope]? = []
     /// Run and `seq` of the last logged envelope applied: the backlog and
     /// the stream overlap, and `seq` restarts with each run.
-    @ObservationIgnored private var lastRun: String?
-    @ObservationIgnored private var lastSeq: UInt64 = 0
+    @ObservationIgnored private var position = RunPosition()
     /// Id of each entry of `envelopes`, same order.
     @ObservationIgnored private var envelopeIds: [Int] = []
     @ObservationIgnored private var nextId = 0
@@ -129,16 +128,6 @@ final class TaskDetailViewModel {
         }
     }
 
-    /// Whether a logged envelope is new; records its position.
-    private func accept(_ envelope: Envelope) -> Bool {
-        guard let seq = envelope.seq else { return true } // ephemeral, or logged before 0.3
-        let run = envelope.event.runId
-        if run == lastRun, seq <= lastSeq { return false }
-        lastRun = run
-        lastSeq = seq
-        return true
-    }
-
     func reload() async {
         do {
             detail = try await client.task(taskId)
@@ -192,7 +181,7 @@ final class TaskDetailViewModel {
     }
 
     private func apply(_ envelope: Envelope) {
-        guard accept(envelope) else { return }
+        guard position.accept(envelope) else { return }
         switch envelope.event {
         case .agentDelta(_, _, _, let delta):
             guard delta.kind == "text" else { return }

@@ -82,8 +82,10 @@ project.yml                 xcodegen spec (app target, scheme with the package t
 VibeFactory/                the app: Models/, Services/, ViewModels/, Views/, Localization/
 Packages/VibeAPI/           Swift package: Codable models (tasks, events, TaggedEnvelope,
                             EventCursor, TaskHistory, RunTrace), VibeClient, SSE parser,
-                            GlobalStream and EventStream (reconnecting), ServerProcess,
-                            the Activity filter, History row text, notices; XCTest + fixtures
+                            GlobalStream and EventStream (reconnecting, longer backoff on
+                            503), ServerProcess, the Activity filter, History row text,
+                            notices, the view models' pure logic (FeedLogic.swift);
+                            XCTest + fixtures (event-types.json written by a cargo test)
 Scripts/make-app-icon.swift placeholder icon generator (from Templates/AppKitTemplate)
 Scripts/release.sh          sign + DMG + notarize + Sparkle signature, writes appcast.xml
 appcast.xml                 Sparkle update feed (SUFeedURL reads it from main)
@@ -168,7 +170,9 @@ The Sparkle private key lives in the login keychain under account `VibeFactory`;
 ## Not there yet
 
 - A manual session against `vibe serve` on a real project has not been done yet: the views
-  are built and the data layer is tested, but nobody has clicked through them.
+  are built, the data layer and the view models' pure logic are tested, but nobody has
+  clicked through them (the view models themselves, `@MainActor` and bound to a live
+  server, have no tests).
 - Out of scope for the first version: plan editing, the settings editor and multiple
   servers per window.
 - The DMG has an `/Applications` alias but no Finder background layout.

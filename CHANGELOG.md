@@ -10,6 +10,18 @@ All notable changes to this project are documented here. The format follows
 - macOS app: Sparkle auto-update (Vibe Factory → Check for Updates…, background checks),
   fed by `apps/macos/VibeFactory/appcast.xml`. `Scripts/release.sh` signs Sparkle's nested
   binaries, EdDSA-signs the DMG and writes the appcast.
+- macOS app: unit tests for the view model logic, moved into the `VibeAPI` package
+  (`FeedLogic.swift`): the `(run, seq)` check between a task's backlog and its live events,
+  the run the Trace tab shows, and the incremental Activity filter, checked against a filter
+  from scratch over random appends, trims, reseeds, filter and pause changes.
+- `event-types.json`: `Event::TYPES` as a fixture of the Swift tests, checked for drift by a
+  cargo test (`VIBE_UPDATE_FIXTURES=1` rewrites it); a Swift test fails when an event type
+  has no Activity group.
+
+### Changed
+- macOS app: a stream refused with 503 (the server's limit of open streams) reconnects with
+  its own, longer backoff (5 s doubling up to 60 s) instead of the network one (0.5 s up to
+  10 s).
 
 ## [0.5.0] — 2026-09-28
 

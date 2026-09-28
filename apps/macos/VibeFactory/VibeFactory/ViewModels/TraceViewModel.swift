@@ -75,10 +75,12 @@ final class TraceViewModel {
     /// Every run with its calls. The picked run is kept, unless it was the
     /// last one: then the newest run is followed.
     func reload() {
-        let keep = runs.last?.id == selectedRun ? nil : selectedRun
+        let previous = runs.map(\.id)
+        let selected = selectedRun
         load { client, taskId in
             let all = try await client.trace(task: taskId, all: true)
-            return (all, all.first { $0.run == keep } ?? all.last)
+            let pick = RunSelection.pick(all.map(\.run), previous: previous, selected: selected)
+            return (all, all.first { $0.run == pick })
         }
     }
 

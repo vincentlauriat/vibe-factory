@@ -55,6 +55,20 @@ final class GlobalEventsTests: XCTestCase {
         XCTAssertNil(EventGroup.of("hologram"))
     }
 
+    /// `event-types.json` is `Event::TYPES`, checked for drift by the cargo
+    /// test `event_types_fixture_is_up_to_date`. `ActivityFilter` files an
+    /// unknown type under the logs (a newer server), so a type missing from
+    /// `EventGroup` would pass unnoticed there: check `EventGroup.of`.
+    func testEveryRustEventTypeHasAGroup() throws {
+        let types = try JSONDecoder().decode([String].self, from: Fixture.data("event-types.json"))
+        XCTAssertFalse(types.isEmpty)
+        for type in types {
+            XCTAssertNotNil(EventGroup.of(type), "`\(type)` has no EventGroup")
+        }
+        XCTAssertEqual(Set(EventGroup.allCases.flatMap(\.types)), Set(types), "EventGroup lists a type Rust lacks")
+        XCTAssertEqual(EventTests.documentedTypes, Set(types))
+    }
+
     func testActivityFilterKeepsGroupsAndTask() throws {
         let events = try Fixture.decode([TaggedEnvelope].self, "events-global.json")
         let types = { (filter: ActivityFilter) in events.filter(filter.keeps).map(\.event.typeName) }

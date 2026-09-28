@@ -119,18 +119,36 @@ public struct SSEParser: Sendable {
     }
 }
 
-/// Reconnection delays: doubled after each failed attempt, capped.
+/// Reconnection delays: doubled after each failed attempt, capped. Any 503
+/// waits longer (from `vibe serve`, the limit of open streams, `MAX_STREAMS`
+/// in `crates/vibe-cli/src/server/api/read.rs`): a saturated server is not
+/// asked again every few seconds.
 public struct Backoff: Sendable {
     public var initial: TimeInterval
     public var maximum: TimeInterval
+    /// The same after a 503.
+    public var saturatedInitial: TimeInterval
+    public var saturatedMaximum: TimeInterval
+    /// Waits between attempts; tests replace it to record the delays.
+    public var sleep: @Sendable (TimeInterval) async -> Void
 
-    public init(initial: TimeInterval = 0.5, maximum: TimeInterval = 10) {
+    public init(initial: TimeInterval = 0.5, maximum: TimeInterval = 10, saturatedInitial: TimeInterval = 5,
+                saturatedMaximum: TimeInterval = 60,
+                sleep: @escaping @Sendable (TimeInterval) async -> Void = Backoff.taskSleep) {
         self.initial = initial
         self.maximum = maximum
+        self.saturatedInitial = saturatedInitial
+        self.saturatedMaximum = saturatedMaximum
+        self.sleep = sleep
     }
 
-    public func delay(attempt: Int) -> TimeInterval {
-        min(maximum, initial * pow(2, Double(max(0, attempt))))
+    public func delay(attempt: Int, saturated: Bool = false) -> TimeInterval {
+        let (start, cap) = saturated ? (saturatedInitial, saturatedMaximum) : (initial, maximum)
+        return min(cap, start * pow(2, Double(max(0, attempt))))
+    }
+
+    public static let taskSleep: @Sendable (TimeInterval) async -> Void = { seconds in
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 }
 
@@ -151,8 +169,10 @@ public struct SSEConnection: Sendable {
     }
 
     /// Messages until the consumer stops iterating. Fails only on answers a
-    /// retry cannot fix (401, 404, other 4xx); network errors and a closed
-    /// body reconnect.
+    /// retry cannot fix (401, 404, other 4xx); network errors, 5xx and a
+    /// closed body reconnect, a 503 with the longer delays. The count of
+    /// failed attempts restarts when a message is delivered or when the kind
+    /// of failure changes (network errors then a first 503 wait 5 s, not 60).
     public func messages(lastEventId: String = "") -> AsyncThrowingStream<SSEMessage, Error> {
         let session = session
         let backoff = backoff
@@ -161,7 +181,9 @@ public struct SSEConnection: Sendable {
             let task = Task {
                 var lastId = lastEventId
                 var failures = 0
+                var lastSaturated = false
                 while !Task.isCancelled {
+                    var saturated = false
                     do {
                         var request = try await makeRequest(lastId)
                         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
@@ -183,7 +205,7 @@ public struct SSEConnection: Sendable {
                         lastId = parser.lastEventId
                     } catch let error as VibeError {
                         if case .server(let status, _) = error, status >= 500 {
-                            // Retry below.
+                            saturated = status == 503 // retry below
                         } else if case .transport = error {
                             // Retry below.
                         } else {
@@ -193,9 +215,11 @@ public struct SSEConnection: Sendable {
                     } catch {
                         if Task.isCancelled { break }
                     }
-                    let delay = backoff.delay(attempt: failures)
+                    if saturated != lastSaturated { failures = 0 }
+                    lastSaturated = saturated
+                    let delay = backoff.delay(attempt: failures, saturated: saturated)
                     failures += 1
-                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    await backoff.sleep(delay)
                 }
                 continuation.finish()
             }

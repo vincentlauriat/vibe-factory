@@ -96,5 +96,7 @@ final class SSEParserTests: XCTestCase {
     func testBackoffDoublesAndCaps() {
         let backoff = Backoff(initial: 0.5, maximum: 3)
         XCTAssertEqual((0..<5).map { backoff.delay(attempt: $0) }, [0.5, 1, 2, 3, 3])
+        // After a 503: its own, longer delays.
+        XCTAssertEqual((0..<6).map { backoff.delay(attempt: $0, saturated: true) }, [5, 10, 20, 40, 60, 60])
     }
 }
