@@ -6,16 +6,16 @@
     <description>Vibe Factory macOS app updates</description>
     <language>en</language>
     <item>
-      <title>0.5.0</title>
-      <pubDate>Mon, 28 Sep 2026 15:38:08 +0200</pubDate>
-      <sparkle:version>101</sparkle:version>
-      <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+      <title>0.5.1</title>
+      <pubDate>Mon, 28 Sep 2026 21:44:03 +0200</pubDate>
+      <sparkle:version>111</sparkle:version>
+      <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/vincentlauriat/vibe-factory/releases/tag/v0.5.0</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://github.com/vincentlauriat/vibe-factory/releases/tag/v0.5.1</sparkle:releaseNotesLink>
       <enclosure
-        url="https://github.com/vincentlauriat/vibe-factory/releases/download/v0.5.0/VibeFactory-0.5.0.dmg"
+        url="https://github.com/vincentlauriat/vibe-factory/releases/download/v0.5.1/VibeFactory-0.5.1.dmg"
         type="application/octet-stream"
-        sparkle:edSignature="H4oH1X/7POtI50KJgJva5RPc7gwv0u2kLnp9zJ/0FlldEa39tu+W7DywvjsQjZTxeJockMndmO4OQQsug20QCQ==" length="3304726" />
+        sparkle:edSignature="U2thqxWDCIJuqo2URTpJWZe94UT77Z5Z/A2UaIk6rgOhZmDfzKwiMXP3vINsR68n2SoTVTWgPp6eIi32DKGMDQ==" length="3876230" />
     </item>
   </channel>
 </rss>
