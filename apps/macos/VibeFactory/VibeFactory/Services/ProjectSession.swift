@@ -308,7 +308,7 @@ final class ProjectSession: Identifiable {
 @MainActor
 final class ProjectFeed {
     /// What the feed keeps of an event.
-    struct Entry: Identifiable, Hashable {
+    struct Entry: Identifiable, Hashable, FeedEntry {
         let line: ActivityLine
         let task: String
         let number: UInt32

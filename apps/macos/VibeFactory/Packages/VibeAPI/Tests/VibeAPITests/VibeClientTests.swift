@@ -195,7 +195,8 @@ final class VibeClientTests: XCTestCase {
             return StubProtocol.Reply(status: 200, chunks: [Data(body.utf8)])
         }
         let stream = EventStream(endpoint: endpoint, path: "tasks/3/stream", session: StubProtocol.session(),
-                                 backoff: Backoff(initial: 0.01, maximum: 0.01))
+                                 backoff: Backoff(initial: 0.01, maximum: 0.01, saturatedInitial: 0.01,
+                                                  saturatedMaximum: 0.01))
         var types: [String] = []
         for try await envelope in stream.envelopes() {
             types.append(envelope.event.typeName)

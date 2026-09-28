@@ -755,4 +755,28 @@ mod tests {
             );
         }
     }
+
+    /// The macOS app's tests read this fixture to check that every event
+    /// type has an Activity group. `VIBE_UPDATE_FIXTURES=1` rewrites it.
+    #[test]
+    fn event_types_fixture_is_up_to_date() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../apps/macos/VibeFactory/Packages/VibeAPI/Tests/VibeAPITests/Fixtures/event-types.json"
+        );
+        let expected = serde_json::to_string_pretty(Event::TYPES).unwrap() + "\n";
+        if std::env::var("VIBE_UPDATE_FIXTURES").as_deref() == Ok("1") {
+            std::fs::write(path, &expected).expect("write event-types.json");
+            return;
+        }
+        // Compared as JSON: a checkout with CRLF line endings (Windows) still matches.
+        let committed = std::fs::read_to_string(path).expect("read event-types.json");
+        let committed: Vec<String> =
+            serde_json::from_str(&committed).expect("event-types.json is a JSON array");
+        assert!(
+            committed == Event::TYPES,
+            "{path} differs from Event::TYPES; rerun with VIBE_UPDATE_FIXTURES=1 \
+             and classify the new types in the app's EventGroup"
+        );
+    }
 }

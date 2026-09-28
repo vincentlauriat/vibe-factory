@@ -77,24 +77,16 @@ public struct EventStream: Sendable {
 
     /// Run and `seq` of the last logged envelope delivered.
     actor Cursor {
-        var run: String?
-        var seq: UInt64
+        private var position: RunPosition
 
-        init(seq: UInt64) { self.seq = seq }
+        init(seq: UInt64) { position = RunPosition(seq: seq) }
 
-        func reset() {
-            run = nil
-            seq = 0
-        }
+        var run: String? { position.run }
+        var seq: UInt64 { position.seq }
+
+        func reset() { position.reset() }
 
         /// Whether to deliver the envelope; records its position.
-        func accept(_ envelope: Envelope) -> Bool {
-            guard let next = envelope.seq else { return true } // ephemeral
-            let envelopeRun = envelope.event.runId
-            if envelopeRun == run, next <= seq { return false }
-            run = envelopeRun
-            seq = next
-            return true
-        }
+        func accept(_ envelope: Envelope) -> Bool { position.accept(envelope) }
     }
 }
