@@ -25,6 +25,11 @@ All notable changes to this project are documented here. The format follows
   its own, longer backoff (5 s doubling up to 60 s) instead of the network one (0.5 s up to
   10 s).
 
+### Fixed
+- macOS app: adding or removing a variable in Settings (an API key) restarts the `vibe serve`
+  of the open projects, after their current run if one is going. The server only read them
+  when the project opened, so a key entered afterwards failed every run with `AuthFailed`.
+
 ## [0.5.0] — 2026-09-28
 
 Visibility release: see everything that was done, from every interface. Configurations and

@@ -158,7 +158,7 @@ enum Strings {
             "env_name": "Variable",
             "env_value": "Valeur",
             "settings_env": "Variables d'environnement du serveur",
-            "settings_env_help": "Données à vibe serve (par ex. les clés nommées par api_key_env) : une app lancée depuis le Finder ne voit pas les variables exportées par le shell. Les valeurs sont gardées dans le Trousseau.",
+            "settings_env_help": "Données à vibe serve (par ex. les clés nommées par api_key_env) : une app lancée depuis le Finder ne voit pas les variables exportées par le shell. Les valeurs sont gardées dans le Trousseau. Les serveurs des projets ouverts redémarrent pour les prendre, après leur run en cours s'il y en a un.",
 
             // Misc
             "ok": "OK",
@@ -384,7 +384,7 @@ enum Strings {
             "env_name": "Variable",
             "env_value": "Value",
             "settings_env": "Server environment variables",
-            "settings_env_help": "Given to vibe serve (for example the keys named by api_key_env): an app started from the Finder does not see variables exported by the shell. Values are kept in the Keychain.",
+            "settings_env_help": "Given to vibe serve (for example the keys named by api_key_env): an app started from the Finder does not see variables exported by the shell. Values are kept in the Keychain. The servers of open projects restart to pick them up, after their current run if one is going.",
 
             "ok": "OK",
             "error_title": "Error",

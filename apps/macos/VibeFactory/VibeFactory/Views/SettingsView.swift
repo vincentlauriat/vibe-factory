@@ -37,7 +37,10 @@ struct SettingsView: View {
                         Text(name).font(.system(.body, design: .monospaced))
                         Spacer()
                         Text("••••••").foregroundStyle(.secondary)
-                        Button(role: .destructive) { settings.setEnvironment(name, value: "") } label: {
+                        Button(role: .destructive) {
+                            settings.setEnvironment(name, value: "")
+                            SessionRegistry.shared.environmentChanged()
+                        } label: {
                             Image(systemName: "minus.circle")
                         }
                         .buttonStyle(.borderless)
@@ -50,6 +53,7 @@ struct SettingsView: View {
                     SecureField(settings.t("env_value"), text: $newValue)
                     Button(settings.t("add")) {
                         settings.setEnvironment(newName, value: newValue)
+                        SessionRegistry.shared.environmentChanged()
                         newName = ""
                         newValue = ""
                     }
