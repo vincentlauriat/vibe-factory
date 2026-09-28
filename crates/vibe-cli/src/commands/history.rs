@@ -76,7 +76,7 @@ pub async fn run(root: &Path, args: HistoryArgs, ui: Ui) -> Result<u8> {
 /// Branch of a task for the history: the recorded one, else the one the
 /// worktree provider derives (tasks run before 0.5). Other workspace
 /// providers have no branch to compare.
-fn task_branch(root: &Path, config: &VibeConfig, task: &Task) -> Option<String> {
+pub(crate) fn task_branch(root: &Path, config: &VibeConfig, task: &Task) -> Option<String> {
     task.branch.clone().or_else(|| {
         app::uses_worktrees(&config.pipeline.workspace)
             .then(|| worktree_location(root, task).branch)

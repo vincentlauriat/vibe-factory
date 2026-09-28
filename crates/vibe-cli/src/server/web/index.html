@@ -75,6 +75,31 @@
   .rate { display: flex; align-items: center; gap: 8px; }
   .rate .bar { width: 80px; }
   .error { color: var(--bad); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+  .toolbar select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
+                    border-radius: 6px; padding: 5px 6px; }
+  .toolbar label { display: flex; gap: 6px; align-items: center; }
+  .toolbar input[type=checkbox] { width: auto; }
+  button.chip { padding: 3px 10px; border-radius: 99px; }
+  button.chip[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #activity, #history { padding: 16px; max-width: 1400px; }
+  .feed { font-variant-numeric: tabular-nums; }
+  .feed div { display: flex; gap: 10px; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
+  .feed div:hover { background: var(--chip); }
+  .feed .when { color: var(--muted); flex: none; width: 70px; }
+  .feed .who { color: var(--muted); flex: none; width: 36px; }
+  .feed .what { white-space: pre-wrap; word-break: break-word; min-width: 0; }
+  tr.row { cursor: pointer; }
+  tr.row:hover td { background: var(--chip); }
+  tr.more > td { background: var(--bg); padding: 10px 16px; }
+  .small { font-size: 12px; }
+  .mono, pre.mono { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .calls .call { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  .calls .head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; cursor: pointer; }
+  .calls .head:focus { outline: 1px solid var(--accent); }
+  .calls .body { padding: 6px 0 4px 18px; }
+  .badge.bad { color: var(--bad); } .badge.warn { color: var(--warn); } .badge.good { color: var(--good); }
+  h4 { margin: 14px 0 4px; }
 </style>
 </head>
 <body>
@@ -82,10 +107,24 @@
   <h1>Vibe Factory</h1>
   <nav class="views">
     <button id="view-tasks" class="on">Tasks</button>
+    <button id="view-activity">Activity</button>
+    <button id="view-history">History</button>
     <button id="view-evals">Evaluations</button>
   </nav>
   <span id="summary" class="muted"></span>
 </header>
+<section id="activity" hidden>
+  <div class="toolbar" id="activity-tools"></div>
+  <div class="feed" id="feed"></div>
+</section>
+<section id="history" hidden>
+  <div class="toolbar">
+    <label><input type="checkbox" id="history-all"> Show failed/cancelled</label>
+    <button id="history-reload">Reload</button>
+    <span id="history-note" class="muted"></span>
+  </div>
+  <div id="history-table"></div>
+</section>
 <section id="evals" hidden></section>
 <main id="board">
   <aside>
@@ -106,8 +145,29 @@ if (params.get("token")) {
   history.replaceState(null, "", location.pathname);
 }
 let token = sessionStorage.getItem("vibe-token") || "";
-const state = { tasks: [], selected: null, detail: null, tab: "activity", log: [], live: "",
-                source: null, streamTask: null, error: "" };
+const state = { view: "tasks", tasks: [], selected: null, detail: null, tab: "activity", log: [], logRun: null,
+                seen: new Set(), live: "", budget: null, error: "",
+                feed: [], feedHeld: 0, paused: false, groupsOff: new Set(), feedTask: "",
+                source: null, cursor: "", streamUp: false,
+                trace: null, traceRun: null, open: new Set(), outputs: {},
+                historyAll: false, histories: null, expanded: new Map() };
+
+// Every event type, grouped for the Activity filter; the stream's listeners
+// come from this list too (named SSE events only reach their own listener).
+const GROUPS = {
+  agents: ["agent_started", "agent_text", "agent_delta", "agent_finished"],
+  tools: ["tool_called", "tool_returned"],
+  phases: ["run_started", "phase_started", "phase_finished", "subtask_updated", "validation_finished",
+           "artefact_written", "run_finished"],
+  git: ["subtask_integrated", "committed", "merged"],
+  approvals: ["approval_requested", "approval_resolved", "paused"],
+  budget: ["budget_updated"],
+  logs: ["retrying", "log"],
+};
+const TYPES = Object.values(GROUPS).flat();
+const groupOf = (type) => Object.keys(GROUPS).find((g) => GROUPS[g].includes(type));
+const FEED_MAX = 2000;
+const LOG_MAX = 2000;
 
 function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
@@ -123,7 +183,7 @@ function el(tag, attrs, ...children) {
   return node;
 }
 
-async function api(method, path, body) {
+async function request(method, path, body) {
   const response = await fetch("/api" + path, {
     method,
     headers: Object.assign({ "Authorization": "Bearer " + token },
@@ -131,9 +191,24 @@ async function api(method, path, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (response.status === 401) { askToken(); throw new Error("token required"); }
+  return response;
+}
+
+async function failure(response) {
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || response.statusText);
-  return data;
+  return new Error(data.error || response.statusText);
+}
+
+async function api(method, path, body) {
+  const response = await request(method, path, body);
+  if (!response.ok) throw await failure(response);
+  return response.json().catch(() => ({}));
+}
+
+async function apiText(path) {
+  const response = await request("GET", path);
+  if (!response.ok) throw await failure(response);
+  return response.text();
 }
 
 function askToken() {
@@ -146,6 +221,10 @@ const short = (text, max) => text.length > max ? text.slice(0, max) + "…" : te
 const statusName = (s) => String(s).replace(/_/g, " ");
 const human = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
 const secs = (ms) => { const s = Math.round(ms / 1000); return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s` : `${s} s`; };
+const duration = (ms) => ms === null || ms === undefined ? "–" : ms < 1000 ? `${ms} ms` : secs(ms);
+const clock = (at) => new Date(at).toLocaleTimeString();
+const when = (at) => at ? new Date(at).toLocaleString() : "–";
+const tokens = (usage) => usage ? usage.input_tokens + usage.output_tokens : 0;
 
 function renderTasks() {
   const list = document.getElementById("tasks");
@@ -159,6 +238,7 @@ function renderTasks() {
   document.getElementById("no-tasks").hidden = state.tasks.length > 0;
   const running = state.tasks.filter((t) => t.running).length;
   document.getElementById("summary").textContent = `${state.tasks.length} task(s), ${running} running`;
+  if (state.view === "activity") renderActivityTools();
 }
 
 function describe(e) {
@@ -167,26 +247,37 @@ function describe(e) {
     case "run_started": return ["", "▶ run started"];
     case "phase_started": return ["", "● " + ev.phase];
     case "phase_finished": return [ev.success ? "good" : "warn", `  ${ev.phase} done: ${ev.summary}`];
-    case "agent_started": return ["dim", `  ${ev.role} started`];
+    case "agent_started": return ["dim", `  ${ev.role} started${ev.model ? " (" + ev.model + ")" : ""}`];
     case "agent_text": return ev.text.trim() ? ["", `  ${ev.role}: ${short(ev.text.trim().replace(/\s+/g, " "), 240)}`] : null;
     case "tool_called": return ["dim", `    → ${ev.tool} ${JSON.stringify(ev.input).slice(0, 160)}`];
-    case "tool_returned": return ev.is_error ? ["warn", `    ← ${ev.tool} failed: ${ev.preview.slice(0, 160)}`] : null;
-    case "agent_finished": return ["dim", `  ${ev.role} finished (${human(ev.usage.input_tokens + ev.usage.output_tokens)} tokens)`];
+    case "tool_returned": return ev.is_error ? ["warn", `    ← ${ev.tool} failed: ${ev.preview.slice(0, 160)}`] : ["dim", `    ← ${ev.tool} ok (${duration(ev.duration_ms)})`];
+    case "agent_finished": return ["dim", `  ${ev.role} finished (${human(tokens(ev.usage))} tokens)`];
     case "subtask_updated": return ["", `  ▸ subtask ${subtaskTitle(ev.subtask)}: ${statusName(ev.status)}`];
-    case "subtask_integrated": return ev.conflicts.length ? ["warn", `  ▸ ${subtaskTitle(ev.subtask)}: conflicts in ${ev.conflicts.join(", ")}`] : null;
+    case "subtask_integrated": return ev.conflicts.length ? ["warn", `  ▸ ${subtaskTitle(ev.subtask)}: conflicts in ${ev.conflicts.join(", ")}`] : ["dim", `  ▸ ${subtaskTitle(ev.subtask)} integrated`];
+    case "committed": return ["good", `  ● commit ${ev.commit.slice(0, 8)} ${ev.message.split("\n")[0]} (${ev.files.length} file(s))`];
+    case "merged": return ["good", `  ⇢ merged ${ev.branch} into ${ev.base} (${ev.commit.slice(0, 8)})`];
     case "validation_finished": return ev.passed ? ["good", "  ✓ " + ev.command] : ["bad", "  ✗ " + ev.command];
+    case "budget_updated": return ["dim", `  budget: ${human(ev.tokens)} tokens${ev.token_limit ? " / " + human(ev.token_limit) : ""}, ${secs(ev.active_ms)} active`];
     case "artefact_written": return ["dim", "  wrote the " + (ev.artefact.kind === "qa_report" ? "QA report " + ev.artefact.round : ev.artefact.kind)];
     case "approval_requested": return ["warn", `⏸ approval needed: the ${ev.gate}`];
     case "approval_resolved": return ["good", `  ${ev.gate} ${ev.approved ? "approved" : "rejected"}${ev.comment ? ": " + ev.comment : ""}`];
     case "retrying": return ["warn", `  ↻ retrying ${ev.what} (attempt ${ev.attempt})`];
     case "paused": return ["warn", "⏸ " + ev.reason];
     case "run_finished": return [ev.success ? "good" : "warn", "■ run finished: " + statusName(ev.status)];
-    case "log": return ev.level === "info" ? null : [ev.level === "error" ? "bad" : "warn", "  ! " + ev.message];
+    case "log": return [ev.level === "error" ? "bad" : ev.level === "warn" ? "warn" : "dim", "  ! " + ev.message];
     default: return null;
   }
 }
 
+// A line for any event: an event of an unexpected shape shows its type
+// instead of breaking the whole list.
+function line(e) {
+  try { return describe(e); }
+  catch (error) { return ["warn", `  ${e && e.event ? e.event.type : "event"} (cannot show: ${error.message})`]; }
+}
+
 function subtaskTitle(id) {
+  if (!id) return "–";
   const plan = state.detail && state.detail.plan;
   if (!plan) return id.slice(0, 8);
   for (const phase of plan.phases) for (const s of phase.subtasks) if (s.id === id) return s.title;
@@ -235,9 +326,14 @@ function renderDetail() {
       bar(budget.tokens, budget.token_limit, `tokens ${human(budget.tokens)}${budget.token_limit ? " / " + human(budget.token_limit) : ""}`),
       bar(budget.active_ms, budget.duration_limit_ms, `active ${secs(budget.active_ms)}${budget.duration_limit_ms ? " / " + secs(budget.duration_limit_ms) : ""}`)));
   }
-  const tabs = [["activity", "Activity"], ["plan", "Plan"], ["spec", "Spec"], ["qa", "QA"], ["changes", "Changes"]];
+  const tabs = [["activity", "Activity"], ["plan", "Plan"], ["spec", "Spec"], ["qa", "QA"], ["trace", "Trace"], ["changes", "Changes"]];
   children.push(el("div", { class: "tabs" }, tabs.map(([key, text]) =>
-    el("button", { class: state.tab === key ? "on" : "", onclick: () => { state.tab = key; if (key === "changes") loadChanges(); renderDetail(); } }, text))));
+    el("button", { class: state.tab === key ? "on" : "", onclick: () => {
+      state.tab = key;
+      if (key === "changes") loadChanges();
+      if (key === "trace") loadTrace();
+      renderDetail();
+    } }, text))));
   children.push(el("div", { class: "pane" }, renderTab(d)));
   pane.replaceChildren(...children.filter(Boolean));
   const log = pane.querySelector(".log");
@@ -246,7 +342,7 @@ function renderDetail() {
 
 function renderTab(d) {
   if (state.tab === "activity") {
-    const lines = state.log.map(describe).filter(Boolean).slice(-400)
+    const lines = state.log.map(line).filter(Boolean).slice(-400)
       .map(([tone, text]) => el("div", { class: tone ? "t-" + tone : "" }, text));
     return [el("div", { class: "log" }, lines.length ? lines : el("div", { class: "muted" }, "No activity yet.")),
             state.live ? el("div", { class: "live" }, "… " + state.live.slice(-2000)) : null];
@@ -270,8 +366,95 @@ function renderTab(d) {
       el("h4", {}, `Round ${q.round}: ${statusName(q.verdict)}`), el("p", {}, q.summary),
       el("ul", {}, q.issues.map((i) => el("li", {}, `[${i.severity}] ${i.title}: ${i.detail}`)))));
   }
+  if (state.tab === "trace") return renderTrace();
   return el("pre", {}, state.changes === undefined ? "Loading…" : (state.changes.trim() || "No change in the workspace."));
 }
+
+// ---- Trace tab ----
+
+async function loadTrace() {
+  const id = state.selected;
+  state.trace = undefined;
+  try { state.trace = await api("GET", `/tasks/${id}/trace?all=true`); }
+  catch (e) { state.trace = { error: e.message }; }
+  if (state.selected !== id) return;
+  if (Array.isArray(state.trace) && !state.trace.some((t) => t.run === state.traceRun)) {
+    state.traceRun = state.trace.length ? state.trace[state.trace.length - 1].run : null;
+  }
+  renderDetail();
+}
+
+function callStatus(c) {
+  if (c.timed_out) return ["bad", "timed out"];
+  if (c.is_error === null || c.is_error === undefined) return ["warn", "no result"];
+  if (c.is_error) return ["bad", c.exit_code !== null && c.exit_code !== undefined ? `error, exit ${c.exit_code}` : "error"];
+  if (c.exit_code !== null && c.exit_code !== undefined && c.exit_code !== 0) return ["warn", `exit ${c.exit_code}`];
+  return ["good", "ok"];
+}
+
+function renderTrace() {
+  if (state.trace === undefined) return el("p", { class: "muted" }, "Loading…");
+  if (state.trace.error) return el("p", { class: "muted" }, state.trace.error.includes("not been run") ? "Not run yet." : "Cannot load the trace: " + state.trace.error);
+  const traces = state.trace;
+  const trace = traces.find((t) => t.run === state.traceRun) || traces[traces.length - 1];
+  const out = [];
+  const tools = [el("button", { onclick: loadTrace }, "Reload")];
+  if (traces.length > 1) {
+    tools.unshift(el("label", {}, "Run ",
+      el("select", { onchange: (e) => { state.traceRun = e.target.value; renderDetail(); } },
+        traces.map((t, i) => el("option", { value: t.run, selected: t.run === trace.run }, `${i + 1}. ${t.run.slice(0, 8)} (${t.calls.length} call(s))`)))));
+  }
+  out.push(el("div", { class: "toolbar" }, tools));
+  if (!trace.calls.length) out.push(el("p", { class: "muted" }, "No tool call in this run."));
+  out.push(el("div", { class: "calls" }, trace.calls.map((c, i) => renderCall(c, i + 1))));
+  const errors = trace.calls.filter((c) => c.is_error).length;
+  out.push(el("p", { class: "muted" }, `${trace.calls.length} call(s), ${errors} error(s)`,
+    trace.files_written.length ? el("div", {}, "files written: " + trace.files_written.join(", ")) : null));
+  return out;
+}
+
+function renderCall(c, position) {
+  const key = c.run + ":" + c.call + ":" + position;
+  const open = state.open.has(key);
+  const [tone, status] = callStatus(c);
+  const toggle = () => { if (open) state.open.delete(key); else state.open.add(key); renderDetail(); };
+  const head = el("div", { class: "head", tabindex: "0", role: "button", "aria-expanded": String(open),
+                           onclick: toggle, onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } } },
+    el("span", { class: "num" }, "#" + position),
+    el("span", {}, c.role),
+    c.subtask ? el("span", { class: "muted" }, "· " + subtaskTitle(c.subtask)) : null,
+    el("strong", { class: "mono" }, c.tool),
+    el("span", { class: "muted" }, duration(c.duration_ms)),
+    el("span", { class: "badge " + tone }, status),
+    c.paired === "order" ? el("span", { class: "badge warn", title: "Logged before 0.5: matched with its result by order" }, "paired by order") : null,
+    el("span", { class: "muted small mono" }, c.call === "000000000000" ? "" : c.call));
+  if (!open) return el("div", { class: "call" }, head);
+  const output = state.outputs[key];
+  const body = [
+    el("div", { class: "muted small" }, "arguments"),
+    el("pre", { class: "mono" }, c.input === null ? "(call not in the log)" : JSON.stringify(c.input, null, 2)),
+    el("div", { class: "muted small" }, c.output_chars > c.preview.length ? `output preview (${c.output_chars} chars in all)` : "output"),
+    el("pre", { class: "mono" }, c.preview || "(empty)"),
+  ];
+  if (output !== undefined) {
+    body.push(el("div", { class: "muted small" }, "complete output"), el("pre", { class: "mono" }, output));
+  } else if (c.output_file) {
+    body.push(el("button", { onclick: () => loadOutput(c, key) }, "Load complete output"));
+  } else if (c.output_chars > c.preview.length) {
+    body.push(el("p", { class: "muted small" }, "The complete output was not traced (tracing off, or logged before 0.5)."));
+  }
+  return el("div", { class: "call" }, head, el("div", { class: "body" }, body));
+}
+
+async function loadOutput(c, key) {
+  state.outputs[key] = "Loading…";
+  renderDetail();
+  try { state.outputs[key] = await apiText(`/tasks/${state.selected}/trace/${c.call}/output`); }
+  catch (e) { state.outputs[key] = "Cannot load the output: " + e.message; }
+  renderDetail();
+}
+
+// ---- Task detail ----
 
 async function post(path, body) {
   try { await api("POST", `/tasks/${state.selected}${path}`, body); await refreshDetail(); }
@@ -285,29 +468,41 @@ async function loadChanges() {
   renderDetail();
 }
 
-function openStream(id) {
-  if (state.source) state.source.close();
-  state.log = []; state.live = ""; state.budget = null; state.streamTask = id;
-  const source = new EventSource(`/api/tasks/${id}/stream?token=${encodeURIComponent(token)}`);
-  source.onmessage = () => {};
-  const handle = (msg) => {
-    if (state.streamTask !== id) return;
-    const envelope = JSON.parse(msg.data);
-    const ev = envelope.event;
-    if (ev.type === "agent_delta") { state.live += ev.delta.text; renderDetailSoon(); return; }
-    if (ev.type === "run_started" && envelope.seq === 1) { state.log = []; }
-    if (ev.type === "agent_text") state.live = "";
-    if (ev.type === "budget_updated") state.budget = ev;
-    state.log.push(envelope);
-    if (["artefact_written", "subtask_updated", "approval_requested", "approval_resolved", "run_finished", "paused"].includes(ev.type)) refreshDetail();
-    else renderDetailSoon();
-  };
-  for (const type of ["run_started", "phase_started", "phase_finished", "agent_started", "agent_text", "agent_delta",
-    "tool_called", "tool_returned", "agent_finished", "subtask_updated", "subtask_integrated", "validation_finished",
-    "budget_updated", "artefact_written", "approval_requested", "approval_resolved", "retrying", "paused", "run_finished", "log"]) {
-    source.addEventListener(type, handle);
+// Add an event of the selected task to its activity: each (run, seq) once,
+// and a new run starts a new log.
+function addToLog(e) {
+  const run = e.event.run || null;
+  const key = run + ":" + e.seq;
+  if (e.seq !== null && e.seq !== undefined) {
+    if (state.seen.has(key)) return;
+    state.seen.add(key);
   }
-  state.source = source;
+  if (e.event.type === "run_started" && state.logRun && run !== state.logRun) {
+    state.log = []; state.live = ""; state.budget = null; state.outputs = {}; state.open = new Set();
+    state.seen = new Set([key]);
+  }
+  if (run) state.logRun = run;
+  if (e.event.type === "agent_text") state.live = "";
+  if (e.event.type === "budget_updated") state.budget = e.event;
+  state.log.push(e);
+  if (state.log.length > LOG_MAX) state.log.splice(0, state.log.length - LOG_MAX);
+}
+
+async function select(id) {
+  state.selected = id; state.tab = "activity"; state.changes = undefined;
+  state.log = []; state.seen = new Set(); state.logRun = null; state.live = ""; state.budget = null;
+  state.trace = undefined; state.traceRun = null; state.open = new Set(); state.outputs = {};
+  renderTasks();
+  const detail = refreshDetail();
+  try {
+    const logged = await api("GET", `/tasks/${id}/events`);
+    if (state.selected !== id) return;
+    for (const e of logged) addToLog(e);
+    // Events the stream delivered while this list was loading.
+    state.log.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    renderDetailSoon();
+  } catch (e) { /* the detail shows the error */ }
+  await detail;
 }
 
 let pending = false;
@@ -317,25 +512,250 @@ function renderDetailSoon() {
   requestAnimationFrame(() => { pending = false; renderDetail(); });
 }
 
-async function select(id) {
-  state.selected = id; state.tab = "activity"; state.changes = undefined;
-  renderTasks();
-  openStream(id);
-  await refreshDetail();
-}
-
 async function refreshDetail() {
   if (!state.selected) return;
-  try { state.detail = await api("GET", "/tasks/" + state.selected); state.error = ""; }
+  const id = state.selected;
+  try { const d = await api("GET", "/tasks/" + id); if (state.selected === id) { state.detail = d; state.error = ""; } }
   catch (e) { state.detail = null; state.error = e.message; }
   renderDetail();
-  refreshTasks();
+  refreshTasksSoon();
 }
 
 async function refreshTasks() {
   try { state.tasks = await api("GET", "/tasks"); renderTasks(); }
   catch (e) { document.getElementById("summary").textContent = e.message; }
 }
+
+let tasksTimer = null;
+function refreshTasksSoon() {
+  if (tasksTimer) return;
+  tasksTimer = setTimeout(() => { tasksTimer = null; refreshTasks(); }, 300);
+}
+
+// ---- The global stream ----
+
+const HEADER_EVENTS = ["run_started", "approval_requested", "approval_resolved", "run_finished", "paused"];
+const LIVE_MAX = 4000;
+const REFRESH_ON = ["run_started", "artefact_written", "subtask_updated", "approval_requested",
+                    "approval_resolved", "run_finished", "paused", "merged"];
+
+function onEvent(msg) {
+  if (msg.lastEventId) state.cursor = msg.lastEventId;
+  const e = JSON.parse(msg.data);
+  const ev = e.event;
+  const mine = e.task === state.selected;
+  if (ev.type === "agent_delta") {
+    if (mine) {
+      state.live += ev.delta.text;
+      if (state.live.length > LIVE_MAX * 2) state.live = state.live.slice(-LIVE_MAX);
+      if (state.tab === "activity") renderDetailSoon();
+    }
+    return;
+  }
+  pushFeed(e);
+  if (mine) {
+    addToLog(e);
+    // Tabs with their own state (an open run list, a loaded output) are
+    // only rebuilt when the task's status moves.
+    const quiet = state.tab === "trace" || state.tab === "changes";
+    if (HEADER_EVENTS.includes(ev.type)) refreshDetail();
+    else if (!quiet) { if (REFRESH_ON.includes(ev.type)) refreshDetail(); else renderDetailSoon(); }
+  }
+  if (REFRESH_ON.includes(ev.type)) refreshTasksSoon();
+  // Replayed events are old news for the history.
+  const live = Date.parse(e.at) >= state.streamOpenedAt - 5000;
+  if (ev.type === "run_finished" && live && state.view === "history") loadHistory();
+}
+
+function openStream() {
+  if (state.source) state.source.close();
+  const query = new URLSearchParams({ after: state.cursor || "0-0-0", token });
+  const source = new EventSource("/api/stream?" + query);
+  state.streamOpenedAt = Date.now();
+  for (const type of TYPES) source.addEventListener(type, onEvent);
+  source.onopen = () => { state.streamUp = true; if (state.view === "activity") renderActivityTools(); };
+  source.onerror = () => {
+    state.streamUp = false;
+    if (state.view === "activity") renderActivityTools();
+    // The browser reconnects by itself (with Last-Event-ID) unless the
+    // server refused the stream; then start again from the last cursor.
+    if (source.readyState === EventSource.CLOSED) setTimeout(() => { if (state.source === source) openStream(); }, 5000);
+  };
+  state.source = source;
+}
+
+async function startStream() {
+  try {
+    const response = await request("GET", "/events?limit=500");
+    if (response.ok) {
+      for (const e of await response.json()) pushFeed(e);
+      state.cursor = response.headers.get("X-Vibe-Cursor") || "";
+    }
+  } catch (e) { /* the stream replays from the start */ }
+  openStream();
+}
+
+// ---- Activity view ----
+
+function pushFeed(e) {
+  state.feed.push(e);
+  if (state.feed.length > FEED_MAX) state.feed.splice(0, state.feed.length - FEED_MAX);
+  if (state.paused) { state.feedHeld += 1; renderActivityTools(); return; }
+  if (state.view === "activity") renderFeedSoon();
+}
+
+let feedPending = false;
+function renderFeedSoon() {
+  if (feedPending) return;
+  feedPending = true;
+  requestAnimationFrame(() => { feedPending = false; renderFeed(); });
+}
+
+// The toolbar is built once; updates only touch labels, so a click or an
+// open list is not lost while events arrive.
+const tools = {};
+function buildActivityTools() {
+  tools.chips = Object.keys(GROUPS).map((g) => el("button", { class: "chip", title: GROUPS[g].join(", "),
+    onclick: () => { if (state.groupsOff.has(g)) state.groupsOff.delete(g); else state.groupsOff.add(g); renderActivityTools(); renderFeed(); } }, g));
+  tools.task = el("select", { "aria-label": "Task", onchange: (e) => { state.feedTask = e.target.value; renderFeed(); } });
+  tools.taskIds = null;
+  tools.pause = el("button", { onclick: () => { state.paused = !state.paused; state.feedHeld = 0; renderActivityTools(); renderFeed(); } });
+  tools.status = el("span", { class: "muted" });
+  document.getElementById("activity-tools").replaceChildren(...tools.chips, tools.task, tools.pause, tools.status);
+}
+
+function renderActivityTools() {
+  if (!tools.chips) buildActivityTools();
+  Object.keys(GROUPS).forEach((g, i) => tools.chips[i].setAttribute("aria-pressed", String(!state.groupsOff.has(g))));
+  const ids = state.tasks.map((row) => row.task.id + row.task.title).join("|");
+  if (ids !== tools.taskIds && document.activeElement !== tools.task) {
+    tools.taskIds = ids;
+    tools.task.replaceChildren(el("option", { value: "" }, "All tasks"),
+      ...state.tasks.map((row) => el("option", { value: row.task.id, selected: row.task.id === state.feedTask }, `${label(row)} ${short(row.task.title, 40)}`)));
+  }
+  tools.pause.textContent = state.paused ? `Resume${state.feedHeld ? ` (${state.feedHeld} new)` : ""}` : "Pause";
+  tools.status.textContent = state.streamUp ? "live" : "connecting…";
+}
+
+function renderFeed() {
+  if (state.paused) return;
+  const feed = document.getElementById("feed");
+  const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 40;
+  const rows = [];
+  for (const e of state.feed) {
+    if (state.groupsOff.has(groupOf(e.event.type))) continue;
+    if (state.feedTask && e.task !== state.feedTask) continue;
+    const shown = line(e);
+    if (!shown) continue;
+    const [tone, text] = shown;
+    rows.push(el("div", { class: tone ? "t-" + tone : "", tabindex: "0", title: "Show the task",
+                          onclick: () => openTask(e.task), onkeydown: (k) => { if (k.key === "Enter") openTask(e.task); } },
+      el("span", { class: "when" }, clock(e.at)),
+      el("span", { class: "who" }, "#" + e.number),
+      el("span", { class: "what" }, text.trim())));
+  }
+  feed.replaceChildren(...(rows.length ? rows : [el("p", { class: "muted empty" }, "No activity yet.")]));
+  if (atBottom) window.scrollTo(0, document.body.scrollHeight);
+}
+
+function openTask(id) {
+  showView("tasks");
+  select(id);
+}
+
+// ---- History view ----
+
+async function loadHistory() {
+  const note = document.getElementById("history-note");
+  note.textContent = "Loading…";
+  try { state.histories = await api("GET", "/history" + (state.historyAll ? "?all=true" : "")); note.textContent = ""; }
+  catch (e) { note.textContent = e.message; return; }
+  renderHistory();
+  for (const id of state.expanded.keys()) loadTaskHistory(id);
+}
+
+const bound = (complete) => complete ? "" : "+";
+const cost = (c) => c ? `${c.amount.toFixed(2)} ${c.currency}${bound(c.complete)}` : "–";
+const finished = (h) => { const done = h.runs.map((r) => r.finished_at).filter(Boolean); return when(done.length ? done[done.length - 1] : h.last_activity); };
+const sourceName = (s) => ({ branch: `branch ${s.branch} vs ${s.base}`, merge_commit: `merge ${String(s.commit).slice(0, 8)}${s.fast_forward ? " (fast-forward)" : ""}`,
+                             commits: "commit events", trace: "tool trace", none: "nothing recorded" })[s.kind] || s.kind;
+const letter = { added: "A", modified: "M", deleted: "D", renamed: "R", copied: "C", unknown: "?" };
+
+function renderHistory() {
+  const box = document.getElementById("history-table");
+  const list = state.histories || [];
+  if (!list.length) { box.replaceChildren(el("p", { class: "muted empty" }, state.historyAll ? "No finished task yet." : "No finished task yet (failed and cancelled ones are hidden).")); return; }
+  const head = ["#", "title", "status", "runs", "commits", "files", "tokens", "active", "cost", "finished"];
+  const rows = [];
+  for (const h of list) {
+    const id = h.task.id;
+    const toggle = () => { if (state.expanded.has(id)) state.expanded.delete(id); else { state.expanded.set(id, null); loadTaskHistory(id); } renderHistory(); };
+    rows.push(el("tr", { class: "row", tabindex: "0", "aria-expanded": String(state.expanded.has(id)), onclick: toggle,
+                         onkeydown: (e) => { if (e.key === "Enter") toggle(); } },
+      el("td", { class: "num" }, h.number), el("td", {}, h.task.title),
+      el("td", {}, el("span", { class: "badge s-" + h.task.status }, statusName(h.task.status))),
+      el("td", {}, h.totals.runs), el("td", {}, h.totals.commits),
+      el("td", {}, h.changed_files.files.length + (h.changed_files.approximate ? "~" : "")),
+      el("td", {}, human(tokens(h.totals.usage)) + bound(h.totals.complete)),
+      el("td", {}, duration(h.totals.active_ms)), el("td", {}, cost(h.cost)), el("td", {}, finished(h))));
+    if (state.expanded.has(id)) {
+      rows.push(el("tr", { class: "more" }, el("td", { colspan: String(head.length) }, historyDetail(state.expanded.get(id) || h, !state.expanded.get(id)))));
+    }
+  }
+  box.replaceChildren(el("table", {},
+    el("thead", {}, el("tr", {}, head.map((t) => el("th", {}, t)))), el("tbody", {}, rows)),
+    el("p", { class: "muted small" }, "+ lower bound (some totals unknown) · ~ approximate file list"));
+}
+
+async function loadTaskHistory(id) {
+  try { const detail = await api("GET", "/history/" + id); if (state.expanded.has(id)) state.expanded.set(id, detail); }
+  catch (e) { if (state.expanded.has(id)) state.expanded.set(id, { error: e.message }); }
+  renderHistory();
+}
+
+function historyDetail(h, loading) {
+  if (h.error) return el("p", { class: "error" }, h.error);
+  const out = [];
+  if (loading) out.push(el("p", { class: "muted small" }, "Loading the detail…"));
+  out.push(el("h4", {}, `Runs (${h.runs.length})`));
+  out.push(el("ul", {}, h.runs.map((r) => el("li", {},
+    `${r.run.slice(0, 8)} ${r.state}${r.status ? " → " + statusName(r.status) : ""}, started ${when(r.started_at)}${r.resumes ? `, ${r.resumes} resume(s)` : ""} · `,
+    r.totals_known ? `${duration(r.active_ms)} active, ${human(tokens(r.usage))} tokens` : "totals unknown",
+    el("div", { class: "muted small" }, r.phases.map((p) => `${p.phase} ${p.success === true ? "✓" : p.success === false ? "✗" : "…"}`).join("  ")),
+    r.merged ? el("div", { class: "small" }, `merged ${r.merged.branch} into ${r.merged.base} (${r.merged.commit.slice(0, 8)})`) : null,
+    r.pending_approval ? el("div", { class: "small t-warn" }, `waiting for the approval of the ${r.pending_approval}`) : null,
+    r.last_error ? el("div", { class: "small error" }, r.last_error) : null))));
+  const commits = h.runs.flatMap((r) => r.commits);
+  out.push(el("h4", {}, `Commits (${commits.length})`));
+  if (commits.length) out.push(el("ul", {}, commits.map((c) => el("li", {},
+    el("span", { class: "mono" }, c.commit.slice(0, 8)), " ", (c.message || "").split("\n")[0] || "(no message)",
+    c.files.length ? el("div", { class: "muted small mono" }, c.files.join(", ")) : null))));
+  const files = h.changed_files;
+  out.push(el("h4", {}, `Files (${files.files.length}) `,
+    el("span", { class: "badge" }, "from " + sourceName(files.source)),
+    files.approximate ? el("span", { class: "badge warn" }, "approximate") : null));
+  if (files.files.length) out.push(el("ul", { class: "mono small" }, files.files.map((f) =>
+    el("li", {}, `${letter[f.status] || "?"} ${f.old_path ? f.old_path + " → " : ""}${f.path}`))));
+  const validated = h.runs.slice().reverse().find((r) => r.validations.length);
+  if (validated) {
+    out.push(el("h4", {}, "Validations"));
+    out.push(el("ul", {}, validated.validations.map((v) => el("li", { class: v.passed ? "t-good" : "t-bad" },
+      `${v.passed ? "✓" : "✗"} ${v.command}${v.integration ? " (integration)" : ""}`))));
+  }
+  if (h.last_qa) {
+    out.push(el("h4", {}, `Last QA: round ${h.last_qa.round}, ${statusName(h.last_qa.verdict)}`), el("p", {}, h.last_qa.summary));
+    if (h.last_qa.issues.length) out.push(el("ul", {}, h.last_qa.issues.map((i) => el("li", {}, `[${i.severity}] ${i.title}`))));
+  }
+  if (h.errors.length) {
+    out.push(el("h4", { class: "error" }, "Problems"), el("ul", {}, h.errors.map((e) => el("li", { class: "error" }, e))));
+  }
+  return out;
+}
+
+document.getElementById("history-all").addEventListener("change", (e) => { state.historyAll = e.target.checked; loadHistory(); });
+document.getElementById("history-reload").addEventListener("click", loadHistory);
+
+// ---- Views ----
 
 document.getElementById("new-task").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -349,15 +769,20 @@ document.getElementById("new-task").addEventListener("submit", async (event) => 
   } catch (e) { alert(e.message); }
 });
 
+const VIEWS = { tasks: "board", activity: "activity", history: "history", evals: "evals" };
 function showView(view) {
-  document.getElementById("board").hidden = view !== "tasks";
-  document.getElementById("evals").hidden = view !== "evals";
-  document.getElementById("view-tasks").className = view === "tasks" ? "on" : "";
-  document.getElementById("view-evals").className = view === "evals" ? "on" : "";
+  state.view = view;
+  for (const [name, id] of Object.entries(VIEWS)) {
+    document.getElementById(id).hidden = view !== name;
+    document.getElementById("view-" + name).className = view === name ? "on" : "";
+  }
+  if (view === "activity") { renderActivityTools(); renderFeed(); }
+  if (view === "history") loadHistory();
   if (view === "evals") loadEvals();
 }
-document.getElementById("view-tasks").addEventListener("click", () => showView("tasks"));
-document.getElementById("view-evals").addEventListener("click", () => showView("evals"));
+for (const name of Object.keys(VIEWS)) {
+  document.getElementById("view-" + name).addEventListener("click", () => showView(name));
+}
 
 async function loadEvals() {
   const pane = document.getElementById("evals");
@@ -396,8 +821,12 @@ async function loadEvals() {
 
 if (!token) askToken();
 refreshTasks();
-setInterval(refreshTasks, 2000);
-setInterval(() => { if (state.selected && state.detail && state.detail.running) refreshDetail(); }, 3000);
+startStream();
+// Task creation is not an event: a slow poll keeps the board complete, and a
+// faster one stands in for the stream while it is down.
+setInterval(refreshTasks, 10000);
+setInterval(() => { if (!state.streamUp) refreshTasks(); }, 2000);
+setInterval(() => { if (!state.streamUp && state.selected && state.detail && state.detail.running) refreshDetail(); }, 3000);
 </script>
 </body>
 </html>

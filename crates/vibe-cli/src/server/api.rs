@@ -20,6 +20,10 @@ use vibe_pipeline::{FileTaskStore, PipelineStore, RunManager, RunOptions};
 
 use crate::app::AppContext;
 
+mod read;
+
+pub use read::StreamHub;
+
 /// How often a stream reads the task's event log again.
 const STREAM_POLL: Duration = Duration::from_millis(300);
 
@@ -38,6 +42,8 @@ pub struct Inner {
     pub allowed_hosts: Vec<String>,
     /// Directory searched for evaluation summaries, if any.
     pub evals: Option<std::path::PathBuf>,
+    /// Reader shared by the global event streams.
+    pub streams: Arc<StreamHub>,
 }
 
 /// Shared state of the server.
@@ -93,6 +99,12 @@ pub fn router(state: ServerState) -> Router {
         .route("/tasks/{task}/changes", get(changes))
         .route("/tasks/{task}/events", get(events))
         .route("/tasks/{task}/stream", get(stream))
+        .route("/tasks/{task}/trace", get(read::trace_of))
+        .route("/tasks/{task}/trace/{call}/output", get(read::call_output))
+        .route("/events", get(read::all_events))
+        .route("/stream", get(read::stream))
+        .route("/history", get(read::history))
+        .route("/history/{task}", get(read::task_history_of))
         .route("/evals", get(evals))
         .layer(middleware::from_fn_with_state(state.clone(), authorize));
     Router::new()
@@ -138,12 +150,25 @@ async fn authorize(
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer "))
         .map(str::to_string);
-    let is_stream = request.uri().path().ends_with("/stream");
+    let is_stream = is_stream_path(request.uri().path());
     let presented = header_token.or(if is_stream { query.token } else { None });
     if !presented.is_some_and(|t| constant_time_eq(t.as_bytes(), state.token.as_bytes())) {
         return ApiError::new(StatusCode::UNAUTHORIZED, "missing or wrong token").into_response();
     }
     next.run(request).await
+}
+
+/// Whether `path` is an event stream: `/api/stream` or
+/// `/api/tasks/{task}/stream` (with or without the `/api` prefix, which the
+/// nested router strips).
+fn is_stream_path(path: &str) -> bool {
+    let path = path.strip_prefix("/api").unwrap_or(path);
+    let segments: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    match segments.as_slice() {
+        ["stream"] => true,
+        ["tasks", task, "stream"] => !task.is_empty(),
+        _ => false,
+    }
 }
 
 /// Compare without leaking where the first difference is.
@@ -166,7 +191,16 @@ fn store(state: &ServerState) -> &Arc<FileTaskStore> {
 async fn find(state: &ServerState, reference: &str) -> ApiResult<Task> {
     store(state)
         .find_by_prefix(reference)
-        .await?
+        .await
+        .map_err(|e| {
+            // An ambiguous reference is the caller's mistake, not a failure
+            // of the store.
+            if e.message.contains("is ambiguous") {
+                ApiError::new(StatusCode::BAD_REQUEST, e.message)
+            } else {
+                ApiError::from(e)
+            }
+        })?
         .ok_or_else(|| {
             ApiError::new(
                 StatusCode::NOT_FOUND,
@@ -479,6 +513,28 @@ async fn stream(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_event_streams_take_the_token_from_the_query() {
+        for path in [
+            "/stream",
+            "/api/stream",
+            "/tasks/3/stream",
+            "/api/tasks/003-x/stream",
+        ] {
+            assert!(is_stream_path(path), "{path}");
+        }
+        for path in [
+            "/api/history/stream",
+            "/api/events",
+            "/api/tasks//stream",
+            "/api/tasks/1/trace/stream",
+            "/api/streams",
+            "/api/x/stream",
+        ] {
+            assert!(!is_stream_path(path), "{path}");
+        }
+    }
 
     #[test]
     fn token_comparison() {
