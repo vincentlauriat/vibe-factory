@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0f1eca9f.js";
+            window.path_to_searchindex_js = "../searchindex-f77a0982.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a937d295.js"></script>
@@ -187,8 +187,8 @@ activity of every task in one feed, the complete trace of each tool call, and a 
 app on <code>vibe serve</code>. Existing <code>.vibe/config.toml</code> files keep working, and runs started with
 0.4 can be resumed with 0.5.</p>
 <h3 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h3>
-<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.0 vibe-cli --force
-vibe --version    # vibe 0.5.0
+<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.1 vibe-cli --force
+vibe --version    # vibe 0.5.1
 vibe doctor
 </code></pre>
 <p>Nothing on disk needs converting and the event schema stays <code>2</code>: 0.5 only adds optional
@@ -248,7 +248,7 @@ without a task (with <code>--since</code>, <code>--type</code>, <code>--task</co
 <h3 id="the-macos-app"><a class="header" href="#the-macos-app">The macOS app</a></h3>
 <p><code>apps/macos/VibeFactory</code> is a SwiftUI client of <code>vibe serve</code> for macOS 14 and later. It
 starts <code>vibe serve --exit-on-stdin-eof</code> for the project it opens, so it needs the 0.5
-<code>vibe</code> on the machine. A signed, notarized DMG is attached to the v0.5.0 release; the app
+<code>vibe</code> on the machine. A signed, notarized DMG is attached to each release since v0.5.0; the app
 then updates itself (Check for Updates…). Its README explains how to build it from source.</p>
 <h3 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h3>
 <p>The Rust API is pre-1.0 and 0.5 changes it in a few places. Code that only uses the <code>vibe</code>
