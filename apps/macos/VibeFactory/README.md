@@ -86,7 +86,7 @@ Packages/VibeAPI/           Swift package: Codable models (tasks, events, Tagged
                             503), ServerProcess, the Activity filter, History row text,
                             notices, the view models' pure logic (FeedLogic.swift);
                             XCTest + fixtures (event-types.json written by a cargo test)
-Scripts/make-app-icon.swift placeholder icon generator (from Templates/AppKitTemplate)
+Scripts/make-app-icon.swift draws the app icon (factory + vibe waves) into AppIcon.appiconset
 Scripts/release.sh          sign + DMG + notarize + Sparkle signature, writes appcast.xml
 appcast.xml                 Sparkle update feed (SUFeedURL reads it from main)
 ```
