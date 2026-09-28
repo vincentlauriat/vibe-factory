@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-479f1378.js";
+            window.path_to_searchindex_js = "../searchindex-0f1eca9f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a937d295.js"></script>
@@ -248,8 +248,8 @@ without a task (with <code>--since</code>, <code>--type</code>, <code>--task</co
 <h3 id="the-macos-app"><a class="header" href="#the-macos-app">The macOS app</a></h3>
 <p><code>apps/macos/VibeFactory</code> is a SwiftUI client of <code>vibe serve</code> for macOS 14 and later. It
 starts <code>vibe serve --exit-on-stdin-eof</code> for the project it opens, so it needs the 0.5
-<code>vibe</code> on the machine. It is built from source for now (its README explains how); a signed
-DMG comes with its first release.</p>
+<code>vibe</code> on the machine. A signed, notarized DMG is attached to the v0.5.0 release; the app
+then updates itself (Check for Updates…). Its README explains how to build it from source.</p>
 <h3 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h3>
 <p>The Rust API is pre-1.0 and 0.5 changes it in a few places. Code that only uses the <code>vibe</code>
 command line is not affected.</p>
