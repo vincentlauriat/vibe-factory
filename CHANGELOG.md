@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- macOS app: an app icon (a factory with vibe waves rising from its chimney), drawn by
+  `Scripts/make-app-icon.swift`, in place of the placeholder letter.
 - macOS app: Sparkle auto-update (Vibe Factory → Check for Updates…, background checks),
   fed by `apps/macos/VibeFactory/appcast.xml`. `Scripts/release.sh` signs Sparkle's nested
   binaries, EdDSA-signs the DMG and writes the appcast.
