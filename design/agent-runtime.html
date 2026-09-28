@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -368,6 +368,18 @@ and yields an error result telling the model not to repeat the call;</li>
 text is written to <code>&lt;workspace_root&gt;/.vibe/tool-output/&lt;uuid&gt;.txt</code> and a note is appended:
 <code>[Output truncated: showing the first N of M characters. The full output was saved to `…`; read it in smaller pieces if you need more.]</code>. If the file cannot be written, the note
 says so instead.</p>
+<h3 id="trace-of-tool-outputs"><a class="header" href="#trace-of-tool-outputs">Trace of tool outputs</a></h3>
+<p>Independently of that truncation, a runner given a <code>ToolTrace</code> (<code>dir</code>, <code>reference</code>,
+<code>max_chars</code>) writes the complete output of every call to <code>&lt;dir&gt;/&lt;call&gt;.txt</code>, cut at
+<code>max_chars</code> characters with a final marker line, and reports it in <code>tool_returned</code>
+(<code>output_file</code> = <code>&lt;reference&gt;/&lt;call&gt;.txt</code>, <code>output_chars</code> = the untruncated length). The
+pipeline passes <code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/</code> of the project when
+<code>pipeline.trace_outputs</code> is on. The <code>call</code> id is generated before the call and repeated on
+the return, so parallel read-only calls pair even when they return out of order;
+<code>exit_code</code> and <code>timed_out</code> are copied from the tool’s metadata (<code>bash</code>). A trace file that
+cannot be written is logged as a warning and leaves <code>output_file</code> empty; the call itself is
+not affected. <code>vibe trace</code> and the read layer’s <code>trace</code> module read the store back
+(<a href="../user/trace.html">Tool call trace</a>, <a href="adr/008-trace-store-and-read-layer.html">ADR-008</a>).</p>
 <h3 id="provider-errors-and-retries"><a class="header" href="#provider-errors-and-retries">Provider errors and retries</a></h3>
 <p>Providers retry transient failures themselves (see <a href="../user/providers.html">Providers and
 models</a>). The runner adds a last line of defence: a retryable error

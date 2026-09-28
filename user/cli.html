@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,8 +187,18 @@ and <code>vibe &lt;command&gt; --help</code> print the same information as this 
 <pre><code class="language-text">vibe [GLOBAL OPTIONS] &lt;COMMAND&gt;
 
   init          create .vibe/config.toml
-  task          add | list | show | discard
+  task          add | list | show | import | discard
   run           run a task through the pipeline
+  approve       approve what a paused run waits for
+  reject        reject it, with a reason for the agents
+  cancel        stop the run of a task, from any terminal
+  pr            push a ready task's branch and open a pull request
+  memory        list | clear the project memory
+  tui           terminal UI: board, activity, history, trace
+  serve         HTTP API and web UI
+  events        replay or follow the events of one task or of every task
+  history       what finished tasks did: runs, commits, files, tokens, cost
+  trace         the tool calls of a run: arguments, results, outputs
   status        project summary
   config        show | path | set
   agents        list | show | export
@@ -204,9 +214,9 @@ and <code>vibe &lt;command&gt; --help</code> print the same information as this 
 <tr><th>Option</th><th>Effect</th></tr>
 </thead>
 <tbody>
-<tr><td><code>-C, --project &lt;DIR&gt;</code></td><td>start directory; the project is this directory (default: the current one) or its nearest parent that contains a <code>.vibe</code> directory, without leaving the git repository (the search stops at the first parent that contains <code>.git</code>) and never your home directory; <code>vibe init</code> never searches parents</td></tr>
+<tr><td><code>-C, --project &lt;DIR&gt;</code></td><td>start directory; the project is this directory (default: the current one) or its nearest parent that contains a <code>.vibe</code> directory, without leaving the git repository (the search stops at the first parent that contains <code>.git</code>) and never climbing up to your home directory; <code>vibe init</code> never searches parents</td></tr>
 <tr><td><code>-v, --verbose</code></td><td>more logging on standard error: default warnings only; <code>-v</code> info, <code>-vv</code> debug, <code>-vvv</code> trace; a non-empty <code>RUST_LOG</code> wins</td></tr>
-<tr><td><code>--json</code></td><td>machine-readable output: one JSON document, or one JSON event per line for <code>vibe run</code></td></tr>
+<tr><td><code>--json</code></td><td>machine-readable output: one JSON document, or one JSON event per line for <code>vibe run</code> and <code>vibe events</code> (see <a href="#json-output">JSON output</a>)</td></tr>
 <tr><td><code>--no-color</code></td><td>no colours; also the case when <code>NO_COLOR</code> is set or the output is not a terminal</td></tr>
 <tr><td><code>-h, --help</code></td><td>help of the command</td></tr>
 <tr><td><code>-V, --version</code></td><td>version of <code>vibe</code></td></tr>
@@ -274,7 +284,7 @@ array of <code>{"number": …, "task": {…}}</code> objects. <code>done</code> 
 <h3 id="vibe-task-show"><a class="header" href="#vibe-task-show"><code>vibe task show</code></a></h3>
 <pre><code class="language-sh">vibe task show &lt;REF&gt;
 </code></pre>
-<p>Shows the task: description, status and complexity, spec summary and requirements, plan
+<p>Shows the task: description, status and complexity, the branch its last run recorded, spec summary and requirements, plan
 with subtask statuses, the latest QA verdict and issues, the state of the last run
 (<code>run.json</code>) and the workspace branch and directory. The files it reads are listed in
 <a href="../design/persistence.html">Persistence layout</a>.</p>
@@ -292,8 +302,9 @@ GitLab.</p>
 <h3 id="vibe-task-discard"><a class="header" href="#vibe-task-discard"><code>vibe task discard</code></a></h3>
 <pre><code class="language-sh">vibe task discard &lt;REF&gt; [-y | --yes]
 </code></pre>
-<p>Removes the task’s workspace (worktree and branch; nothing for <code>in_place</code>) and deletes the
-task directory. It asks for confirmation on a terminal unless <code>--yes</code> is given; when standard
+<p>Removes the task’s workspace (worktree and branch; nothing for <code>in_place</code>), deletes the
+task directory and the task’s traced tool outputs (<code>.vibe/tool-output/&lt;task dir&gt;/</code>), so the
+task leaves the history too. It asks for confirmation on a terminal unless <code>--yes</code> is given; when standard
 input is not a terminal it refuses to run without <code>--yes</code>. Unmerged work on the task branch
 is lost.</p>
 <h2 id="vibe-run"><a class="header" href="#vibe-run"><code>vibe run</code></a></h2>
@@ -410,11 +421,14 @@ memory stores.</p>
 <h2 id="vibe-tui"><a class="header" href="#vibe-tui"><code>vibe tui</code></a></h2>
 <pre><code class="language-sh">vibe tui
 </code></pre>
-<p>A terminal board of the project: tasks on the left (a <code>●</code> marks the ones a process is
-running, whichever terminal started them), the selected task on the right with its run
-state, a budget gauge and three tabs: <strong>Activity</strong> (phases, agents, tools, validations,
-approvals, and the text of the current step as the model writes it), <strong>Plan</strong> (subtasks and
-their status) and <strong>Changes</strong> (the workspace diff summary).</p>
+<p>A terminal view of the project with three screens, listed in the title bar: <strong>Tasks</strong> (<code>T</code>),
+<strong>Activity</strong> (<code>A</code>) and <strong>History</strong> (<code>H</code>). <code>q</code> quits from any of them; <code>Esc</code> closes what is
+open, then goes back to Tasks, and quits only from Tasks (not from its Trace tab).</p>
+<p><strong>Tasks</strong> is the board: tasks on the left (a <code>●</code> marks the ones a process is running,
+whichever terminal started them), the selected task on the right with its run state, a
+budget gauge and four tabs: <strong>Activity</strong> (phases, agents, tools, validations, approvals, and
+the text of the current step as the model writes it), <strong>Plan</strong> (subtasks and their status),
+<strong>Changes</strong> (the workspace diff summary) and <strong>Trace</strong> (the tool calls of the last run).</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -427,32 +441,103 @@ their status) and <strong>Changes</strong> (the workspace diff summary).</p>
 <tr><td><code>c</code></td><td>cancel its run (also one started in another terminal)</td></tr>
 <tr><td><code>a</code> / <code>x</code></td><td>approve / reject what the run waits for (a rejection asks for a reason)</td></tr>
 <tr><td><code>Tab</code></td><td>next tab</td></tr>
+<tr><td><code>g</code></td><td>read the tasks again</td></tr>
 <tr><td><code>q</code></td><td>quit; runs started from the UI are cancelled and stay resumable</td></tr>
 </tbody>
 </table>
 </div>
+<p>The <strong>Trace</strong> tab lists the calls of a run, one per line: <code>seq role subtask tool duration exit err</code> (<code>error</code> when the tool failed, <code>timeout</code>, or <code>no result</code> for a call that never
+returned). While it is shown, <code>↑</code> <code>↓</code> move among the calls instead of the tasks (<code>Tab</code> to
+another tab to select tasks again); the other task keys keep working.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key (Trace tab)</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>↑</code> <code>↓</code></td><td>select a call (in an expanded call or its output: scroll)</td></tr>
+<tr><td><code>[</code> / <code>]</code></td><td>previous / next run, when the task has several</td></tr>
+<tr><td><code>Enter</code></td><td>expand the call: its arguments as JSON and a preview of its output</td></tr>
+<tr><td><code>o</code></td><td>load its complete output from <code>.vibe/tool-output/</code> into a scrollable pane (<code>PgUp</code> <code>PgDn</code>); a note says when it was not traced or is gone, and when the call was paired with its result by order (logs from before 0.5)</td></tr>
+<tr><td><code>Esc</code></td><td>close the output, then collapse the call</td></tr>
+<tr><td><code>g</code></td><td>load the calls again (they are also loaded each time the tab is entered)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Activity</strong> is the feed of every task’s events, oldest first, each prefixed with the task
+number (<code>#003</code>). It opens on the last 200 events and follows new ones.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key (Activity)</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>↑</code> <code>↓</code> (<code>PgUp</code> <code>PgDn</code>)</td><td>select an event; the feed stops following</td></tr>
+<tr><td><code>f</code></td><td>follow the newest event again, or stop</td></tr>
+<tr><td><code>1</code> … <code>7</code></td><td>show or hide agents, tools, phases, git, approvals, budget, logs</td></tr>
+<tr><td><code>Enter</code></td><td>open the event’s task on the Tasks screen</td></tr>
+<tr><td><code>g</code></td><td>load the last 200 events again (also done each time the screen is entered)</td></tr>
+</tbody>
+</table>
+</div>
+<p>A log that cannot be read is reported once in the status line; the other tasks keep coming.</p>
+<p><strong>History</strong> lists the finished tasks (ready and done; <code>a</code> adds failed and cancelled ones) as
+<code>vibe history</code> does: number, title, status, runs, commits, changed files, tokens, active time,
+cost (<code>-</code> without a <code>[pricing]</code> table), with the notation of <code>vibe history</code>: <code>+</code> marks a lower
+bound, <code>~</code> an approximate file count; <code>finished</code> is the end of the last run, else the last
+activity. <code>Enter</code> opens the task: its runs (state, start, duration, tokens), commits, changed
+files (status, where the list comes from, whether it is approximate), validations, last QA
+report and errors; <code>↑</code> <code>↓</code> scroll it and <code>Esc</code> closes it. The list is loaded each time the
+screen is entered; <code>g</code> loads it again.</p>
+<p>History and trace data are loaded in the background on entry, so the screen stays responsive
+on large projects (“Loading…” shows meanwhile).</p>
 <p>The UI reads the same files and events as the other commands, so <code>vibe run</code>, <code>vibe approve</code>
 or <code>vibe cancel</code> in another terminal show up in it. Runs use the project configuration
 (there are no <code>--provider</code> or <code>--model</code> flags; set <code>default_model</code> or <code>[phases]</code>). It needs an
 interactive terminal.</p>
 <h2 id="vibe-serve"><a class="header" href="#vibe-serve"><code>vibe serve</code></a></h2>
-<pre><code class="language-sh">vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR]
+<pre><code class="language-sh">vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR] [--exit-on-stdin-eof]
 </code></pre>
 <p>Serves an HTTP API and a web UI for the project. It prints the address and a link that
 carries the access token (<code>http://127.0.0.1:7777/#token=…</code>); open it in a browser. The web
 UI shows the task board, the selected task with its run, budget, a live activity feed with
-the text as the model writes it, the plan, spec, QA reports and workspace changes, and lets
-you create, run, resume and cancel tasks and approve or reject what a run waits for. With
-<code>--evals DIR</code>, an <strong>Evaluations</strong> view shows every <code>summary.json</code> that
-<code>evals/run_suite.py</code> wrote under <code>DIR</code> (success rate, time, tokens per case and model).</p>
+the text as the model writes it, the plan, spec, QA reports, tool-call trace and workspace
+changes, and lets you create, run, resume and cancel tasks and approve or reject what a run
+waits for. Its views:</p>
+<ul>
+<li><strong>Tasks</strong>: the board and the selected task. Its <strong>Trace</strong> tab lists every tool call of a
+run (role, subtask, tool, duration, exit code, a badge for errors and for calls logged
+before 0.5 that were <code>paired by order</code>); a call expands to its arguments as JSON and its
+output preview, and <strong>Load complete output</strong> fetches the whole traced output. A selector
+picks the run when there are several; the footer counts calls and errors and lists the
+files written.</li>
+<li><strong>Activity</strong>: every task’s events as they happen, with toggles per group of event types
+(agents, tools, phases, git, approvals, budget, logs), a task filter and a pause button.
+Clicking a line opens its task.</li>
+<li><strong>History</strong>: what each finished task delivered (the columns of <code>vibe history</code>), with
+failed and cancelled tasks on demand; a row expands to its runs, commits, changed files
+(with their source and whether the list is approximate), validations, last QA verdict
+and problems.</li>
+<li><strong>Evaluations</strong>: with <code>--evals DIR</code>, every <code>summary.json</code> that <code>evals/run_suite.py</code> wrote
+under <code>DIR</code> (success rate, time, tokens per case and model).</li>
+</ul>
+<p>The page reads one event stream, <code>GET /api/stream</code>, for the whole project; it resumes from
+the last event id when the connection comes back, and polls the task list every 10 s
+(every 2 s while the stream is down) since creating a task is not an event.</p>
 <p>Security: the server listens on the loopback interface by default and then only accepts its
 own host names (<code>127.0.0.1</code>, <code>localhost</code>, <code>[::1]</code>), which blocks DNS rebinding. Every API
 call needs <code>Authorization: Bearer &lt;token&gt;</code>; the token is random per start, printed once and
-written to <code>.vibe/server.token</code> (owner-only on Unix), and removed on exit. Event streams also
-accept <code>?token=</code>, because browsers cannot set headers on them. The API never returns the
+written to <code>.vibe/server.token</code> (owner-only on Unix), and removed on exit. The two event
+streams, <code>/api/stream</code> and <code>/api/tasks/{ref}/stream</code>, also accept <code>?token=</code>, because browsers
+cannot set headers on them; no other route does. The API never returns the
 configuration or keys. <code>--bind</code> with another address prints a warning: anyone who reaches it
 with the token controls the agents. <code>Ctrl-C</code> stops the server and cancels the runs it started
 (they stay resumable).</p>
+<p><code>--exit-on-stdin-eof</code> makes the end of standard input stop the server exactly like <code>Ctrl-C</code>
+(runs cancelled, token file removed, exit code 0). An application that starts <code>vibe serve</code> as
+a child with a pipe on its standard input (the macOS app does) uses it so that the server
+does not outlive it, even when the application is killed or crashes. Without the flag, standard input is not
+read.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -471,19 +556,152 @@ with the token controls the agents. <code>Ctrl-C</code> stops the server and can
 <tr><td><code>GET /api/tasks/{ref}/events?after=SEQ&amp;all=bool</code></td><td>logged events</td></tr>
 <tr><td><code>GET /api/evals</code></td><td>evaluation summaries found under <code>--evals</code></td></tr>
 <tr><td><code>GET /api/tasks/{ref}/stream?after=SEQ</code></td><td>server-sent events: logged events after <code>SEQ</code>, then new ones and streamed text; each SSE event is named by its type and carries the envelope, with the sequence number as id</td></tr>
+<tr><td><code>GET /api/events?after=CURSOR&amp;since=TIME&amp;type=T&amp;task=REF&amp;limit=N</code></td><td>logged events of every task as tagged envelopes (<code>{"task", "number", "schema", "seq", "at", "event"}</code>), oldest first, the last <code>N</code> (default 1000, at most 10000) after the filters; see below</td></tr>
+<tr><td><code>GET /api/stream?after=CURSOR&amp;since=TIME&amp;type=T&amp;task=REF</code></td><td>server-sent events of every task: logged events after the starting point, then new ones (tasks created later included) and the streamed text of runs this server started; see below</td></tr>
+<tr><td><code>GET /api/history?all=bool</code></td><td>history of every finished task (<code>vibe history --json</code>); <code>all</code> adds failed and cancelled ones</td></tr>
+<tr><td><code>GET /api/history/{ref}</code></td><td>history of one task, finished or not (<code>vibe history REF --json</code>)</td></tr>
+<tr><td><code>GET /api/tasks/{ref}/trace?run=RUN&amp;all=bool</code></td><td>tool calls of the last run, of the run whose id starts with <code>RUN</code>, or of every run with <code>all</code> (a list), as <code>vibe trace --json</code>; 404 when the task has not been run (where <code>vibe trace --json</code> prints <code>null</code> or <code>[]</code>) or no run matches <code>RUN</code>, 400 when <code>RUN</code> matches several runs or comes with <code>all</code></td></tr>
+<tr><td><code>GET /api/tasks/{ref}/trace/{call}/output</code></td><td>complete output of a call, as <code>text/plain</code>, cut at 8 MiB (then marked at the end and with <code>X-Vibe-Truncated: true</code>); 400 for an id that is not 12 hex digits, 404 when the call is unknown or its output was not traced, is gone or cannot be read</td></tr>
 </tbody>
 </table>
 </div>
-<p><code>{ref}</code> is a task number, directory name or id prefix, as on the command line. Errors are
-<code>{"error": "…"}</code> with 400, 401, 403, 404 or 409.</p>
+<p><code>{ref}</code> is a task number, directory name or id prefix, as on the command line; a prefix
+that matches several tasks is a 400. Errors are <code>{"error": "…"}</code> with 400 (including an
+unknown event type, a malformed cursor, time or limit in <code>/api/events</code> and <code>/api/stream</code>),
+401, 403, 404, 409, or 503 when too many event streams are open.</p>
+<p>Project-wide events are ordered by an <strong>event cursor</strong>, <code>&lt;nanoseconds since the epoch&gt;-&lt;task number&gt;-&lt;seq&gt;</code> (<code>1790000000123456789-3-17</code>): by time, then task, then sequence
+number, so events of two tasks logged at the same instant are neither lost nor repeated on
+resume. In <code>/api/events</code> and <code>/api/stream</code>, <code>after=CURSOR</code> keeps the events after it and
+<code>since=TIME</code> those after that time (RFC 3339, or an age such as <code>30m</code>, <code>2h</code>, <code>1d</code>, as
+<code>vibe events --since</code>); <code>type</code> (an event type) and <code>task</code> (a task
+reference) repeat, and each list keeps events that match one of its values. <code>/api/events</code>
+answers with two headers: <code>X-Vibe-Cursor</code>, the cursor of the last event read before the
+filters (the value to pass as <code>after</code> to go on from there, absent when nothing was read),
+and <code>X-Vibe-Read-Errors</code>, the number of task logs that could not be read (their events are
+missing; the server logs why). In <code>/api/stream</code>, each SSE event is named by its type and
+its data is the tagged envelope; logged events carry their cursor as <code>id</code>, and a client that
+reconnects with <code>Last-Event-ID</code> resumes after it (the header wins over <code>after</code>). Streamed
+text (<code>agent_delta</code>) has no id and is not replayed. Without <code>after</code>, <code>since</code> or
+<code>Last-Event-ID</code>, the stream starts from now. A comment line is sent every 15 s to keep an
+idle connection open. All streams share one reader of the logs, which runs while at least
+one is open; at most 32 streams are open at once (503 beyond).</p>
+<p>Cursor order is the order of the <code>at</code> times each process writes. Events of one task always
+come in order, but a <code>vibe run</code> in another process whose clock reads earlier than the
+server’s can log an event with a cursor below one already sent for another task. An open
+stream still sends it, once, so ids are not always increasing; but a client that was
+disconnected while it was logged and resumes from its last id does not get it, since it
+sorts before that id. Reload the events of a task (<code>/api/tasks/{ref}/events</code>) when its
+state must be exact.</p>
+<p>Trace outputs are only read from <code>.vibe/tool-output/</code>: paths recorded elsewhere are
+ignored, and a file there that is a link leading out of it is answered like a missing
+output (404, the reason in the server’s log).</p>
 <h2 id="vibe-events"><a class="header" href="#vibe-events"><code>vibe events</code></a></h2>
-<pre><code class="language-sh">vibe events &lt;REF&gt; [--after SEQ] [--follow] [--all]
+<pre><code class="language-sh">vibe events &lt;REF&gt; [--after SEQ] [--follow | --all] [--since TIME] [--type TYPE]...
+vibe events [--follow] [--since TIME] [--type TYPE]... [--task REF]...
 </code></pre>
-<p>Replays the logged events of the task’s last run, rendered like <code>vibe run</code> (or as JSON
-envelopes with <code>--json</code>). <code>--after SEQ</code> skips events up to that sequence number,
+<p>With a <code>&lt;REF&gt;</code>, replays the logged events of the task’s last run, rendered like <code>vibe run</code>
+(or as JSON envelopes with <code>--json</code>). <code>--after SEQ</code> skips events up to that sequence number,
 <code>--follow</code> keeps printing new events until the run ends (use it from another terminal while
-<code>vibe run</code> works), and <code>--all</code> shows every run of the task. The envelope and every event
-type are described in <a href="../reference/events.html">Events</a>.</p>
+<code>vibe run</code> works), and <code>--all</code> shows every run of the task.</p>
+<p>Without <code>&lt;REF&gt;</code>, it prints the activity of every task, merged in time order, each line
+prefixed with the task number (<code>#3 ✓ plan: …</code>). <code>--follow</code> prints the events logged from
+now on, including those of tasks created meanwhile, until <code>Ctrl-C</code> (exit code 0); with
+<code>--since</code>, it first prints what was logged since then. With <code>--json</code>, each line is an
+envelope carrying its task: <code>{"task": "&lt;id&gt;", "number": 3, "schema": 2, "seq": …, "at": …, "event": {…}}</code>. A task whose log cannot be read is reported once on standard error and the
+feed goes on with the others.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--since TIME</code></td><td>only events logged after <code>TIME</code>: RFC 3339 (<code>2026-09-27T10:00:00Z</code>) or an age (<code>90s</code>, <code>30m</code>, <code>2h</code>, <code>1d</code>)</td></tr>
+<tr><td><code>--type TYPE</code></td><td>only events of this type (repeatable), e.g. <code>--type run_finished --type committed</code>; an unknown type is an error</td></tr>
+<tr><td><code>--task REF</code></td><td>only the events of this task (repeatable); with <code>&lt;REF&gt;</code> as well, nothing is printed unless <code>&lt;REF&gt;</code> is one of them</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>--after</code> and <code>--all</code> need a <code>&lt;REF&gt;</code>. With <code>--follow</code> and a <code>&lt;REF&gt;</code>, the end of the run stops
+the command even when <code>--type</code> or <code>--since</code> hide the <code>run_finished</code> event; a run that paused
+and was resumed is followed to its new end. As with <code>vibe run</code>, some events are only
+rendered with <code>-v</code> (agent text, <code>committed</code>, <code>artefact_written</code>, subtask integrations without
+conflicts, informational logs): add <code>-v</code>, or use <code>--json</code>,
+to see them when you filter on them. The envelope and
+every event type are described in <a href="../reference/events.html">Events</a>.</p>
+<h2 id="vibe-history"><a class="header" href="#vibe-history"><code>vibe history</code></a></h2>
+<pre><code class="language-sh">vibe history [--all]
+vibe history &lt;REF&gt;
+</code></pre>
+<p>What finished tasks did, read from their event logs, <code>run.json</code> and git (nothing is
+recomputed by a model). <a href="history.html">History of finished work</a> explains each figure and
+where it comes from. Without <code>&lt;REF&gt;</code>, a table of the <code>ready</code> and <code>done</code> tasks, most
+recent first — <code>--all</code> adds <code>failed</code> and <code>cancelled</code> ones:</p>
+<pre><code class="language-text">#  title               status  runs  commits  files  tokens  active      cost      finished
+3  Add OAuth login     done    2     5        7      184.2k  6 min 12 s  1.84 USD  2 h ago
+1  Fix typo in README  ready   1     1        1      2.9k    4.1 s       -         1 d ago
+</code></pre>
+<p><code>tokens</code> counts input plus output tokens of every run, <code>active</code> the time the runs were
+working (pauses excluded); a <code>+</code> on them marks a lower bound: some run was logged before 0.5
+(its totals are unknown) or did not finish. <code>cost</code> is <code>-</code> without a
+<a href="configuration.html#pricing"><code>[pricing]</code></a> table, or when a model the task used has no price in
+it; a <code>+</code> on it marks a lower bound: some tokens were used outside a finished agent session
+(a session cut by a crash, or calls such as the repair of an invalid structured answer) and
+are not priced.
+<code>files</code> is marked <code>~</code> when the list is approximate.</p>
+<p>With <code>&lt;REF&gt;</code> (any task, finished or not), the detail:</p>
+<ul>
+<li>the task, its branch (the one its run recorded, or the task branch git still has) and its
+totals;</li>
+<li>one block per run: its state (<code>running</code>, <code>finished</code>, or <code>interrupted</code> when the process
+died), when it started, how many times it was resumed, its active time, tokens and cost,
+its phases with their result, the merge, a pending approval and the last error;</li>
+<li>the commits (short sha, first line of the message, number of files, subtask);</li>
+<li>the changed files with their status (<code>A</code>, <code>M</code>, <code>D</code>, <code>R</code>, <code>C</code>, <code>?</code> when unknown) and where
+the list comes from: the recorded merge, the diff of the task branch against its base,
+the commit events, or the files the agents wrote (the last two are marked approximate);</li>
+<li>the validation commands of the last run that ran them, and whether they passed;</li>
+<li>the last QA verdict and its summary;</li>
+<li>problems met while reading (a missing merge commit, an unreadable file).</li>
+</ul>
+<p>With <code>--json</code>, the output is the <code>TaskHistory</code> document (an array of them without <code>&lt;REF&gt;</code>):
+<code>task</code>, <code>number</code>, <code>runs</code> (with <code>state</code>, <code>usage</code>, <code>active_ms</code>, <code>totals_known</code>, <code>phases</code>,
+<code>commits</code>, <code>merged</code>, <code>validations</code>, <code>approvals</code>, <code>last_error</code>), <code>totals</code>, <code>changed_files</code>
+(<code>source</code>, <code>approximate</code>, <code>files</code>), <code>last_qa</code>, <code>validations_passed</code>, <code>cost</code>,
+<code>last_activity</code> and <code>errors</code>.</p>
+<h2 id="vibe-trace"><a class="header" href="#vibe-trace"><code>vibe trace</code></a></h2>
+<pre><code class="language-sh">vibe trace &lt;REF&gt; [--run RUN | --all] [--tool NAME] [--subtask ID] [--full]
+</code></pre>
+<p>The tool calls of the task’s last run (<code>--run</code> picks another by id or id prefix, <code>--all</code>
+shows every run), in the order they were made. <a href="trace.html">Tool call trace</a> describes the
+trace store, its disk usage and what it may contain. Each call is a block:</p>
+<pre><code class="language-text">#4 coder · subtask 1/2 Write hello.txt · write_file  2 ms  ok  [call 5f0c2a9e1b7d]
+    {
+      "content": "Hello, world!\n",
+      "path": "hello.txt"
+    }
+  ⟵ output
+    Created `hello.txt` (14 bytes).
+</code></pre>
+<p>The number is the call’s position in the run (it stays the same when filters hide other
+calls), then the agent role, the subtask, the tool, the duration and the result: <code>ok</code>,
+<code>exit N</code> for commands, <code>error</code>, <code>timed out</code>, or <code>no result</code> for a call that never returned
+(the run was interrupted). The call id pairs the call with its result; logs recorded before
+0.5 have none (<code>-</code>) and are paired by order, which is shown as <code>paired: by order</code>. Errors
+are shown in red.</p>
+<p>The arguments are printed as JSON, with strings longer than 2 000 characters cut. The
+output is the preview logged with the event; <code>--full</code> prints the complete arguments and the
+complete output from the trace store (<code>.vibe/tool-output/</code>, see
+<a href="configuration.html#pipeline"><code>pipeline.trace_outputs</code></a>), or says why it is not there: tracing was off
+or the run predates 0.5, or the file was removed (<code>vibe task discard</code>, manual cleanup). A
+footer counts the calls and the errors and lists the files written by <code>write_file</code> and
+<code>edit_file</code>.</p>
+<p><code>--tool</code> and <code>--subtask</code> (id or id prefix) keep only the matching calls. With <code>--json</code>, the
+output is the <code>RunTrace</code> document — <code>run</code>, <code>calls</code> (each with <code>run</code>, <code>call</code>, <code>role</code>,
+<code>subtask</code>, <code>tool</code>, <code>input</code>, <code>called_at</code>, <code>returned_at</code>, <code>duration_ms</code>, <code>is_error</code>,
+<code>exit_code</code>, <code>timed_out</code>, <code>preview</code>, <code>output_chars</code>, <code>output_file</code>, <code>paired</code>) and
+<code>files_written</code> — or an array of them with <code>--all</code>; <code>--full</code> does not change it (read
+<code>output_file</code> for the complete output). A task that has not been run prints <code>Task has not been run yet.</code>
+(<code>null</code>, or <code>[]</code> with <code>--all</code>, with <code>--json</code>).</p>
 <h2 id="vibe-status"><a class="header" href="#vibe-status"><code>vibe status</code></a></h2>
 <pre><code class="language-sh">vibe status
 </code></pre>
@@ -572,14 +790,25 @@ a run fails before its first phase.</p>
 </code></pre>
 <p>Prints a completion script for <code>bash</code>, <code>zsh</code>, <code>fish</code>, <code>elvish</code> or <code>powershell</code>. Installation
 is shown in <a href="installation.html#shell-completions">Installation</a>.</p>
+<h2 id="exit-codes"><a class="header" href="#exit-codes">Exit codes</a></h2>
+<p>Every command exits with <code>0</code> when it did what was asked and <code>1</code> when it failed: an unknown
+task reference or run, a bad configuration, a storage or git error, a <code>--run</code> or
+<code>--subtask</code> prefix that matches nothing or several ids. A usage error (an unknown option,
+an invalid value such as an unknown <code>--type</code>, conflicting options) exits with <code>2</code> before
+anything runs. <code>vibe run</code> has its own codes (above): <code>2</code> there also means the run paused for
+a human, and <code>130</code> that it was cancelled. <code>vibe doctor</code> and <code>vibe plugins check</code> exit with
+<code>1</code> when a check fails. <code>vibe history</code>, <code>vibe trace</code>, <code>vibe events</code> and JSON documents exit with
+<code>0</code> when their output is closed early (<code>vibe history | head</code>).</p>
 <h2 id="json-output"><a class="header" href="#json-output">JSON output</a></h2>
 <p><code>--json</code> replaces human-oriented output with one JSON document on standard output, suitable
 for scripts; logs still go to standard error. Field names follow the persisted types
 (<a href="../design/domain-model.html">Domain model</a>) and statuses are the <code>snake_case</code> names listed
 above. <code>task add</code> prints <code>number</code>, <code>id</code>, <code>dir</code> and <code>task</code>; <code>task list</code> an array of
 <code>{number, task}</code>; <code>task show</code> the <code>number</code>, <code>task</code>, <code>dir</code>, <code>spec</code>, <code>plan</code>, <code>qa_reports</code>,
-<code>run</code> and <code>worktree</code> (branch, path and whether each exists); <code>init</code> the paths it wrote.
-<code>vibe run --json</code> is the exception: a stream of events, one per line, then the summary.</p>
+<code>run</code> and <code>worktree</code> (branch, path and whether each exists); <code>history</code> the <code>TaskHistory</code>
+documents and <code>trace</code> the <code>RunTrace</code> documents described above; <code>init</code> the paths it wrote.
+<code>vibe run --json</code> and <code>vibe events --json</code> are the exceptions: a stream of events, one per
+line (then the summary for <code>vibe run</code>).</p>
 
                     </main>
 
@@ -589,7 +818,7 @@ above. <code>task add</code> prints <code>number</code>, <code>id</code>, <code>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../user/providers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../user/history.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -603,7 +832,7 @@ above. <code>task add</code> prints <code>number</code>, <code>id</code>, <code>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../user/providers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../user/history.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

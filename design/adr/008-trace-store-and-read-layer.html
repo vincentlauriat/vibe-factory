@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Installation - Vibe Factory</title>
+        <title>ADR-008: Trace store and read layer - Vibe Factory</title>
 
 
         <!-- Custom HTML head -->
@@ -12,33 +12,33 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
-        <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-e96d0476.css">
-        <link rel="stylesheet" href="../css/chrome-d279d366.css">
-        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "../";
+            const path_to_root = "../../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
+            window.path_to_searchindex_js = "../../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a937d295.js"></script>
+        <script src="../../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -105,7 +105,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -140,13 +140,13 @@
                     <h1 class="menu-title">Vibe Factory</h1>
 
                     <div class="right-buttons">
-                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/vincentlauriat/vibe-factory" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/user/installation.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/design/adr/008-trace-store-and-read-layer.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,157 +180,64 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<p>Vibe Factory is a single binary, <code>vibe</code>, built from source with cargo. It runs on macOS,
-Linux and Windows.</p>
-<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Requirement</th><th>Version</th><th>Why</th></tr>
-</thead>
-<tbody>
-<tr><td>Rust toolchain</td><td>1.88 or newer (edition 2024)</td><td>to build <code>vibe</code>; install with <a href="https://rustup.rs">rustup</a></td></tr>
-<tr><td>git</td><td>any recent version</td><td>task workspaces are git worktrees; also needed by <code>cargo install --git</code></td></tr>
-<tr><td>a model provider</td><td></td><td>an Anthropic or OpenAI key, any OpenAI-compatible endpoint, or a local Ollama</td></tr>
-<tr><td>Ollama (optional)</td><td></td><td>to run models locally without a key</td></tr>
-</tbody>
-</table>
-</div>
-<p>Check what you have:</p>
-<pre><code class="language-sh">rustc --version     # rustc 1.88.0 or newer
-git --version
-</code></pre>
-<p>If <code>rustc</code> is older, run <code>rustup update stable</code>.</p>
-<p>The project you point <code>vibe</code> at should be a git repository: the default workspace creates a
-worktree per task. For a directory without git, use the <code>in_place</code> workspace (see
-<a href="workspaces.html#in-place-mode">Workspaces and merging</a>).</p>
-<h2 id="installing-from-git"><a class="header" href="#installing-from-git">Installing from git</a></h2>
-<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory vibe-cli
-</code></pre>
-<p>This builds the <code>vibe-cli</code> package in release mode and places the <code>vibe</code> binary in
-<code>~/.cargo/bin</code> (<code>%USERPROFILE%\.cargo\bin</code> on Windows), which rustup adds to your <code>PATH</code>.
-The first build downloads and compiles the dependencies and takes a few minutes.</p>
-<p>To install a tagged release or a branch (replace the tag with one that exists):</p>
-<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.4.0 vibe-cli
-cargo install --git https://github.com/vincentlauriat/vibe-factory --branch main vibe-cli
-</code></pre>
-<h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
-<pre><code class="language-sh">git clone https://github.com/vincentlauriat/vibe-factory
-cd vibe-factory
-cargo build --release -p vibe-cli
-./target/release/vibe --version
-</code></pre>
-<p>To install your local checkout as <code>vibe</code>:</p>
-<pre><code class="language-sh">cargo install --path crates/vibe-cli
-</code></pre>
-<p>The rest of the workspace builds and tests the same way:</p>
-<pre><code class="language-sh">cargo build --workspace
-cargo test --workspace
-mdbook serve docs          # this book, on http://localhost:3000
-</code></pre>
-<p>The repository also contains an example plugin, built separately:</p>
-<pre><code class="language-sh">cargo build --release -p vibe-plugins --bin vibe-echo-plugin
-</code></pre>
-<h2 id="verifying-the-installation"><a class="header" href="#verifying-the-installation">Verifying the installation</a></h2>
-<pre><code class="language-sh">vibe --version
-</code></pre>
-<pre><code class="language-text">vibe 0.4.0
-</code></pre>
-<p>Then, inside a project:</p>
-<pre><code class="language-sh">cd your-project
-vibe init
-vibe doctor
-</code></pre>
-<p><code>vibe doctor</code> checks git, the project repository, the configuration, provider keys,
-plugins, the workspace setting and that <code>.vibe/</code> is writable, one line per check. A missing key is expected at
-this point if you have not set one yet; the <a href="quickstart.html">Quick start</a> continues from here.</p>
-<h2 id="setting-up-a-model-provider"><a class="header" href="#setting-up-a-model-provider">Setting up a model provider</a></h2>
-<p>With the default configuration, <code>vibe</code> uses <code>anthropic/claude-sonnet-5</code> and reads the key
-from <code>ANTHROPIC_API_KEY</code>:</p>
-<pre><code class="language-sh">export ANTHROPIC_API_KEY=sk-ant-…          # bash, zsh
-set -gx ANTHROPIC_API_KEY sk-ant-…         # fish
-$env:ANTHROPIC_API_KEY = "sk-ant-…"        # PowerShell
-</code></pre>
-<p>For OpenAI, set <code>OPENAI_API_KEY</code> and a default model:</p>
-<pre><code class="language-sh">export OPENAI_API_KEY=sk-…
-vibe config set default_model openai/gpt-5
-</code></pre>
-<p>For a local model with Ollama, no key is needed:</p>
-<pre><code class="language-sh">ollama pull qwen2.5-coder
-ollama serve                                # if not already running as a service
-vibe config set default_model ollama/qwen2.5-coder
-</code></pre>
-<p>Other vendors and gateways are configured in <a href="providers.html">Providers and models</a>.</p>
-<h2 id="shell-completions"><a class="header" href="#shell-completions">Shell completions</a></h2>
-<p><code>vibe completions &lt;shell&gt;</code> prints a completion script for <code>bash</code>, <code>zsh</code>, <code>fish</code>, <code>elvish</code>
-or <code>powershell</code>.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Shell</th><th>Install</th></tr>
-</thead>
-<tbody>
-<tr><td>bash</td><td><code>vibe completions bash &gt; ~/.local/share/bash-completion/completions/vibe</code></td></tr>
-<tr><td>zsh</td><td><code>vibe completions zsh &gt; ~/.zfunc/_vibe</code>, with <code>fpath+=~/.zfunc</code> before <code>compinit</code> in <code>~/.zshrc</code></td></tr>
-<tr><td>fish</td><td><code>vibe completions fish &gt; ~/.config/fish/completions/vibe.fish</code></td></tr>
-<tr><td>PowerShell</td><td><code>vibe completions powershell &gt;&gt; $PROFILE</code></td></tr>
-</tbody>
-</table>
-</div>
-<p>Open a new shell afterwards. Regenerate the script after upgrading, since new options only
-appear in a fresh script.</p>
-<h2 id="upgrading"><a class="header" href="#upgrading">Upgrading</a></h2>
-<p>Run the install command again with <code>--force</code>:</p>
-<pre><code class="language-sh">cargo install --force --git https://github.com/vincentlauriat/vibe-factory vibe-cli
-</code></pre>
-<p>From a checkout: <code>git pull</code> then <code>cargo install --path crates/vibe-cli --force</code>.</p>
-<p>Project data is forward-compatible: fields added to persisted files have defaults, so tasks
-created by an older version still load. Read the changelog before upgrading across a minor
-version, and finish or pause running tasks first. Your <code>.vibe/config.toml</code> is never rewritten
-by an upgrade; <code>vibe config show --default</code> shows the new defaults so you can compare.</p>
-<h2 id="uninstalling"><a class="header" href="#uninstalling">Uninstalling</a></h2>
-<pre><code class="language-sh">cargo uninstall vibe-cli
-</code></pre>
-<p>This removes the binary only. Per-project data lives in each project’s <code>.vibe/</code> directory;
-discard task worktrees first so that their branches are removed too, then delete the
-directory:</p>
-<pre><code class="language-sh">vibe task list --all              # tasks whose worktrees you may want to discard
-vibe task discard &lt;ref&gt; --yes     # for each task
-rm -rf .vibe
-git worktree prune
-</code></pre>
-<p>User-level plugins live in your configuration directory (<code>~/.config/vibe/</code> on Linux,
-<code>~/Library/Application Support/vibe/</code> on macOS, <code>%APPDATA%\vibe\</code> on Windows); remove it if
-you installed any.</p>
-<h2 id="platform-notes"><a class="header" href="#platform-notes">Platform notes</a></h2>
-<p><strong>macOS and Linux.</strong> The <code>bash</code> tool runs commands with <code>sh -c</code> in the workspace, in their
-own process group, so a timeout kills the whole process tree. Any POSIX <code>sh</code> works; the
-commands agents write (<code>cargo test</code>, <code>npm test</code>, <code>grep</code>, …) must be installed on your
-machine, as for a human developer.</p>
-<p><strong>Windows.</strong> The <code>bash</code> tool runs commands with <code>cmd /C</code>, and a timeout kills the process
-tree with <code>taskkill /T /F</code>. The security policy still parses commands with POSIX shell
-rules, so constructs specific to <code>cmd</code> (for example <code>%VAR%</code> expansion or <code>^</code> escapes) may be
-rejected as unparseable; commands such as <code>cargo test</code> or <code>git status</code> work unchanged.
-Programs must be on <code>PATH</code>. Paths given to tools are resolved against the workspace and must
-stay inside it, as on other platforms, and a bare drive root (<code>C:\</code>) is never a valid target
-for <code>rm</code>. Long paths inside deep worktrees
-can hit the 260-character limit: enable long paths in git
-(<code>git config --global core.longpaths true</code>) and in Windows, or keep the project close to the
-drive root.</p>
-<p><strong>All platforms.</strong> Worktrees live inside the project, under <code>.vibe/worktrees/</code>, so they are
-on the same file system as your checkout and need roughly one extra working copy of disk
-space per open task (see <a href="workspaces.html#disk-usage">Workspaces and merging</a>).</p>
+                        <h1 id="adr-008-trace-store-and-read-layer"><a class="header" href="#adr-008-trace-store-and-read-layer">ADR-008: Trace store and read layer</a></h1>
+<p><strong>Status:</strong> Accepted — 2026-09-27</p>
+<h2 id="context"><a class="header" href="#context">Context</a></h2>
+<p>Up to 0.4, interfaces show a run while it happens, but reconstructing what was done after
+the fact is hard. <code>tool_returned</code> carries a 200-character preview and nothing pairs it with
+its <code>tool_called</code> when read-only tools run in parallel; the complete output of a call is kept
+nowhere unless it exceeds the model’s limit. Commits other than subtask integrations and the
+final merge emit no event, and <code>run.json</code>, the only place with a run’s totals, is
+overwritten by the next run. Each interface that wanted a history, a project-wide activity
+feed or a trace of tool calls would have had to re-parse <code>events.jsonl</code>, guess, and ask git
+on its own.</p>
+<p><a href="007-one-seam-many-interfaces.html">ADR-007</a> makes events the interface contract and forbids
+private views that events cannot rebuild, so whatever these views need must be in the
+events, or referenced by them.</p>
+<h2 id="decision"><a class="header" href="#decision">Decision</a></h2>
+<ol>
+<li><strong>Events carry what the views need</strong>, as optional fields and new types (schema stays 2):
+a <code>call</code> id on <code>tool_called</code> and <code>tool_returned</code>, the <code>subtask</code>, exit code, output length
+and output path on <code>tool_returned</code>, the model on <code>agent_started</code>, <code>committed</code> and <code>merged</code>
+events, and the run’s totals on <code>run_finished</code> (<a href="../../reference/events.html">Events</a>).</li>
+<li><strong>Complete tool outputs go to a trace store</strong>, not into the log:
+<code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code> at the project root, ignored by git,
+capped per call (<code>pipeline.trace_max_chars</code>), on by default (<code>pipeline.trace_outputs</code>),
+removed with the task. <code>tool_returned.output_file</code> references the file by a path relative
+to the project root; nothing else points to it.</li>
+<li><strong>One read layer in <code>vibe-pipeline</code></strong> turns events and git into views: <code>events_log</code>
+(incremental reading of one log, every task’s log merged by an event cursor), <code>history</code>
+(runs, commits, changed files, validations, QA, tokens, active time and cost of a task)
+and <code>trace</code> (the calls of a run, paired, with their outputs). It stores nothing: every
+view is rebuilt from <code>.vibe/</code> and git when it is asked for. The command line, the
+terminal UI and the server all use it, so they agree.</li>
+<li><strong>The server reads the logs once.</strong> <code>vibe serve</code> runs one follower of every task’s log,
+shared by all its open event streams, instead of one reader per client.</li>
+</ol>
+<h2 id="consequences"><a class="header" href="#consequences">Consequences</a></h2>
+<ul>
+<li><code>vibe history</code>, <code>vibe trace</code> and <code>vibe events</code> without a task, and the matching screens of
+the terminal UI, the web UI and the server routes, are thin renderings of the same
+documents (<code>TaskHistory</code>, <code>RunTrace</code>, <code>TaggedEnvelope</code>).</li>
+<li>The trace store costs disk space in proportion to what the tools printed, bounded per call;
+it is local, git-ignored and can hold secrets that a command printed.</li>
+<li>Logs written before 0.5 still load: their calls pair by order, their outputs are only the
+previews, and their totals are unknown rather than zero.</li>
+<li><code>vibe-pipeline</code> now depends on <code>vibe-workspace</code> for read-only git queries of the history;
+the pipeline itself still reaches workspaces through <code>WorkspaceProvider</code>.</li>
+<li>Ordering across tasks relies on the clocks of the processes that log; within a task, <code>seq</code>
+stays the exact order.</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../introduction.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../design/adr/007-one-seam-many-interfaces.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../user/quickstart.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../reference/events.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -340,11 +247,11 @@ space per open task (see <a href="workspaces.html#disk-usage">Workspaces and mer
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../introduction.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../design/adr/007-one-seam-many-interfaces.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../user/quickstart.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../reference/events.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -364,13 +271,13 @@ space per open task (see <a href="workspaces.html#disk-usage">Workspaces and mer
         </script>
 
 
-        <script src="../elasticlunr-ef4e11c1.min.js"></script>
-        <script src="../mark-09e88c2c.min.js"></script>
-        <script src="../searcher-09f2665d.js"></script>
+        <script src="../../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../../mark-09e88c2c.min.js"></script>
+        <script src="../../searcher-09f2665d.js"></script>
 
-        <script src="../clipboard-1626706a.min.js"></script>
-        <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-609e4cb8.js"></script>
+        <script src="../../clipboard-1626706a.min.js"></script>
+        <script src="../../highlight-abc7f01d.js"></script>
+        <script src="../../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
 

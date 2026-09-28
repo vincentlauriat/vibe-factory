@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f3067f38.js"></script>
+        <script src="toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,7 +186,9 @@ development</em>, written in Rust.</p>
 <p>You describe what you want. A pipeline of cooperating AI agents assesses the request,
 explores your codebase, writes a specification, plans the work, implements it in an isolated
 git workspace, reviews the result against the acceptance criteria, fixes what the review
-found, and hands you a branch ready to merge.</p>
+found, and hands you a branch ready to merge. Everything it did stays visible afterwards:
+the history of each task, the activity of every task in one feed, and the complete trace of
+every tool call, from the command line, a terminal UI, a local web UI or a macOS app.</p>
 <pre><code class="language-text">   task ──▶ assess ──▶ spec ──▶ plan ──▶ build ──▶ qa ──▶ fix ──▶ merge
                                           │          ▲       │
                                           └──────────┴───────┘
@@ -215,7 +217,16 @@ between teams is an extension point with a small, documented trait:</p>
 framework can do, a plugin can do too.</p>
 <h2 id="what-is-in-the-box"><a class="header" href="#what-is-in-the-box">What is in the box</a></h2>
 <ul>
-<li><strong><code>vibe</code> CLI</strong> — create tasks, run the pipeline, inspect progress, manage plugins.</li>
+<li><strong>Four interfaces on one engine</strong> — the <code>vibe</code> command line, a terminal UI (<code>vibe tui</code>), a
+local web UI and HTTP API (<code>vibe serve</code>), and a native macOS app built on that API; they
+all read the same events, so they always agree. A VS Code extension is a client of
+<code>vibe serve</code> too.</li>
+<li><strong>See what was done</strong> — <code>vibe history</code> for what each task delivered (runs, commits,
+changed files, validations, QA verdict, tokens, active time, and a cost when you give
+prices), <code>vibe events</code> for the activity of every task, live or replayed, and <code>vibe trace</code>
+for every tool call of a run with its complete arguments, exit code and output.</li>
+<li><strong>Human control</strong> — approvals of the spec, the plan or the merge, token and time budgets,
+cancellation and resume from any interface.</li>
 <li><strong>Providers</strong> — Anthropic, any OpenAI-compatible API (OpenAI, Groq, Mistral, xAI,
 OpenRouter, Ollama), and a scriptable mock for tests and dry runs.</li>
 <li><strong>Tools</strong> — read, write, edit, list, glob, grep and a sandboxed shell, all confined to the
@@ -233,7 +244,8 @@ records, and generated API docs.</li>
 <h2 id="where-to-go-next"><a class="header" href="#where-to-go-next">Where to go next</a></h2>
 <ul>
 <li>New user: start with <a href="user/installation.html">Installation</a> and the
-<a href="user/quickstart.html">Quick start</a>.</li>
+<a href="user/quickstart.html">Quick start</a>, then see <a href="user/history.html">History</a> and
+<a href="user/trace.html">Tool call trace</a> to look back at what the agents did.</li>
 <li>Contributor or curious engineer: read the
 <a href="design/overview.html">Architecture overview</a>.</li>
 <li>Extending the framework: see <a href="design/extension-points.html">Extension points</a> and

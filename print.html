@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f3067f38.js"></script>
+        <script src="toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,7 +184,9 @@ development</em>, written in Rust.</p>
 <p>You describe what you want. A pipeline of cooperating AI agents assesses the request,
 explores your codebase, writes a specification, plans the work, implements it in an isolated
 git workspace, reviews the result against the acceptance criteria, fixes what the review
-found, and hands you a branch ready to merge.</p>
+found, and hands you a branch ready to merge. Everything it did stays visible afterwards:
+the history of each task, the activity of every task in one feed, and the complete trace of
+every tool call, from the command line, a terminal UI, a local web UI or a macOS app.</p>
 <pre><code class="language-text">   task ──▶ assess ──▶ spec ──▶ plan ──▶ build ──▶ qa ──▶ fix ──▶ merge
                                           │          ▲       │
                                           └──────────┴───────┘
@@ -213,7 +215,16 @@ between teams is an extension point with a small, documented trait:</p>
 framework can do, a plugin can do too.</p>
 <h2 id="what-is-in-the-box"><a class="header" href="#what-is-in-the-box">What is in the box</a></h2>
 <ul>
-<li><strong><code>vibe</code> CLI</strong> — create tasks, run the pipeline, inspect progress, manage plugins.</li>
+<li><strong>Four interfaces on one engine</strong> — the <code>vibe</code> command line, a terminal UI (<code>vibe tui</code>), a
+local web UI and HTTP API (<code>vibe serve</code>), and a native macOS app built on that API; they
+all read the same events, so they always agree. A VS Code extension is a client of
+<code>vibe serve</code> too.</li>
+<li><strong>See what was done</strong> — <code>vibe history</code> for what each task delivered (runs, commits,
+changed files, validations, QA verdict, tokens, active time, and a cost when you give
+prices), <code>vibe events</code> for the activity of every task, live or replayed, and <code>vibe trace</code>
+for every tool call of a run with its complete arguments, exit code and output.</li>
+<li><strong>Human control</strong> — approvals of the spec, the plan or the merge, token and time budgets,
+cancellation and resume from any interface.</li>
 <li><strong>Providers</strong> — Anthropic, any OpenAI-compatible API (OpenAI, Groq, Mistral, xAI,
 OpenRouter, Ollama), and a scriptable mock for tests and dry runs.</li>
 <li><strong>Tools</strong> — read, write, edit, list, glob, grep and a sandboxed shell, all confined to the
@@ -231,7 +242,8 @@ records, and generated API docs.</li>
 <h2 id="where-to-go-next"><a class="header" href="#where-to-go-next">Where to go next</a></h2>
 <ul>
 <li>New user: start with <a href="#installation">Installation</a> and the
-<a href="#quick-start">Quick start</a>.</li>
+<a href="#quick-start">Quick start</a>, then see <a href="#history-of-finished-work">History</a> and
+<a href="#tool-call-trace">Tool call trace</a> to look back at what the agents did.</li>
 <li>Contributor or curious engineer: read the
 <a href="#architecture-overview">Architecture overview</a>.</li>
 <li>Extending the framework: see <a href="#extension-points">Extension points</a> and
@@ -379,7 +391,7 @@ can hit the 260-character limit: enable long paths in git
 drive root.</p>
 <p><strong>All platforms.</strong> Worktrees live inside the project, under <code>.vibe/worktrees/</code>, so they are
 on the same file system as your checkout and need roughly one extra working copy of disk
-space per open task (see <a href="#disk-usage">Workspaces and merging</a>).</p>
+space per open task (see <a href="#disk-usage-1">Workspaces and merging</a>).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="quick-start"><a class="header" href="#quick-start">Quick start</a></h1>
 <p>This walkthrough takes about ten minutes. It runs one small task on an existing repository,
@@ -569,8 +581,11 @@ cd .vibe/worktrees/add-a-json-flag-to-the-export-command-6f1c3e0a &amp;&amp; car
 <p>The task is <code>ready</code>: nothing reached your branch yet. Merge it as any branch:</p>
 <pre><code class="language-sh">git switch main
 git merge vibe/add-a-json-flag-to-the-export-command-6f1c3e0a
-vibe task discard 1 --yes          # remove the worktree and the branch
 </code></pre>
+<p>The worktree and the branch stay until you discard the task. <code>vibe task discard 1 --yes</code>
+removes them, together with the task directory and its traced tool outputs, so the task no
+longer appears in its history: run it once you no longer need to look back at the task
+(step 8).</p>
 <p>To let Vibe Factory merge by itself as soon as QA approves, run with <code>--auto-merge</code>, or
 set it for the project:</p>
 <pre><code class="language-sh">vibe run 2 --auto-merge
@@ -580,6 +595,29 @@ vibe config set pipeline.auto_merge true
 while tracked files of your checkout have uncommitted changes, and it leaves the task
 <code>ready</code> with the list of conflicting files when the branches conflict. Details in
 <a href="#merge-behaviour">Workspaces and merging</a>.</p>
+<h2 id="8-see-what-was-done"><a class="header" href="#8-see-what-was-done">8. See what was done</a></h2>
+<p>Everything a run did stays readable after it ended, rebuilt from the task’s events and git:</p>
+<pre><code class="language-sh">vibe history                 # every finished task: runs, commits, files, tokens, time, cost
+vibe history 1               # one task: its runs, commits, changed files, validations, QA
+vibe trace 1                 # every tool call of the last run, with its result
+vibe trace 1 --full          # … and the complete output of each call
+vibe events --since 1d       # what happened on every task today, in time order
+vibe events --follow         # the activity of every task from now on (Ctrl-C to stop)
+</code></pre>
+<p><code>vibe history</code> shows a cost only once you give model prices in
+<a href="#pricing"><code>[pricing]</code></a>. The complete tool outputs <code>vibe trace --full</code> reads
+are kept under <code>.vibe/tool-output/</code>, ignored by git; see <a href="#tool-call-trace">Tool call trace</a> for
+their disk usage and <a href="#history-of-finished-work">History</a> for where each figure comes from.</p>
+<p>The same views exist outside the command line:</p>
+<ul>
+<li><code>vibe tui</code> opens a terminal UI: the task board (<code>T</code>), the activity of every task (<code>A</code>),
+the history (<code>H</code>), and a <strong>Trace</strong> tab in the task detail;</li>
+<li><code>vibe serve</code> serves a web UI on <code>http://127.0.0.1:7777</code> (open the link it prints, which
+carries the access token) with the <strong>Tasks</strong>, <strong>Activity</strong>, <strong>History</strong> and
+<strong>Evaluations</strong> views and a <strong>Trace</strong> tab per task, and the HTTP API they use;</li>
+<li>the macOS app in <a href="https://github.com/vincentlauriat/vibe-factory/tree/main/apps/macos/VibeFactory"><code>apps/macos/VibeFactory</code></a>
+opens a project folder and starts <code>vibe serve</code> for it, or connects to one already running.</li>
+</ul>
 <h2 id="try-it-with-no-api-key"><a class="header" href="#try-it-with-no-api-key">Try it with no API key</a></h2>
 <p>The built-in <code>mock</code> provider answers every agent with canned, valid documents without
 calling any model. It edits no file, so it is only good for seeing the pipeline move:</p>
@@ -624,6 +662,8 @@ reviews again with the canned approval, and the task ends <code>ready</code>.</p
 <ul>
 <li><a href="#concepts">Concepts</a> explains tasks, profiles, specs, plans and workspaces.</li>
 <li><a href="#configuration">Configuration</a> lists every setting, including models per phase.</li>
+<li><a href="#history-of-finished-work">History</a> and <a href="#tool-call-trace">Tool call trace</a> explain what <code>vibe history</code> and
+<code>vibe trace</code> show and where it comes from.</li>
 <li><a href="#troubleshooting-1">Troubleshooting</a> covers what to do when a run pauses or fails.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -670,6 +710,20 @@ you to review). <code>in_place</code> mode disables isolation for quick experime
 <p>The <strong>pipeline</strong> runs the phases <code>assess → spec → plan → build → qa → fix → merge</code>. Each
 phase reads the artefacts of the previous ones and writes its own into
 <code>.vibe/tasks/&lt;task&gt;/</code>. A <strong>run</strong> can be watched live, interrupted, and resumed.</p>
+<h2 id="events-trace-and-history"><a class="header" href="#events-trace-and-history">Events, trace and history</a></h2>
+<p>Everything a run does is published as an <strong>event</strong> (a phase started, an agent called a
+tool, a subtask was committed, the run finished with its totals) and appended to the task’s
+<code>events.jsonl</code>. Events are the contract between the engine and every interface: the live
+output of <code>vibe run</code>, <code>vibe events</code>, the terminal UI, the web UI and the macOS app all show
+events, and none of them keeps a state of its own (<a href="#events-3">Events</a>).</p>
+<p>What does not fit in an event is referenced by one. The complete output of each tool call
+goes to the <strong>trace store</strong>, <code>.vibe/tool-output/</code>, local and ignored by git, and the
+<code>tool_returned</code> event points to it (<a href="#tool-call-trace">Tool call trace</a>).</p>
+<p>A <strong>read layer</strong> turns events and git back into views: the activity of every task in time
+order, the <strong>history</strong> of what a task delivered (runs, commits, changed files, validations,
+QA verdict, tokens, active time, cost; see <a href="#history-of-finished-work">History</a>), and the <strong>trace</strong> of a
+run’s tool calls. The command line, the terminal UI and <code>vibe serve</code> use the same read
+layer, so they always agree.</p>
 <h2 id="providers-and-models"><a class="header" href="#providers-and-models">Providers and models</a></h2>
 <p>A <strong>provider</strong> is a model vendor or API (Anthropic, OpenAI, a local Ollama…). Models are
 referred to as <code>provider/model</code>, for example <code>anthropic/claude-sonnet-5</code> or
@@ -709,6 +763,9 @@ vibe config show --default   # the built-in defaults only
 <tr><td><code>[pipeline]</code></td><td>table</td><td>see below</td><td>pipeline tuning</td></tr>
 <tr><td><code>[security]</code></td><td>table</td><td>see below</td><td>tool security policy</td></tr>
 <tr><td><code>[[plugins]]</code></td><td>array of tables</td><td>none</td><td>out-of-process plugins to start</td></tr>
+<tr><td><code>[workspace.container]</code></td><td>table</td><td>none</td><td>settings of the <code>container</code> workspace; see below</td></tr>
+<tr><td><code>[integrations]</code></td><td>table</td><td>none</td><td>GitHub and GitLab access for <code>vibe task import</code> and <code>vibe pr</code>; see below</td></tr>
+<tr><td><code>[pricing."&lt;provider&gt;/&lt;model&gt;"]</code></td><td>table</td><td>none</td><td>model prices, to show what a task cost in <code>vibe history</code>; see below</td></tr>
 </tbody>
 </table>
 </div>
@@ -799,6 +856,8 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in <a href="#providers-and-mo
 <tr><td><code>approvals</code></td><td>list of <code>"spec"</code>, <code>"plan"</code>, <code>"merge"</code></td><td><code>[]</code></td><td>where the run waits for a human decision; see <a href="#human-approvals">Human approvals</a></td></tr>
 <tr><td><code>max_tokens</code></td><td>integer</td><td>none</td><td>input plus output tokens of the whole run, including resumes; the run pauses when reached</td></tr>
 <tr><td><code>max_duration_secs</code></td><td>integer</td><td>none</td><td>active time of the whole run in seconds, including resumes; the run pauses when reached</td></tr>
+<tr><td><code>trace_outputs</code></td><td>bool</td><td><code>true</code></td><td>keep the complete output of every tool call in <code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code> (ignored by git), referenced by the <code>tool_returned</code> events and read by <code>vibe trace --full</code>; see <a href="#tool-call-trace">Tool call trace</a> for disk usage and privacy</td></tr>
+<tr><td><code>trace_max_chars</code></td><td>integer</td><td><code>100000</code></td><td>characters kept per traced tool output; longer outputs are cut and end with a marker line. Only the trace is affected: what the model sees is truncated separately</td></tr>
 </tbody>
 </table>
 </div>
@@ -950,6 +1009,49 @@ token_env = "GITLAB_TOKEN"
 </code></pre>
 <p>Used by <code>vibe task import</code> and <code>vibe pr</code>. Tokens are read from the environment only, never
 from the configuration file.</p>
+<h2 id="pricing"><a class="header" href="#pricing"><code>[pricing]</code></a></h2>
+<pre><code class="language-toml">[pricing."anthropic/claude-sonnet-5"]
+input = 3.0          # USD per million prompt tokens
+output = 15.0        # USD per million completion tokens
+cache_read = 0.3     # optional: prompt tokens served from cache
+cache_write = 3.75   # optional: prompt tokens written to cache
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Type</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>input</code></td><td>number, required</td><td>none</td><td>USD per million prompt tokens</td></tr>
+<tr><td><code>output</code></td><td>number, required</td><td>none</td><td>USD per million completion tokens</td></tr>
+<tr><td><code>cache_read</code></td><td>number</td><td>unset</td><td>USD per million prompt tokens read from the cache</td></tr>
+<tr><td><code>cache_write</code></td><td>number</td><td>unset</td><td>USD per million prompt tokens written to the cache</td></tr>
+</tbody>
+</table>
+</div>
+<p>Prices are only used to show the cost of a task in <a href="#history-of-finished-work"><code>vibe history</code></a> and its
+web, terminal and API equivalents; they change nothing in a run. There are no built-in
+prices: without this table no cost is shown. Every price must be a
+finite number, zero or more; <code>vibe</code> refuses a configuration with any other value.</p>
+<p>Events name a model by the provider’s model id, without the provider. A model id is
+matched first against a key equal to it, then against every key <code>"&lt;provider&gt;/&lt;model id&gt;"</code>,
+the provider being the part of the key before its first <code>/</code>. So <code>claude-sonnet-5</code> in a log
+matches <code>"claude-sonnet-5"</code>, else <code>"anthropic/claude-sonnet-5"</code>; a model id that contains a
+<code>/</code> itself, such as <code>meta-llama/llama-3</code> served by <code>openrouter</code>, matches
+<code>"openrouter/meta-llama/llama-3"</code>. When two providers price the same model id differently,
+the model counts as unpriced. A local model needs a table too, at zero, or tasks that used
+it show no cost:</p>
+<pre><code class="language-toml">[pricing."ollama/qwen2.5-coder"]
+input = 0.0
+output = 0.0
+</code></pre>
+<p>A task’s cost is shown only when every agent session it ran has a price that covers the
+tokens it used: one model without a price, cache tokens without a <code>cache_read</code> or
+<code>cache_write</code> price, or a session logged before 0.5 (whose model is not recorded) and the
+cost is left out rather than estimated. The cost is marked incomplete, a lower bound, when
+a session started but never finished (a crash: its tokens were not logged) or when a run
+used more tokens than its sessions account for (a call outside any agent session, such as
+the repair of an invalid structured answer, whose model is not logged).</p>
 <h2 id="plugins"><a class="header" href="#plugins"><code>[[plugins]]</code></a></h2>
 <div class="table-wrapper">
 <table>
@@ -1012,6 +1114,8 @@ auto_merge = false          # stop in `ready` and let me merge
 merge_strategy = "manual"
 max_tokens = 3_000_000      # pause the run beyond this, resumes included
 max_duration_secs = 7200    # and beyond two hours of active work
+trace_outputs = true        # keep every tool output under .vibe/tool-output/ (git-ignored)
+trace_max_chars = 50_000    # at most this many characters per call
 
 # Security ----------------------------------------------------------------
 [security]
@@ -1091,8 +1195,18 @@ and <code>vibe &lt;command&gt; --help</code> print the same information as this 
 <pre><code class="language-text">vibe [GLOBAL OPTIONS] &lt;COMMAND&gt;
 
   init          create .vibe/config.toml
-  task          add | list | show | discard
+  task          add | list | show | import | discard
   run           run a task through the pipeline
+  approve       approve what a paused run waits for
+  reject        reject it, with a reason for the agents
+  cancel        stop the run of a task, from any terminal
+  pr            push a ready task's branch and open a pull request
+  memory        list | clear the project memory
+  tui           terminal UI: board, activity, history, trace
+  serve         HTTP API and web UI
+  events        replay or follow the events of one task or of every task
+  history       what finished tasks did: runs, commits, files, tokens, cost
+  trace         the tool calls of a run: arguments, results, outputs
   status        project summary
   config        show | path | set
   agents        list | show | export
@@ -1108,9 +1222,9 @@ and <code>vibe &lt;command&gt; --help</code> print the same information as this 
 <tr><th>Option</th><th>Effect</th></tr>
 </thead>
 <tbody>
-<tr><td><code>-C, --project &lt;DIR&gt;</code></td><td>start directory; the project is this directory (default: the current one) or its nearest parent that contains a <code>.vibe</code> directory, without leaving the git repository (the search stops at the first parent that contains <code>.git</code>) and never your home directory; <code>vibe init</code> never searches parents</td></tr>
+<tr><td><code>-C, --project &lt;DIR&gt;</code></td><td>start directory; the project is this directory (default: the current one) or its nearest parent that contains a <code>.vibe</code> directory, without leaving the git repository (the search stops at the first parent that contains <code>.git</code>) and never climbing up to your home directory; <code>vibe init</code> never searches parents</td></tr>
 <tr><td><code>-v, --verbose</code></td><td>more logging on standard error: default warnings only; <code>-v</code> info, <code>-vv</code> debug, <code>-vvv</code> trace; a non-empty <code>RUST_LOG</code> wins</td></tr>
-<tr><td><code>--json</code></td><td>machine-readable output: one JSON document, or one JSON event per line for <code>vibe run</code></td></tr>
+<tr><td><code>--json</code></td><td>machine-readable output: one JSON document, or one JSON event per line for <code>vibe run</code> and <code>vibe events</code> (see <a href="#json-output">JSON output</a>)</td></tr>
 <tr><td><code>--no-color</code></td><td>no colours; also the case when <code>NO_COLOR</code> is set or the output is not a terminal</td></tr>
 <tr><td><code>-h, --help</code></td><td>help of the command</td></tr>
 <tr><td><code>-V, --version</code></td><td>version of <code>vibe</code></td></tr>
@@ -1178,7 +1292,7 @@ array of <code>{"number": …, "task": {…}}</code> objects. <code>done</code> 
 <h3 id="vibe-task-show"><a class="header" href="#vibe-task-show"><code>vibe task show</code></a></h3>
 <pre><code class="language-sh">vibe task show &lt;REF&gt;
 </code></pre>
-<p>Shows the task: description, status and complexity, spec summary and requirements, plan
+<p>Shows the task: description, status and complexity, the branch its last run recorded, spec summary and requirements, plan
 with subtask statuses, the latest QA verdict and issues, the state of the last run
 (<code>run.json</code>) and the workspace branch and directory. The files it reads are listed in
 <a href="#persistence-layout">Persistence layout</a>.</p>
@@ -1196,8 +1310,9 @@ GitLab.</p>
 <h3 id="vibe-task-discard"><a class="header" href="#vibe-task-discard"><code>vibe task discard</code></a></h3>
 <pre><code class="language-sh">vibe task discard &lt;REF&gt; [-y | --yes]
 </code></pre>
-<p>Removes the task’s workspace (worktree and branch; nothing for <code>in_place</code>) and deletes the
-task directory. It asks for confirmation on a terminal unless <code>--yes</code> is given; when standard
+<p>Removes the task’s workspace (worktree and branch; nothing for <code>in_place</code>), deletes the
+task directory and the task’s traced tool outputs (<code>.vibe/tool-output/&lt;task dir&gt;/</code>), so the
+task leaves the history too. It asks for confirmation on a terminal unless <code>--yes</code> is given; when standard
 input is not a terminal it refuses to run without <code>--yes</code>. Unmerged work on the task branch
 is lost.</p>
 <h2 id="vibe-run"><a class="header" href="#vibe-run"><code>vibe run</code></a></h2>
@@ -1314,11 +1429,14 @@ memory stores.</p>
 <h2 id="vibe-tui"><a class="header" href="#vibe-tui"><code>vibe tui</code></a></h2>
 <pre><code class="language-sh">vibe tui
 </code></pre>
-<p>A terminal board of the project: tasks on the left (a <code>●</code> marks the ones a process is
-running, whichever terminal started them), the selected task on the right with its run
-state, a budget gauge and three tabs: <strong>Activity</strong> (phases, agents, tools, validations,
-approvals, and the text of the current step as the model writes it), <strong>Plan</strong> (subtasks and
-their status) and <strong>Changes</strong> (the workspace diff summary).</p>
+<p>A terminal view of the project with three screens, listed in the title bar: <strong>Tasks</strong> (<code>T</code>),
+<strong>Activity</strong> (<code>A</code>) and <strong>History</strong> (<code>H</code>). <code>q</code> quits from any of them; <code>Esc</code> closes what is
+open, then goes back to Tasks, and quits only from Tasks (not from its Trace tab).</p>
+<p><strong>Tasks</strong> is the board: tasks on the left (a <code>●</code> marks the ones a process is running,
+whichever terminal started them), the selected task on the right with its run state, a
+budget gauge and four tabs: <strong>Activity</strong> (phases, agents, tools, validations, approvals, and
+the text of the current step as the model writes it), <strong>Plan</strong> (subtasks and their status),
+<strong>Changes</strong> (the workspace diff summary) and <strong>Trace</strong> (the tool calls of the last run).</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -1331,32 +1449,103 @@ their status) and <strong>Changes</strong> (the workspace diff summary).</p>
 <tr><td><code>c</code></td><td>cancel its run (also one started in another terminal)</td></tr>
 <tr><td><code>a</code> / <code>x</code></td><td>approve / reject what the run waits for (a rejection asks for a reason)</td></tr>
 <tr><td><code>Tab</code></td><td>next tab</td></tr>
+<tr><td><code>g</code></td><td>read the tasks again</td></tr>
 <tr><td><code>q</code></td><td>quit; runs started from the UI are cancelled and stay resumable</td></tr>
 </tbody>
 </table>
 </div>
+<p>The <strong>Trace</strong> tab lists the calls of a run, one per line: <code>seq role subtask tool duration exit err</code> (<code>error</code> when the tool failed, <code>timeout</code>, or <code>no result</code> for a call that never
+returned). While it is shown, <code>↑</code> <code>↓</code> move among the calls instead of the tasks (<code>Tab</code> to
+another tab to select tasks again); the other task keys keep working.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key (Trace tab)</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>↑</code> <code>↓</code></td><td>select a call (in an expanded call or its output: scroll)</td></tr>
+<tr><td><code>[</code> / <code>]</code></td><td>previous / next run, when the task has several</td></tr>
+<tr><td><code>Enter</code></td><td>expand the call: its arguments as JSON and a preview of its output</td></tr>
+<tr><td><code>o</code></td><td>load its complete output from <code>.vibe/tool-output/</code> into a scrollable pane (<code>PgUp</code> <code>PgDn</code>); a note says when it was not traced or is gone, and when the call was paired with its result by order (logs from before 0.5)</td></tr>
+<tr><td><code>Esc</code></td><td>close the output, then collapse the call</td></tr>
+<tr><td><code>g</code></td><td>load the calls again (they are also loaded each time the tab is entered)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Activity</strong> is the feed of every task’s events, oldest first, each prefixed with the task
+number (<code>#003</code>). It opens on the last 200 events and follows new ones.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key (Activity)</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>↑</code> <code>↓</code> (<code>PgUp</code> <code>PgDn</code>)</td><td>select an event; the feed stops following</td></tr>
+<tr><td><code>f</code></td><td>follow the newest event again, or stop</td></tr>
+<tr><td><code>1</code> … <code>7</code></td><td>show or hide agents, tools, phases, git, approvals, budget, logs</td></tr>
+<tr><td><code>Enter</code></td><td>open the event’s task on the Tasks screen</td></tr>
+<tr><td><code>g</code></td><td>load the last 200 events again (also done each time the screen is entered)</td></tr>
+</tbody>
+</table>
+</div>
+<p>A log that cannot be read is reported once in the status line; the other tasks keep coming.</p>
+<p><strong>History</strong> lists the finished tasks (ready and done; <code>a</code> adds failed and cancelled ones) as
+<code>vibe history</code> does: number, title, status, runs, commits, changed files, tokens, active time,
+cost (<code>-</code> without a <code>[pricing]</code> table), with the notation of <code>vibe history</code>: <code>+</code> marks a lower
+bound, <code>~</code> an approximate file count; <code>finished</code> is the end of the last run, else the last
+activity. <code>Enter</code> opens the task: its runs (state, start, duration, tokens), commits, changed
+files (status, where the list comes from, whether it is approximate), validations, last QA
+report and errors; <code>↑</code> <code>↓</code> scroll it and <code>Esc</code> closes it. The list is loaded each time the
+screen is entered; <code>g</code> loads it again.</p>
+<p>History and trace data are loaded in the background on entry, so the screen stays responsive
+on large projects (“Loading…” shows meanwhile).</p>
 <p>The UI reads the same files and events as the other commands, so <code>vibe run</code>, <code>vibe approve</code>
 or <code>vibe cancel</code> in another terminal show up in it. Runs use the project configuration
 (there are no <code>--provider</code> or <code>--model</code> flags; set <code>default_model</code> or <code>[phases]</code>). It needs an
 interactive terminal.</p>
 <h2 id="vibe-serve"><a class="header" href="#vibe-serve"><code>vibe serve</code></a></h2>
-<pre><code class="language-sh">vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR]
+<pre><code class="language-sh">vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--workspace NAME] [--script FILE] [--evals DIR] [--exit-on-stdin-eof]
 </code></pre>
 <p>Serves an HTTP API and a web UI for the project. It prints the address and a link that
 carries the access token (<code>http://127.0.0.1:7777/#token=…</code>); open it in a browser. The web
 UI shows the task board, the selected task with its run, budget, a live activity feed with
-the text as the model writes it, the plan, spec, QA reports and workspace changes, and lets
-you create, run, resume and cancel tasks and approve or reject what a run waits for. With
-<code>--evals DIR</code>, an <strong>Evaluations</strong> view shows every <code>summary.json</code> that
-<code>evals/run_suite.py</code> wrote under <code>DIR</code> (success rate, time, tokens per case and model).</p>
+the text as the model writes it, the plan, spec, QA reports, tool-call trace and workspace
+changes, and lets you create, run, resume and cancel tasks and approve or reject what a run
+waits for. Its views:</p>
+<ul>
+<li><strong>Tasks</strong>: the board and the selected task. Its <strong>Trace</strong> tab lists every tool call of a
+run (role, subtask, tool, duration, exit code, a badge for errors and for calls logged
+before 0.5 that were <code>paired by order</code>); a call expands to its arguments as JSON and its
+output preview, and <strong>Load complete output</strong> fetches the whole traced output. A selector
+picks the run when there are several; the footer counts calls and errors and lists the
+files written.</li>
+<li><strong>Activity</strong>: every task’s events as they happen, with toggles per group of event types
+(agents, tools, phases, git, approvals, budget, logs), a task filter and a pause button.
+Clicking a line opens its task.</li>
+<li><strong>History</strong>: what each finished task delivered (the columns of <code>vibe history</code>), with
+failed and cancelled tasks on demand; a row expands to its runs, commits, changed files
+(with their source and whether the list is approximate), validations, last QA verdict
+and problems.</li>
+<li><strong>Evaluations</strong>: with <code>--evals DIR</code>, every <code>summary.json</code> that <code>evals/run_suite.py</code> wrote
+under <code>DIR</code> (success rate, time, tokens per case and model).</li>
+</ul>
+<p>The page reads one event stream, <code>GET /api/stream</code>, for the whole project; it resumes from
+the last event id when the connection comes back, and polls the task list every 10 s
+(every 2 s while the stream is down) since creating a task is not an event.</p>
 <p>Security: the server listens on the loopback interface by default and then only accepts its
 own host names (<code>127.0.0.1</code>, <code>localhost</code>, <code>[::1]</code>), which blocks DNS rebinding. Every API
 call needs <code>Authorization: Bearer &lt;token&gt;</code>; the token is random per start, printed once and
-written to <code>.vibe/server.token</code> (owner-only on Unix), and removed on exit. Event streams also
-accept <code>?token=</code>, because browsers cannot set headers on them. The API never returns the
+written to <code>.vibe/server.token</code> (owner-only on Unix), and removed on exit. The two event
+streams, <code>/api/stream</code> and <code>/api/tasks/{ref}/stream</code>, also accept <code>?token=</code>, because browsers
+cannot set headers on them; no other route does. The API never returns the
 configuration or keys. <code>--bind</code> with another address prints a warning: anyone who reaches it
 with the token controls the agents. <code>Ctrl-C</code> stops the server and cancels the runs it started
 (they stay resumable).</p>
+<p><code>--exit-on-stdin-eof</code> makes the end of standard input stop the server exactly like <code>Ctrl-C</code>
+(runs cancelled, token file removed, exit code 0). An application that starts <code>vibe serve</code> as
+a child with a pipe on its standard input (the macOS app does) uses it so that the server
+does not outlive it, even when the application is killed or crashes. Without the flag, standard input is not
+read.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -1375,19 +1564,152 @@ with the token controls the agents. <code>Ctrl-C</code> stops the server and can
 <tr><td><code>GET /api/tasks/{ref}/events?after=SEQ&amp;all=bool</code></td><td>logged events</td></tr>
 <tr><td><code>GET /api/evals</code></td><td>evaluation summaries found under <code>--evals</code></td></tr>
 <tr><td><code>GET /api/tasks/{ref}/stream?after=SEQ</code></td><td>server-sent events: logged events after <code>SEQ</code>, then new ones and streamed text; each SSE event is named by its type and carries the envelope, with the sequence number as id</td></tr>
+<tr><td><code>GET /api/events?after=CURSOR&amp;since=TIME&amp;type=T&amp;task=REF&amp;limit=N</code></td><td>logged events of every task as tagged envelopes (<code>{"task", "number", "schema", "seq", "at", "event"}</code>), oldest first, the last <code>N</code> (default 1000, at most 10000) after the filters; see below</td></tr>
+<tr><td><code>GET /api/stream?after=CURSOR&amp;since=TIME&amp;type=T&amp;task=REF</code></td><td>server-sent events of every task: logged events after the starting point, then new ones (tasks created later included) and the streamed text of runs this server started; see below</td></tr>
+<tr><td><code>GET /api/history?all=bool</code></td><td>history of every finished task (<code>vibe history --json</code>); <code>all</code> adds failed and cancelled ones</td></tr>
+<tr><td><code>GET /api/history/{ref}</code></td><td>history of one task, finished or not (<code>vibe history REF --json</code>)</td></tr>
+<tr><td><code>GET /api/tasks/{ref}/trace?run=RUN&amp;all=bool</code></td><td>tool calls of the last run, of the run whose id starts with <code>RUN</code>, or of every run with <code>all</code> (a list), as <code>vibe trace --json</code>; 404 when the task has not been run (where <code>vibe trace --json</code> prints <code>null</code> or <code>[]</code>) or no run matches <code>RUN</code>, 400 when <code>RUN</code> matches several runs or comes with <code>all</code></td></tr>
+<tr><td><code>GET /api/tasks/{ref}/trace/{call}/output</code></td><td>complete output of a call, as <code>text/plain</code>, cut at 8 MiB (then marked at the end and with <code>X-Vibe-Truncated: true</code>); 400 for an id that is not 12 hex digits, 404 when the call is unknown or its output was not traced, is gone or cannot be read</td></tr>
 </tbody>
 </table>
 </div>
-<p><code>{ref}</code> is a task number, directory name or id prefix, as on the command line. Errors are
-<code>{"error": "…"}</code> with 400, 401, 403, 404 or 409.</p>
+<p><code>{ref}</code> is a task number, directory name or id prefix, as on the command line; a prefix
+that matches several tasks is a 400. Errors are <code>{"error": "…"}</code> with 400 (including an
+unknown event type, a malformed cursor, time or limit in <code>/api/events</code> and <code>/api/stream</code>),
+401, 403, 404, 409, or 503 when too many event streams are open.</p>
+<p>Project-wide events are ordered by an <strong>event cursor</strong>, <code>&lt;nanoseconds since the epoch&gt;-&lt;task number&gt;-&lt;seq&gt;</code> (<code>1790000000123456789-3-17</code>): by time, then task, then sequence
+number, so events of two tasks logged at the same instant are neither lost nor repeated on
+resume. In <code>/api/events</code> and <code>/api/stream</code>, <code>after=CURSOR</code> keeps the events after it and
+<code>since=TIME</code> those after that time (RFC 3339, or an age such as <code>30m</code>, <code>2h</code>, <code>1d</code>, as
+<code>vibe events --since</code>); <code>type</code> (an event type) and <code>task</code> (a task
+reference) repeat, and each list keeps events that match one of its values. <code>/api/events</code>
+answers with two headers: <code>X-Vibe-Cursor</code>, the cursor of the last event read before the
+filters (the value to pass as <code>after</code> to go on from there, absent when nothing was read),
+and <code>X-Vibe-Read-Errors</code>, the number of task logs that could not be read (their events are
+missing; the server logs why). In <code>/api/stream</code>, each SSE event is named by its type and
+its data is the tagged envelope; logged events carry their cursor as <code>id</code>, and a client that
+reconnects with <code>Last-Event-ID</code> resumes after it (the header wins over <code>after</code>). Streamed
+text (<code>agent_delta</code>) has no id and is not replayed. Without <code>after</code>, <code>since</code> or
+<code>Last-Event-ID</code>, the stream starts from now. A comment line is sent every 15 s to keep an
+idle connection open. All streams share one reader of the logs, which runs while at least
+one is open; at most 32 streams are open at once (503 beyond).</p>
+<p>Cursor order is the order of the <code>at</code> times each process writes. Events of one task always
+come in order, but a <code>vibe run</code> in another process whose clock reads earlier than the
+server’s can log an event with a cursor below one already sent for another task. An open
+stream still sends it, once, so ids are not always increasing; but a client that was
+disconnected while it was logged and resumes from its last id does not get it, since it
+sorts before that id. Reload the events of a task (<code>/api/tasks/{ref}/events</code>) when its
+state must be exact.</p>
+<p>Trace outputs are only read from <code>.vibe/tool-output/</code>: paths recorded elsewhere are
+ignored, and a file there that is a link leading out of it is answered like a missing
+output (404, the reason in the server’s log).</p>
 <h2 id="vibe-events"><a class="header" href="#vibe-events"><code>vibe events</code></a></h2>
-<pre><code class="language-sh">vibe events &lt;REF&gt; [--after SEQ] [--follow] [--all]
+<pre><code class="language-sh">vibe events &lt;REF&gt; [--after SEQ] [--follow | --all] [--since TIME] [--type TYPE]...
+vibe events [--follow] [--since TIME] [--type TYPE]... [--task REF]...
 </code></pre>
-<p>Replays the logged events of the task’s last run, rendered like <code>vibe run</code> (or as JSON
-envelopes with <code>--json</code>). <code>--after SEQ</code> skips events up to that sequence number,
+<p>With a <code>&lt;REF&gt;</code>, replays the logged events of the task’s last run, rendered like <code>vibe run</code>
+(or as JSON envelopes with <code>--json</code>). <code>--after SEQ</code> skips events up to that sequence number,
 <code>--follow</code> keeps printing new events until the run ends (use it from another terminal while
-<code>vibe run</code> works), and <code>--all</code> shows every run of the task. The envelope and every event
-type are described in <a href="#events-3">Events</a>.</p>
+<code>vibe run</code> works), and <code>--all</code> shows every run of the task.</p>
+<p>Without <code>&lt;REF&gt;</code>, it prints the activity of every task, merged in time order, each line
+prefixed with the task number (<code>#3 ✓ plan: …</code>). <code>--follow</code> prints the events logged from
+now on, including those of tasks created meanwhile, until <code>Ctrl-C</code> (exit code 0); with
+<code>--since</code>, it first prints what was logged since then. With <code>--json</code>, each line is an
+envelope carrying its task: <code>{"task": "&lt;id&gt;", "number": 3, "schema": 2, "seq": …, "at": …, "event": {…}}</code>. A task whose log cannot be read is reported once on standard error and the
+feed goes on with the others.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--since TIME</code></td><td>only events logged after <code>TIME</code>: RFC 3339 (<code>2026-09-27T10:00:00Z</code>) or an age (<code>90s</code>, <code>30m</code>, <code>2h</code>, <code>1d</code>)</td></tr>
+<tr><td><code>--type TYPE</code></td><td>only events of this type (repeatable), e.g. <code>--type run_finished --type committed</code>; an unknown type is an error</td></tr>
+<tr><td><code>--task REF</code></td><td>only the events of this task (repeatable); with <code>&lt;REF&gt;</code> as well, nothing is printed unless <code>&lt;REF&gt;</code> is one of them</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>--after</code> and <code>--all</code> need a <code>&lt;REF&gt;</code>. With <code>--follow</code> and a <code>&lt;REF&gt;</code>, the end of the run stops
+the command even when <code>--type</code> or <code>--since</code> hide the <code>run_finished</code> event; a run that paused
+and was resumed is followed to its new end. As with <code>vibe run</code>, some events are only
+rendered with <code>-v</code> (agent text, <code>committed</code>, <code>artefact_written</code>, subtask integrations without
+conflicts, informational logs): add <code>-v</code>, or use <code>--json</code>,
+to see them when you filter on them. The envelope and
+every event type are described in <a href="#events-3">Events</a>.</p>
+<h2 id="vibe-history"><a class="header" href="#vibe-history"><code>vibe history</code></a></h2>
+<pre><code class="language-sh">vibe history [--all]
+vibe history &lt;REF&gt;
+</code></pre>
+<p>What finished tasks did, read from their event logs, <code>run.json</code> and git (nothing is
+recomputed by a model). <a href="#history-of-finished-work">History of finished work</a> explains each figure and
+where it comes from. Without <code>&lt;REF&gt;</code>, a table of the <code>ready</code> and <code>done</code> tasks, most
+recent first — <code>--all</code> adds <code>failed</code> and <code>cancelled</code> ones:</p>
+<pre><code class="language-text">#  title               status  runs  commits  files  tokens  active      cost      finished
+3  Add OAuth login     done    2     5        7      184.2k  6 min 12 s  1.84 USD  2 h ago
+1  Fix typo in README  ready   1     1        1      2.9k    4.1 s       -         1 d ago
+</code></pre>
+<p><code>tokens</code> counts input plus output tokens of every run, <code>active</code> the time the runs were
+working (pauses excluded); a <code>+</code> on them marks a lower bound: some run was logged before 0.5
+(its totals are unknown) or did not finish. <code>cost</code> is <code>-</code> without a
+<a href="#pricing"><code>[pricing]</code></a> table, or when a model the task used has no price in
+it; a <code>+</code> on it marks a lower bound: some tokens were used outside a finished agent session
+(a session cut by a crash, or calls such as the repair of an invalid structured answer) and
+are not priced.
+<code>files</code> is marked <code>~</code> when the list is approximate.</p>
+<p>With <code>&lt;REF&gt;</code> (any task, finished or not), the detail:</p>
+<ul>
+<li>the task, its branch (the one its run recorded, or the task branch git still has) and its
+totals;</li>
+<li>one block per run: its state (<code>running</code>, <code>finished</code>, or <code>interrupted</code> when the process
+died), when it started, how many times it was resumed, its active time, tokens and cost,
+its phases with their result, the merge, a pending approval and the last error;</li>
+<li>the commits (short sha, first line of the message, number of files, subtask);</li>
+<li>the changed files with their status (<code>A</code>, <code>M</code>, <code>D</code>, <code>R</code>, <code>C</code>, <code>?</code> when unknown) and where
+the list comes from: the recorded merge, the diff of the task branch against its base,
+the commit events, or the files the agents wrote (the last two are marked approximate);</li>
+<li>the validation commands of the last run that ran them, and whether they passed;</li>
+<li>the last QA verdict and its summary;</li>
+<li>problems met while reading (a missing merge commit, an unreadable file).</li>
+</ul>
+<p>With <code>--json</code>, the output is the <code>TaskHistory</code> document (an array of them without <code>&lt;REF&gt;</code>):
+<code>task</code>, <code>number</code>, <code>runs</code> (with <code>state</code>, <code>usage</code>, <code>active_ms</code>, <code>totals_known</code>, <code>phases</code>,
+<code>commits</code>, <code>merged</code>, <code>validations</code>, <code>approvals</code>, <code>last_error</code>), <code>totals</code>, <code>changed_files</code>
+(<code>source</code>, <code>approximate</code>, <code>files</code>), <code>last_qa</code>, <code>validations_passed</code>, <code>cost</code>,
+<code>last_activity</code> and <code>errors</code>.</p>
+<h2 id="vibe-trace"><a class="header" href="#vibe-trace"><code>vibe trace</code></a></h2>
+<pre><code class="language-sh">vibe trace &lt;REF&gt; [--run RUN | --all] [--tool NAME] [--subtask ID] [--full]
+</code></pre>
+<p>The tool calls of the task’s last run (<code>--run</code> picks another by id or id prefix, <code>--all</code>
+shows every run), in the order they were made. <a href="#tool-call-trace">Tool call trace</a> describes the
+trace store, its disk usage and what it may contain. Each call is a block:</p>
+<pre><code class="language-text">#4 coder · subtask 1/2 Write hello.txt · write_file  2 ms  ok  [call 5f0c2a9e1b7d]
+    {
+      "content": "Hello, world!\n",
+      "path": "hello.txt"
+    }
+  ⟵ output
+    Created `hello.txt` (14 bytes).
+</code></pre>
+<p>The number is the call’s position in the run (it stays the same when filters hide other
+calls), then the agent role, the subtask, the tool, the duration and the result: <code>ok</code>,
+<code>exit N</code> for commands, <code>error</code>, <code>timed out</code>, or <code>no result</code> for a call that never returned
+(the run was interrupted). The call id pairs the call with its result; logs recorded before
+0.5 have none (<code>-</code>) and are paired by order, which is shown as <code>paired: by order</code>. Errors
+are shown in red.</p>
+<p>The arguments are printed as JSON, with strings longer than 2 000 characters cut. The
+output is the preview logged with the event; <code>--full</code> prints the complete arguments and the
+complete output from the trace store (<code>.vibe/tool-output/</code>, see
+<a href="#pipeline"><code>pipeline.trace_outputs</code></a>), or says why it is not there: tracing was off
+or the run predates 0.5, or the file was removed (<code>vibe task discard</code>, manual cleanup). A
+footer counts the calls and the errors and lists the files written by <code>write_file</code> and
+<code>edit_file</code>.</p>
+<p><code>--tool</code> and <code>--subtask</code> (id or id prefix) keep only the matching calls. With <code>--json</code>, the
+output is the <code>RunTrace</code> document — <code>run</code>, <code>calls</code> (each with <code>run</code>, <code>call</code>, <code>role</code>,
+<code>subtask</code>, <code>tool</code>, <code>input</code>, <code>called_at</code>, <code>returned_at</code>, <code>duration_ms</code>, <code>is_error</code>,
+<code>exit_code</code>, <code>timed_out</code>, <code>preview</code>, <code>output_chars</code>, <code>output_file</code>, <code>paired</code>) and
+<code>files_written</code> — or an array of them with <code>--all</code>; <code>--full</code> does not change it (read
+<code>output_file</code> for the complete output). A task that has not been run prints <code>Task has not been run yet.</code>
+(<code>null</code>, or <code>[]</code> with <code>--all</code>, with <code>--json</code>).</p>
 <h2 id="vibe-status"><a class="header" href="#vibe-status"><code>vibe status</code></a></h2>
 <pre><code class="language-sh">vibe status
 </code></pre>
@@ -1476,14 +1798,263 @@ a run fails before its first phase.</p>
 </code></pre>
 <p>Prints a completion script for <code>bash</code>, <code>zsh</code>, <code>fish</code>, <code>elvish</code> or <code>powershell</code>. Installation
 is shown in <a href="#shell-completions">Installation</a>.</p>
+<h2 id="exit-codes"><a class="header" href="#exit-codes">Exit codes</a></h2>
+<p>Every command exits with <code>0</code> when it did what was asked and <code>1</code> when it failed: an unknown
+task reference or run, a bad configuration, a storage or git error, a <code>--run</code> or
+<code>--subtask</code> prefix that matches nothing or several ids. A usage error (an unknown option,
+an invalid value such as an unknown <code>--type</code>, conflicting options) exits with <code>2</code> before
+anything runs. <code>vibe run</code> has its own codes (above): <code>2</code> there also means the run paused for
+a human, and <code>130</code> that it was cancelled. <code>vibe doctor</code> and <code>vibe plugins check</code> exit with
+<code>1</code> when a check fails. <code>vibe history</code>, <code>vibe trace</code>, <code>vibe events</code> and JSON documents exit with
+<code>0</code> when their output is closed early (<code>vibe history | head</code>).</p>
 <h2 id="json-output"><a class="header" href="#json-output">JSON output</a></h2>
 <p><code>--json</code> replaces human-oriented output with one JSON document on standard output, suitable
 for scripts; logs still go to standard error. Field names follow the persisted types
 (<a href="#domain-model">Domain model</a>) and statuses are the <code>snake_case</code> names listed
 above. <code>task add</code> prints <code>number</code>, <code>id</code>, <code>dir</code> and <code>task</code>; <code>task list</code> an array of
 <code>{number, task}</code>; <code>task show</code> the <code>number</code>, <code>task</code>, <code>dir</code>, <code>spec</code>, <code>plan</code>, <code>qa_reports</code>,
-<code>run</code> and <code>worktree</code> (branch, path and whether each exists); <code>init</code> the paths it wrote.
-<code>vibe run --json</code> is the exception: a stream of events, one per line, then the summary.</p>
+<code>run</code> and <code>worktree</code> (branch, path and whether each exists); <code>history</code> the <code>TaskHistory</code>
+documents and <code>trace</code> the <code>RunTrace</code> documents described above; <code>init</code> the paths it wrote.
+<code>vibe run --json</code> and <code>vibe events --json</code> are the exceptions: a stream of events, one per
+line (then the summary for <code>vibe run</code>).</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="history-of-finished-work"><a class="header" href="#history-of-finished-work">History of finished work</a></h1>
+<p><code>vibe history</code> answers “what did the agents deliver, and what did it cost?” for every task,
+long after the run that did the work. Nothing is asked of a model and nothing extra is
+stored: the history is rebuilt each time from what the runs already left in <code>.vibe/</code> and in
+git (<a href="#adr-008-trace-store-and-read-layer">ADR-008</a>).</p>
+<h2 id="the-table"><a class="header" href="#the-table">The table</a></h2>
+<pre><code class="language-sh">vibe history            # ready and done tasks, most recent first
+vibe history --all      # failed and cancelled tasks too
+</code></pre>
+<pre><code class="language-text">#  title                      status  runs  commits  files  tokens  active  cost  finished
+2  Write the greeting module  done    1     1        1      6.7k    251 ms  -     just now
+1  Fix typo in README         done    1     0        0      2.9k    187 ms  -     just now
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Column</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>runs</code></td><td>runs of the task; a run and its resumes count once</td></tr>
+<tr><td><code>commits</code></td><td>commits the pipeline made for the task (checkpoints, subtasks, fixes, integrations)</td></tr>
+<tr><td><code>files</code></td><td>files the task changed, <code>~</code> when the list is approximate (see below)</td></tr>
+<tr><td><code>tokens</code></td><td>input plus output tokens of every run, resumes included</td></tr>
+<tr><td><code>active</code></td><td>time the runs were working, pauses excluded</td></tr>
+<tr><td><code>cost</code></td><td>money spent, only with a <a href="#pricing"><code>[pricing]</code></a> table; <code>-</code> otherwise</td></tr>
+<tr><td><code>finished</code></td><td>end of the last run, else the last activity</td></tr>
+</tbody>
+</table>
+</div>
+<p>A <code>+</code> after <code>tokens</code>, <code>active</code> or <code>cost</code> marks a lower bound: a run was logged before 0.5,
+whose totals are unknown, or has not finished, or some tokens were used outside a finished
+agent session and are not priced. A legend under the table repeats this when it applies.</p>
+<h2 id="one-task-in-detail"><a class="header" href="#one-task-in-detail">One task in detail</a></h2>
+<pre><code class="language-sh">vibe history 2
+</code></pre>
+<pre><code class="language-text">#2 Write the greeting module
+  status    done
+  branch    vibe/write-the-greeting-module-6fed323c
+  tokens    6.3k in / 365 out
+  active    251 ms
+  activity  just now
+
+Runs (1)
+  4ef9f554 finished → done, started just now
+    251 ms active, 6.3k in / 365 out tokens
+    phases  assess ✓  spec ✓  plan ✓  build ✓  qa ✓  merge ✓
+    merged  vibe/write-the-greeting-module-6fed323c into main (62a82acb)
+
+Commits (1)
+  62a82acb  vibe: complete subtask 1 - Implement the task (1 file(s)) · subtask 1/1 Implement the task
+
+Files (1) from merge 62a82acb (fast-forward)
+  A  hello.txt
+
+QA round 1: approved, 0 issue(s)
+  Approved by the mock provider.
+</code></pre>
+<p>Any task can be shown, finished or not. Each run shows its state: <code>finished</code>, <code>running</code>
+when a process holds the task’s run lock, or <code>interrupted</code> when the process died before the
+run ended (<code>vibe run &lt;REF&gt; --resume</code> continues it). The detail ends with the validation
+commands of the last run that ran them, the last QA verdict, and the problems met while
+reading (a merge commit git no longer has, a file that does not parse), if any.</p>
+<h2 id="where-the-data-comes-from"><a class="header" href="#where-the-data-comes-from">Where the data comes from</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Part</th><th>Source</th></tr>
+</thead>
+<tbody>
+<tr><td>runs, phases, approvals, errors</td><td>the <code>run_started</code> … <code>run_finished</code> events of <code>events.jsonl</code>; <code>run.json</code> completes the last run</td></tr>
+<tr><td>tokens, active time</td><td>the totals of each run’s last <code>run_finished</code> (resumes included); <code>run.json</code> for the last run when its log predates 0.5 or it has not finished</td></tr>
+<tr><td>commits</td><td>the <code>committed</code> events (and <code>subtask_integrated</code> for older logs)</td></tr>
+<tr><td>merge</td><td>the <code>merged</code> event</td></tr>
+<tr><td>validations</td><td>the <code>validation_finished</code> events</td></tr>
+<tr><td>QA verdict</td><td>the last <code>qa_report_&lt;n&gt;.json</code></td></tr>
+<tr><td>changed files</td><td>git, else the events (below)</td></tr>
+<tr><td>cost</td><td>the <code>agent_started</code> model and <code>agent_finished</code> usage of each session, and <code>[pricing]</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="changed-files-and-the-approximate-marker"><a class="header" href="#changed-files-and-the-approximate-marker">Changed files and the <code>approximate</code> marker</a></h3>
+<p>The list of changed files comes from the most exact source available, and the detail says
+which one it used (<code>from …</code>):</p>
+<ol>
+<li><strong>the recorded merge</strong> (<code>merge &lt;sha&gt;</code>): the files the merge brought into the base
+branch. A fast-forward is compared from where the task’s first recorded commit started;</li>
+<li><strong>the task branch</strong> (<code>diff of &lt;branch&gt; against &lt;base&gt;</code>), while it exists and differs from
+its base;</li>
+<li><strong>the commit events</strong> (<code>commit events</code>): every file of every <code>committed</code> event, statuses
+unknown;</li>
+<li><strong>the files written by the agents</strong> (<code>files written by the agents</code>): paths passed to
+<code>write_file</code> and <code>edit_file</code> calls that succeeded;</li>
+<li><code>nothing recorded</code>.</li>
+</ol>
+<p>Sources 3 and 4 are <strong>approximate</strong>: they can list a file a later commit reverted, and the
+fourth misses files that shell commands wrote. The first is approximate in one case: a
+fast-forward that contains none of the task’s recorded commits. Approximate lists are
+marked <code>~</code> in the table and <code>approximate</code> in the detail. Statuses are <code>A</code> added, <code>M</code>
+modified, <code>D</code> deleted, <code>R</code> renamed, <code>C</code> copied, <code>?</code> unknown. The rules are detailed in
+<a href="#reading-the-store-the-read-layer">Persistence layout</a>.</p>
+<p>A project outside git, or a task run with the <code>in_place</code> workspace, has no branch to diff:
+its files come from the events.</p>
+<h2 id="tokens-time-and-cost"><a class="header" href="#tokens-time-and-cost">Tokens, time and cost</a></h2>
+<p>Tokens and active time are always shown. A money cost is shown only when you give prices:</p>
+<pre><code class="language-toml">[pricing."anthropic/claude-sonnet-5"]
+input = 3.0
+output = 15.0
+cache_read = 0.3
+cache_write = 3.75
+</code></pre>
+<p>The cost of a task is computed only when every agent session it ran used a model with a
+price that covers its tokens; otherwise it is <code>-</code>, never an estimate. Matching rules and the
+cases that make a cost a lower bound are in <a href="#pricing"><code>[pricing]</code></a>.</p>
+<h2 id="json-and-other-interfaces"><a class="header" href="#json-and-other-interfaces">JSON and other interfaces</a></h2>
+<p><code>vibe --json history</code> prints an array of <code>TaskHistory</code> documents, <code>vibe --json history &lt;REF&gt;</code>
+one of them; the fields are listed in the
+<a href="#vibe-history">command line reference</a>. The same documents are served by
+<code>GET /api/history?all=bool</code> and <code>GET /api/history/{ref}</code> (<a href="#vibe-serve"><code>vibe serve</code></a>),
+shown by the <strong>History</strong> view of the web UI (a table whose rows expand to the detail) and by
+the <strong>History</strong> screen of <code>vibe tui</code> (<code>H</code>). Clients of <code>vibe serve</code>, such as the macOS app
+in <a href="https://github.com/vincentlauriat/vibe-factory/tree/main/apps/macos/VibeFactory"><code>apps/macos/VibeFactory</code></a>,
+read the same routes.</p>
+<p>To see <em>how</em> a run got there, call by call, use <a href="#tool-call-trace"><code>vibe trace</code></a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tool-call-trace"><a class="header" href="#tool-call-trace">Tool call trace</a></h1>
+<p><code>vibe trace</code> shows how a run did its work: every tool call an agent made, with its complete
+arguments, how long it took, how it ended, and its output. It is the answer to “which
+command failed, and what did it print?” once the live output of <code>vibe run</code> is gone.</p>
+<h2 id="reading-a-trace"><a class="header" href="#reading-a-trace">Reading a trace</a></h2>
+<pre><code class="language-sh">vibe trace 2                     # the last run of task 2
+vibe trace 2 --full              # with complete arguments and outputs
+vibe trace 2 --tool bash         # only the shell commands
+vibe trace 2 --all               # every run of the task
+vibe trace 2 --run 4ef9          # one run, by id or id prefix
+vibe trace 2 --subtask 7c1e      # the calls made for one subtask
+</code></pre>
+<pre><code class="language-text">── run 4ef9f554 ──────────
+
+#1 coder · subtask 1/1 Implement the task · write_file  1 ms  ok  [call 2e5c7f564a52]
+    {
+      "content": "Hello, world!\n",
+      "path": "hello.txt"
+    }
+  ⟵ output
+    Created `hello.txt` (14 bytes).
+
+#2 coder · subtask 1/1 Implement the task · bash  7 ms  error, exit 1  [call 4b5fd969429a]
+    {
+      "command": "cat hello.txt; ls nope"
+    }
+  ⟵ output
+    Hello, world!
+    ls: nope: No such file or directory
+
+    Exit code: 1
+
+2 call(s), 1 error(s)
+files written: hello.txt
+</code></pre>
+<p>Each block starts with the call’s position in the run, the agent role, the subtask (its
+position and title in the plan), the tool, the duration and the result: <code>ok</code>, <code>exit N</code> for a
+command, <code>error</code>, <code>timed out</code>, or <code>no result</code> when the run was interrupted before the tool
+returned. The call id at the end pairs the call with its result. The footer counts the calls
+and errors and lists the files written by <code>write_file</code> and <code>edit_file</code>. The options are
+described in the <a href="#vibe-trace">command line reference</a>.</p>
+<p>Without <code>--full</code>, the output is the 200-character preview logged with the event, and
+strings longer than 2 000 characters in the arguments are cut. <code>--full</code> reads the complete
+output from the trace store and prints the arguments whole.</p>
+<h2 id="the-trace-store"><a class="header" href="#the-trace-store">The trace store</a></h2>
+<p>While a run works, the complete output of every tool call is written to</p>
+<pre><code class="language-text">.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt
+</code></pre>
+<p>at the project root, for example
+<code>.vibe/tool-output/002-write-the-greeting-module/4ef9f554-…/4b5fd969429a.txt</code>. The
+<code>tool_returned</code> event records that path (<code>output_file</code>) and the length of the complete
+output (<code>output_chars</code>), so the log stays small and the output stays one read away
+(<a href="#trace-store">Events</a>).</p>
+<p>Two settings control it (<a href="#pipeline"><code>[pipeline]</code></a>):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Default</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>trace_outputs</code></td><td><code>true</code></td><td>write the store; <code>false</code> keeps only the previews in the log</td></tr>
+<tr><td><code>trace_max_chars</code></td><td><code>100000</code></td><td>characters kept per call; a longer output is cut and ends with <code>[vibe: output cut to the first N of M characters]</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The store is independent of what the model sees. An output longer than the runner’s limit
+is still truncated for the model, and its complete text is also written in the workspace
+(<code>&lt;workspace&gt;/.vibe/tool-output/&lt;uuid&gt;.txt</code>) where the agent can read it, so such outputs
+exist twice.</p>
+<h3 id="disk-usage"><a class="header" href="#disk-usage">Disk usage</a></h3>
+<p>The store grows with what the tools print: at most <code>trace_max_chars</code> characters per call,
+usually far less (a <code>write_file</code> result is one line; a test suite’s output can reach the
+cap). Nothing is removed automatically. To see and reclaim the space:</p>
+<pre><code class="language-sh">du -sh .vibe/tool-output/*/                      # per task
+rm -rf .vibe/tool-output/002-write-the-greeting-module/&lt;run&gt;   # one run's outputs
+vibe task discard 2 --yes                        # the task, its workspace and its outputs
+</code></pre>
+<p>Removing files only affects <code>--full</code> and the complete output in the other interfaces:
+<code>vibe trace</code> then says the output file is missing and shows the preview. Lower
+<code>trace_max_chars</code> to keep less per call, or set <code>trace_outputs = false</code> to stop writing the
+store.</p>
+<h2 id="privacy"><a class="header" href="#privacy">Privacy</a></h2>
+<p>Tool outputs can contain secrets: a command that prints an environment variable, a
+configuration file an agent read, a token in an error message. The trace store stays on
+your machine: <code>vibe init</code> puts <code>tool-output/</code> in <code>.vibe/.gitignore</code>, so it is never
+committed, and nothing sends it anywhere.</p>
+<p>Two things are worth knowing:</p>
+<ul>
+<li>the event log, <code>.vibe/tasks/*/events.jsonl</code>, is committed with the task by default
+(<code>tasks/</code> is project history on purpose), and it holds each call’s complete <strong>arguments</strong>
+and the 200-character <strong>preview</strong> of its output. Add <code>tasks/*/events.jsonl</code> to
+<code>.vibe/.gitignore</code> if that is too much to share
+(<a href="#what-to-commit">What to commit</a>);</li>
+<li><code>vibe serve</code> returns complete outputs (<code>GET /api/tasks/{ref}/trace/{call}/output</code>) to
+anyone holding its token. It listens on the loopback interface by default; with another
+<code>--bind</code> address, anyone who can reach it with the token can read them.</li>
+</ul>
+<h2 id="logs-recorded-before-05"><a class="header" href="#logs-recorded-before-05">Logs recorded before 0.5</a></h2>
+<p>Runs logged by an earlier version have no call ids and no stored outputs. <code>vibe trace</code>
+pairs their calls with their results by order, per role, tool and subtask, and shows
+<code>paired: by order</code>; <code>--full</code> reports that the output was not traced and shows the preview.</p>
+<h2 id="json-and-other-interfaces-1"><a class="header" href="#json-and-other-interfaces-1">JSON and other interfaces</a></h2>
+<p><code>vibe --json trace &lt;REF&gt;</code> prints the <code>RunTrace</code> document (an array of them with <code>--all</code>):
+<code>run</code>, <code>calls</code> and <code>files_written</code>, each call with its arguments, times, result, preview,
+<code>output_chars</code> and <code>output_file</code>. <code>--full</code> does not change it; read <code>output_file</code> for the
+complete output. The same documents are served by <code>GET /api/tasks/{ref}/trace</code> and the
+complete output by <code>GET /api/tasks/{ref}/trace/{call}/output</code>
+(<a href="#vibe-serve"><code>vibe serve</code></a>). The web UI shows them in the <strong>Trace</strong> tab of a task
+(a call expands to its arguments and output; <strong>Load complete output</strong> fetches the whole
+text), and <code>vibe tui</code> in the <strong>Trace</strong> tab of the task detail (<code>Enter</code> expands a call, <code>o</code>
+loads its complete output).</p>
+<p>For what the task delivered in the end (commits, changed files, tokens, cost), see
+<a href="#history-of-finished-work">History</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="providers-and-models-1"><a class="header" href="#providers-and-models-1">Providers and models</a></h1>
 <p>A <strong>provider</strong> is a model back-end: Anthropic, any API speaking the OpenAI Chat Completions
@@ -2085,7 +2656,7 @@ git worktree prune
 </code></pre>
 <p>Discarding is idempotent: a worktree or branch that is already gone is not an error. The
 framework refuses to discard a workspace whose root is the project itself.</p>
-<h2 id="disk-usage"><a class="header" href="#disk-usage">Disk usage</a></h2>
+<h2 id="disk-usage-1"><a class="header" href="#disk-usage-1">Disk usage</a></h2>
 <p>Each worktree is a full checkout of your tracked files (the object database is shared, so
 history is not duplicated), plus whatever the agents build inside it: <code>target/</code>,
 <code>node_modules/</code>, virtual environments. On large projects, budget one working copy and one
@@ -2429,11 +3000,15 @@ vibe doctor              # environment, configuration, keys, plugins
 <tr><td><code>.vibe/tasks/NNN-slug/events.jsonl</code></td><td>every event of every run: tool calls with their input, tool results, retries, agent stops</td></tr>
 <tr><td><code>.vibe/tasks/NNN-slug/plan.md</code></td><td>each subtask’s status, attempts and notes</td></tr>
 <tr><td><code>.vibe/tasks/NNN-slug/qa_report_&lt;n&gt;.md</code></td><td>the issues of each QA round</td></tr>
+<tr><td><code>vibe history &lt;ref&gt;</code></td><td>what each run did: phases, commits, changed files, validations, QA verdict, errors (<a href="#history-of-finished-work">History</a>)</td></tr>
+<tr><td><code>vibe trace &lt;ref&gt; [--full]</code></td><td>every tool call of a run with its arguments, exit code and complete output (<a href="#tool-call-trace">Tool call trace</a>)</td></tr>
+<tr><td><code>vibe events --since 1h</code></td><td>the recent activity of every task, in time order</td></tr>
 <tr><td>standard error with <code>-v</code>, <code>-vv</code>, <code>-vvv</code></td><td>logs at info, debug, trace level; <code>RUST_LOG</code> overrides</td></tr>
 </tbody>
 </table>
 </div>
-<pre><code class="language-sh">jq -r 'select(.event.type == "tool_returned" and .event.is_error) | "\(.event.tool): \(.event.preview)"' \
+<pre><code class="language-sh">vibe trace 3 --tool bash --full      # every shell command of the last run, with its output
+jq -r 'select(.event.type == "tool_returned" and .event.is_error) | "\(.event.tool): \(.event.preview)"' \
   .vibe/tasks/003-*/events.jsonl
 RUST_LOG=vibe_agents=debug,vibe_plugins=debug vibe run 3 --resume 2&gt; run.log
 </code></pre>
@@ -2590,6 +3165,68 @@ subtasks or QA fail.</p>
 remove the program from <code>blocked_commands</code>, or add it to <code>allowed_commands</code> if you use an
 allowlist. System administration programs (<code>sudo</code>, <code>mount</code>, …) are always blocked. The rules
 are listed in <a href="#tools-and-security">Tools and security</a>.</p>
+<h2 id="vibe-says-your-home-directory-is-not-a-git-repository"><a class="header" href="#vibe-says-your-home-directory-is-not-a-git-repository"><code>vibe</code> says your home directory is not a git repository</a></h2>
+<pre><code class="language-text">error: /Users/me is not a git repository: run `git init`, or use `--workspace in_place`
+</code></pre>
+<p><strong>Cause.</strong> Before 0.4.0, <code>vibe</code> looked for the nearest parent holding a <code>.vibe</code> directory
+without limit, and a <code>~/.vibe</code> left by another tool made it take your home directory for the
+project. Since 0.4.0 the search stops at the git repository and never climbs up to the home
+directory; running <code>vibe</code> from the home directory itself still uses it, like any other
+directory.</p>
+<p><strong>Fix.</strong> Check which binary runs (<code>vibe --version</code>, <code>which -a vibe</code>) and reinstall if it is
+older than 0.4.0. With a current version, the project is the directory you are in (or the
+nearest parent with <code>.vibe</code> inside the same repository): run <code>vibe</code> from inside the
+repository, or name it with <code>-C &lt;dir&gt;</code>. The other tool’s <code>~/.vibe</code> does not need to be
+removed.</p>
+<h2 id="vibetool-output-keeps-growing"><a class="header" href="#vibetool-output-keeps-growing"><code>.vibe/tool-output/</code> keeps growing</a></h2>
+<p><strong>Cause.</strong> The trace store keeps the complete output of every tool call of every run, up to
+<code>pipeline.trace_max_chars</code> characters per call (100 000 by default), and nothing removes it
+automatically. Long test suites and verbose builds fill it fastest.</p>
+<p><strong>Fix.</strong></p>
+<pre><code class="language-sh">du -sh .vibe/tool-output/*/                  # which tasks use the space
+vibe task discard 3 --yes                   # a task you no longer need, with its outputs
+rm -rf .vibe/tool-output/003-*/&lt;run&gt;        # the outputs of one old run only
+</code></pre>
+<p>To keep less, lower <code>pipeline.trace_max_chars</code>; to keep nothing but the previews in the log,
+set <code>pipeline.trace_outputs = false</code>. Removed outputs only make <code>vibe trace --full</code> fall back
+to the preview. The directory is ignored by git. Details in
+<a href="#disk-usage">Tool call trace</a>.</p>
+<h2 id="a-vibe-serve-started-by-an-application-is-still-running"><a class="header" href="#a-vibe-serve-started-by-an-application-is-still-running">A <code>vibe serve</code> started by an application is still running</a></h2>
+<pre><code class="language-text">error: cannot listen on 127.0.0.1:7777
+  caused by: Address already in use (os error 48)
+</code></pre>
+<p><strong>Cause.</strong> An application (an editor, the macOS app, a script) started <code>vibe serve</code> as a
+child process and died without stopping it, for example after a crash or a <code>kill -9</code>. The
+orphan server keeps its port, its token file <code>.vibe/server.token</code>, and possibly runs.</p>
+<p><strong>Fix.</strong> Find it and stop it with <code>SIGINT</code>, which cancels its runs cleanly (they stay
+resumable) and removes the token file:</p>
+<pre><code class="language-sh">pgrep -fl "vibe.*serve"
+kill -INT &lt;pid&gt;
+</code></pre>
+<p>An application that starts <code>vibe serve</code> should pass <code>--exit-on-stdin-eof</code> and keep a pipe
+on the child’s standard input: when the application ends, however it ends, the pipe closes
+and the server stops as on <code>Ctrl-C</code>. The macOS app does this. For a server you start by
+hand, <code>--port 0</code> picks a free port.</p>
+<h2 id="vibe-history-shows---or--"><a class="header" href="#vibe-history-shows---or--"><code>vibe history</code> shows <code>~</code>, <code>+</code> or <code>-</code></a></h2>
+<pre><code class="language-text">#  title          status  runs  commits  files  tokens  active      cost  finished
+4  Add a cache    done    2     3        5~     84.1k+  3 min 10 s+ -     2 d ago
+</code></pre>
+<p>These marks are not errors:</p>
+<ul>
+<li><strong><code>~</code> on files</strong>: the list of changed files is approximate. The task branch is gone and
+no merge was recorded, so the list comes from the commit events or from the files the
+agents wrote. <code>vibe history &lt;ref&gt;</code> names the source.</li>
+<li><strong><code>+</code> on tokens or active time</strong>: a lower bound. A run was logged before 0.5 (its totals
+are unknown) or has not finished; <code>vibe history &lt;ref&gt;</code> shows which run.</li>
+<li><strong><code>+</code> on the cost</strong>: some tokens were used outside a finished agent session (a session cut
+by a crash, or the repair of an invalid structured answer) and are not priced.</li>
+<li><strong><code>-</code> as the cost</strong>: there is no <a href="#pricing"><code>[pricing]</code></a> table, or a model
+the task used has no price in it (a local model needs a price of zero), or the task ran
+before 0.5 and its models are not recorded.</li>
+</ul>
+<p>The detail also lists <strong>problems</strong> met while reading, such as a merge commit that git no
+longer has (after a rebase or a garbage collection): the history then falls back to the next
+source. See <a href="#changed-files-and-the-approximate-marker">History</a>.</p>
 <h2 id="windows-specifics"><a class="header" href="#windows-specifics">Windows specifics</a></h2>
 <ul>
 <li>Shell commands run through <code>cmd /C</code> but are validated with POSIX shell rules, so <code>cmd</code>
@@ -2627,12 +3264,107 @@ again. <code>--from</code> starts a new run that reuses the files already on dis
 <code>plan.json</code> if you want them regenerated rather than reused by later phases.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="upgrading-1"><a class="header" href="#upgrading-1">Upgrading</a></h1>
+<h2 id="from-04-to-05"><a class="header" href="#from-04-to-05">From 0.4 to 0.5</a></h2>
+<p>Version 0.5 is about seeing everything that was done: the history of finished work, the
+activity of every task in one feed, the complete trace of each tool call, and a native macOS
+app on <code>vibe serve</code>. Existing <code>.vibe/config.toml</code> files keep working, and runs started with
+0.4 can be resumed with 0.5.</p>
+<h3 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h3>
+<p>Once 0.5.0 is released:</p>
+<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.0 vibe-cli --force
+vibe --version    # vibe 0.5.0
+vibe doctor
+</code></pre>
+<p>Nothing on disk needs converting and the event schema stays <code>2</code>: 0.5 only adds optional
+fields and two event types (<code>committed</code>, <code>merged</code>), which older clients must ignore anyway.
+Logs written by 0.4 still load, with what they lack shown as such: <code>vibe trace</code> pairs their
+tool calls with their results by order (<code>paired: by order</code>) and has only the 200-character
+previews of their outputs, and <code>vibe history</code> marks their token and time totals as lower
+bounds (<code>+</code>) unless <code>run.json</code> still describes the run, and shows no cost for them (their
+model is not recorded). See <a href="#logs-recorded-before-05-1">Logs recorded before 0.5</a>.</p>
+<p><code>task.json</code> gains a <code>branch</code> field, recorded the next time a run opens the task’s workspace.
+Until then <code>vibe pr</code>, <code>vibe task show</code> and <code>vibe task discard</code> compute the branch from the
+title as before.</p>
+<h3 id="behaviour-that-changes-by-default"><a class="header" href="#behaviour-that-changes-by-default">Behaviour that changes by default</a></h3>
+<p><strong>Complete tool outputs are kept.</strong> Every tool call’s output is written to
+<code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code>, at most 100 000 characters per call, so the
+directory grows with every run. It is ignored by git (<code>vibe init</code> has always put
+<code>tool-output/</code> in <code>.vibe/.gitignore</code>; check that yours has it), removed per task by
+<code>vibe task discard</code>, and can be limited or turned off:</p>
+<pre><code class="language-toml">[pipeline]
+trace_max_chars = 20_000    # keep less per call
+trace_outputs = false       # or keep nothing but the previews in the log
+</code></pre>
+<p>Outputs may contain secrets printed by tools; they never leave your machine. See
+<a href="#disk-usage">Tool call trace</a> for disk usage and privacy.</p>
+<p><strong><code>vibe events &lt;REF&gt; --follow</code> follows a resumed run to its end.</strong> It used to stop at the
+<code>run_finished</code> left by an earlier pause of the same run. It also stops at the end of the run
+when <code>--after</code> (or the new <code>--type</code> and <code>--since</code>) hides the <code>run_finished</code> event, where an
+<code>--after</code> beyond it used to follow forever.</p>
+<p><strong>The web UI reads one event stream.</strong> The page opens a single <code>GET /api/stream</code> for the
+whole project (after loading the recent events with <code>GET /api/events</code>) instead of one
+stream per selected task. The per-task routes (<code>/api/tasks/{ref}/events</code> and
+<code>/api/tasks/{ref}/stream</code>) are unchanged, so the VS Code extension and other clients keep
+working. A task reference that matches several tasks is now answered with 400 instead of
+500 on every route.</p>
+<p><strong><code>vibe tui</code></strong> has three screens (<code>T</code> Tasks, <code>A</code> Activity, <code>H</code> History) and a <strong>Trace</strong> tab.
+<code>Esc</code> still quits from the Tasks board; on the other screens it closes what is open and
+goes back. In the Trace tab, <code>↑</code> <code>↓</code> select calls instead of tasks.</p>
+<h3 id="new-settings"><a class="header" href="#new-settings">New settings</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>What it does</th><th>Page</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pipeline.trace_outputs</code></td><td>keep the complete output of every tool call (default <code>true</code>)</td><td><a href="#tool-call-trace">Tool call trace</a></td></tr>
+<tr><td><code>pipeline.trace_max_chars</code></td><td>characters kept per call (default <code>100000</code>)</td><td>same</td></tr>
+<tr><td><code>[pricing."&lt;provider&gt;/&lt;model&gt;"]</code></td><td>prices per million tokens, to show a cost in the history (none by default)</td><td><a href="#pricing"><code>[pricing]</code></a></td></tr>
+</tbody>
+</table>
+</div>
+<p>New commands and options: <code>vibe history [REF] [--all]</code>, <code>vibe trace &lt;REF&gt;</code>, <code>vibe events</code>
+without a task (with <code>--since</code>, <code>--type</code>, <code>--task</code>, <code>--follow</code>), <code>--since</code> and <code>--type</code> for
+<code>vibe events &lt;REF&gt;</code>, and <code>vibe serve --exit-on-stdin-eof</code>. New server routes:
+<code>GET /api/events</code>, <code>GET /api/stream</code>, <code>GET /api/history[/{ref}]</code>,
+<code>GET /api/tasks/{ref}/trace</code> and <code>GET /api/tasks/{ref}/trace/{call}/output</code>; see
+<a href="#vibe-serve"><code>vibe serve</code></a>.</p>
+<h3 id="the-macos-app"><a class="header" href="#the-macos-app">The macOS app</a></h3>
+<p><code>apps/macos/VibeFactory</code> is a SwiftUI client of <code>vibe serve</code> for macOS 14 and later. It
+starts <code>vibe serve --exit-on-stdin-eof</code> for the project it opens, so it needs the 0.5
+<code>vibe</code> on the machine. It is built from source for now (its README explains how); a signed
+DMG comes with its first release.</p>
+<h3 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h3>
+<p>The Rust API is pre-1.0 and 0.5 changes it in a few places. Code that only uses the <code>vibe</code>
+command line is not affected.</p>
+<ul>
+<li><code>vibe_core::Event</code> has two new variants, <code>Committed</code> and <code>Merged</code>, and new fields:
+<code>AgentStarted::model</code>, <code>ToolCalled::{call, subtask}</code>,
+<code>ToolReturned::{call, subtask, exit_code, timed_out, output_chars, output_file}</code> and
+<code>RunFinished::{usage, active_ms, started_at}</code>. A <code>match</code> needs the new cases (or a
+wildcard) and <code>..</code> in struct patterns; code that builds these events must fill the fields.
+<code>vibe_core::CallId</code> identifies a tool call.</li>
+<li><code>Task</code> has a new <code>branch</code> field, <code>PipelineConfig</code> new <code>trace_outputs</code> and
+<code>trace_max_chars</code> fields, and <code>VibeConfig</code> a <code>pricing</code> table of <code>ModelPrice</code>: use
+<code>..Default::default()</code> rather than full struct literals.</li>
+<li><code>vibe_agents::ToolTrace</code> and <code>AgentRunner::tool_trace</code> write the complete output of each
+call; <code>RunContext</code> has a new <code>tool_trace</code> field and <code>RunContext::commit</code> takes the
+subtask the commit belongs to (<code>None</code> for checkpoints and fixes).</li>
+<li><code>PipelineStore</code> has three new methods with defaults, <code>task_dir_name</code>, <code>task_numbers</code> and
+<code>is_running</code>; implement them in a custom store to name trace directories after the task
+and to report running tasks.</li>
+<li><code>vibe_pipeline</code> has a read layer (<a href="#adr-008-trace-store-and-read-layer">ADR-008</a>):
+the modules <code>events_log</code> (<code>EventReader</code>, <code>TaggedEnvelope</code>, <code>EventCursor</code>,
+<code>AllEventsFollower</code>), <code>history</code> (<code>TaskHistory</code>, <code>task_history</code>, <code>project_history</code>) and
+<code>trace</code> (<code>RunTrace</code>, <code>Call</code>, <code>run_trace</code>, <code>read_output</code>).</li>
+<li><code>vibe-pipeline</code> now depends on <code>vibe-workspace</code> (read-only git queries of the history).</li>
+</ul>
 <h2 id="from-02-to-04"><a class="header" href="#from-02-to-04">From 0.2 to 0.4</a></h2>
 <p>Version 0.4 includes the work planned for 0.3 (streaming, numbered events, human approvals,
 the run manager and the terminal UI) and for 0.4 (<code>vibe serve</code>, the web UI, integrations).
 There was no 0.3 release. Existing <code>.vibe/config.toml</code> files keep working, and runs started
 with 0.2 can be resumed with 0.4.</p>
-<h3 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h3>
+<h3 id="upgrade-1"><a class="header" href="#upgrade-1">Upgrade</a></h3>
 <pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.4.0 vibe-cli --force
 vibe --version    # vibe 0.4.0
 vibe doctor
@@ -2640,7 +3372,7 @@ vibe doctor
 <p>Nothing on disk needs converting. Events written by 0.2 in <code>events.jsonl</code> have no <code>schema</code>
 or <code>seq</code> field: they read as schema 1 and are not replayed by <code>vibe events</code>; a resumed run
 numbers its new events from 1. <code>run.json</code> gains approval fields that load empty.</p>
-<h3 id="behaviour-that-changes-by-default"><a class="header" href="#behaviour-that-changes-by-default">Behaviour that changes by default</a></h3>
+<h3 id="behaviour-that-changes-by-default-1"><a class="header" href="#behaviour-that-changes-by-default-1">Behaviour that changes by default</a></h3>
 <p><strong>Answers are streamed.</strong> Anthropic and OpenAI-compatible providers now use server-sent
 events, and <code>vibe --json</code> prints <code>agent_delta</code> lines while a step is generated (they are not
 kept in <code>events.jsonl</code>). For a gateway that mishandles streaming, set
@@ -2670,7 +3402,7 @@ which they require. Older models keep the token budget form; <code>extra.thinkin
 <p>New commands: <code>vibe events</code>, <code>vibe approve</code>, <code>vibe reject</code>, <code>vibe cancel</code>, <code>vibe tui</code>,
 <code>vibe serve</code>, <code>vibe memory</code>, <code>vibe task import</code> and <code>vibe pr</code>. A run paused for an approval
 exits with code 2, like any run that waits for a human.</p>
-<h3 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h3>
+<h3 id="for-library-users-1"><a class="header" href="#for-library-users-1">For library users</a></h3>
 <p>The Rust API is pre-1.0 and 0.4 changes it in a few places. Code that only uses the <code>vibe</code>
 command line is not affected.</p>
 <ul>
@@ -2692,7 +3424,7 @@ interface uses (<a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a>
 <p>Version 0.2 is about reliability. Existing <code>.vibe/config.toml</code> files keep working, and runs
 started with 0.1 can be resumed with 0.2. This page lists what changes when you upgrade and
 what you may want to turn on.</p>
-<h3 id="upgrade-1"><a class="header" href="#upgrade-1">Upgrade</a></h3>
+<h3 id="upgrade-2"><a class="header" href="#upgrade-2">Upgrade</a></h3>
 <pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.2.0 vibe-cli --force
 vibe --version    # vibe 0.2.0
 vibe doctor
@@ -2700,7 +3432,7 @@ vibe doctor
 <p>Nothing on disk needs converting. <code>run.json</code> gains new fields (<code>validations</code>,
 <code>validation_fix_attempts</code>, <code>pending_validation_fix</code>, <code>usage</code>, <code>active_ms</code>); files written by
 0.1 load with empty or zero values, so a resumed 0.1 run starts its budgets from zero.</p>
-<h3 id="behaviour-that-changes-by-default-1"><a class="header" href="#behaviour-that-changes-by-default-1">Behaviour that changes by default</a></h3>
+<h3 id="behaviour-that-changes-by-default-2"><a class="header" href="#behaviour-that-changes-by-default-2">Behaviour that changes by default</a></h3>
 <p><strong>One worktree per subtask attempt.</strong> With the default <code>git_worktree</code> workspace, every
 subtask attempt now runs in its own worktree and branch (<code>&lt;task branch&gt;--s&lt;N&gt;-a&lt;attempt&gt;</code>)
 and is merged into the task branch as soon as it is done. You will see:</p>
@@ -2750,7 +3482,7 @@ validation_commands = ["cargo fmt --all -- --check", "cargo test --offline"]
 max_tokens = 3_000_000
 max_duration_secs = 7200
 </code></pre>
-<h3 id="for-library-users-1"><a class="header" href="#for-library-users-1">For library users</a></h3>
+<h3 id="for-library-users-2"><a class="header" href="#for-library-users-2">For library users</a></h3>
 <p>The Rust API is pre-1.0 and 0.2 changes it in a few places. Code that only uses the <code>vibe</code>
 command line is not affected.</p>
 <ul>
@@ -2777,12 +3509,12 @@ an agent run; a reached limit stops it like a cancellation.</li>
 <p>Vibe Factory is a Cargo workspace of eight crates arranged in strict layers. Every arrow
 points downwards; no crate depends on a crate above it.</p>
 <pre><code class="language-text">                        ┌─────────────┐
-                        │  vibe-cli   │   command line: wires everything together
+                        │  vibe-cli   │   command line, terminal UI, server: wires everything together
                         └──────┬──────┘
         ┌──────────┬───────────┼───────────┬────────────┐
         │          │           │           │            │
         │   ┌──────▼──────┐    │           │            │
-        │   │vibe-pipeline│    │           │            │   orchestration, task store, run state
+        │   │vibe-pipeline│    │           │            │   orchestration, task store, run state, read layer
         │   └──────┬──────┘    │           │            │
         │   ┌──────▼──────┐    │           │            │
         │   │ vibe-agents │    │           │            │   agentic loop, prompts, structured output
@@ -2795,7 +3527,8 @@ points downwards; no crate depends on a crate above it.</p>
                          │  vibe-core  │   domain model, traits, registry, events
                          └─────────────┘
 </code></pre>
-<p>Only <code>vibe-pipeline</code> depends on <code>vibe-agents</code>; every other crate depends on <code>vibe-core</code>
+<p>Only <code>vibe-pipeline</code> depends on <code>vibe-agents</code> (and on <code>vibe-workspace</code>, whose git helpers
+its read layer uses to rebuild a task’s history); every other crate depends on <code>vibe-core</code>
 alone and reaches the others through the traits in the <code>Registry</code>. The CLI is the only
 place where concrete implementations meet.</p>
 <h2 id="the-three-ideas"><a class="header" href="#the-three-ideas">The three ideas</a></h2>
@@ -2847,26 +3580,28 @@ the public types you will meet first, what it is allowed to depend on, and how i
 The <a href="#architecture-overview">Architecture overview</a> explains why the layering exists; this page is the
 map.</p>
 <h2 id="dependency-graph"><a class="header" href="#dependency-graph">Dependency graph</a></h2>
-<p>The graph below is the one declared in the <code>Cargo.toml</code> files today. Every implementation
-crate depends on <code>vibe-core</code> and on nothing else from the workspace: <code>vibe-agents</code> reaches
-models, tools and hooks only through the core traits, so it does not link any concrete
-provider, tool set, workspace or plugin transport. Wiring concrete implementations together
-is the job of the layers above it.</p>
-<pre><code class="language-text">                 vibe-cli            (binary `vibe`)
-                    │
-                 vibe-pipeline       (orchestration, task store)
-                    │
-   ┌────────────┬───┴────────┬──────────────┬──────────────┬─────────────┐
-   │            │            │              │              │             │
-vibe-agents  vibe-providers vibe-tools  vibe-workspace  vibe-plugins     │
-   │            │            │              │              │             │
-   └────────────┴────────────┴──────┬───────┴──────────────┴─────────────┘
-                                    │
-                                vibe-core      (types + traits, no I/O)
+<p>The graph below is the one declared in the <code>Cargo.toml</code> files. The implementation crates
+depend on <code>vibe-core</code> and on nothing else from the workspace: <code>vibe-agents</code> reaches models,
+tools and hooks only through the core traits, so it does not link any concrete provider,
+tool set, workspace or plugin transport. <code>vibe-pipeline</code> builds on <code>vibe-agents</code>, and on
+<code>vibe-workspace</code> for the git reads of its read layer (the history of a task: its branch, its
+merge commit, the files it changed); the pipeline itself still reaches workspaces through
+the <code>WorkspaceProvider</code> trait. Wiring concrete implementations together is the job of
+<code>vibe-cli</code>.</p>
+<pre><code class="language-text">   vibe-cli        (binary `vibe`: commands, terminal UI, HTTP server and web UI)
+      │   depends on every crate below
+      ├──────────────────────────────┬────────────────┬──────────────┐
+      │                              │                │              │
+   vibe-pipeline                     │                │              │
+      │                              │                │              │
+      ├──────────────┐               │                │              │
+      │              │               │                │              │
+   vibe-agents   vibe-workspace   vibe-providers   vibe-tools   vibe-plugins
+      │              │               │                │              │
+      └──────────────┴───────┬───────┴────────────────┴──────────────┘
+                             │
+                         vibe-core      (types + traits, no I/O)
 </code></pre>
-<p><code>vibe-pipeline</code> and <code>vibe-cli</code> currently declare only <code>vibe-core</code> (both are placeholders);
-the edges from the pipeline to the five middle crates are the intended wiring described in
-<code>ARCHITECTURE_EN.md</code>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2879,8 +3614,8 @@ the edges from the pipeline to the five middle crates are the intended wiring de
 <tr><td><code>vibe-workspace</code></td><td><code>vibe-core</code></td><td><code>tokio</code> (process); shells out to <code>git</code></td></tr>
 <tr><td><code>vibe-plugins</code></td><td><code>vibe-core</code></td><td><code>tokio</code> (process, io), <code>futures</code>, <code>dirs</code>, <code>indexmap</code></td></tr>
 <tr><td><code>vibe-agents</code></td><td><code>vibe-core</code></td><td><code>futures</code>, <code>tokio</code>, <code>chrono</code>, <code>uuid</code>, <code>toml</code></td></tr>
-<tr><td><code>vibe-pipeline</code></td><td><code>vibe-core</code></td><td>none yet</td></tr>
-<tr><td><code>vibe-cli</code></td><td><code>vibe-core</code></td><td>none yet</td></tr>
+<tr><td><code>vibe-pipeline</code></td><td><code>vibe-core</code>, <code>vibe-agents</code>, <code>vibe-workspace</code></td><td><code>tokio</code>, <code>fs4</code> (file locks), <code>futures</code>, <code>chrono</code>, <code>uuid</code>, <code>regex</code></td></tr>
+<tr><td><code>vibe-cli</code></td><td>every crate above</td><td><code>clap</code>, <code>ratatui</code>, <code>axum</code>, <code>reqwest</code>, <code>tokio</code>, <code>console</code>, <code>toml_edit</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -2997,14 +3732,27 @@ truncation to <code>.vibe/tool-output/</code>, cancellation, provider error hand
 max-tokens nudge, convergence at 75 %, prompt variables and hook augmentation, published
 events, and a smoke run of every built-in agent.</p>
 <h2 id="vibe-pipeline"><a class="header" href="#vibe-pipeline">vibe-pipeline</a></h2>
-<p><strong>Responsibility</strong> (from <code>ARCHITECTURE_EN.md</code>; not written yet). File-backed <code>TaskStore</code>
-under <code>.vibe/tasks/NNN-slug/</code>, complexity profiles, phase orchestration, parallel subtask
-execution honouring <code>depends_on</code>, the QA/fix loop with escalation, run state and resume, and
-the event log. See <a href="#the-pipeline">The pipeline</a>.</p>
+<p><strong>Responsibility.</strong> The file-backed <code>TaskStore</code> under <code>.vibe/tasks/NNN-slug/</code>
+(<code>FileTaskStore</code>), complexity profiles, phase orchestration, parallel subtask execution
+honouring <code>depends_on</code>, the QA/fix loop with escalation, human approvals, budgets, run state
+and resume, and the event log. <code>RunManager</code> is the seam every interface uses to start,
+resume, cancel and list runs (<a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a>). See
+<a href="#the-pipeline">The pipeline</a>.</p>
+<p><strong>Read layer</strong> (<a href="#adr-008-trace-store-and-read-layer">ADR-008</a>): <code>events_log</code>
+(<code>EventReader</code>, <code>TaggedEnvelope</code>, <code>EventCursor</code>, <code>AllEventsFollower</code>) reads one log
+incrementally or every task’s log in cursor order; <code>history</code> rebuilds what a task did
+(<code>TaskHistory</code>, <code>project_history</code>, <code>task_history</code>); <code>trace</code> pairs the tool calls of a run
+(<code>RunTrace</code>, <code>Call</code>, <code>run_trace</code>, <code>read_output</code>). They are described in
+<a href="#reading-the-store-the-read-layer">Persistence layout</a>.</p>
+<p><strong>Tests.</strong> <code>tests/pipeline.rs</code> runs whole pipelines on the scripted provider and a temporary
+git repository; <code>tests/history.rs</code> builds histories from logs of both schemas and from real
+git histories (branch, fast-forward, merge, reset).</p>
 <h2 id="vibe-cli"><a class="header" href="#vibe-cli">vibe-cli</a></h2>
-<p><strong>Responsibility</strong> (from <code>ARCHITECTURE_EN.md</code>; not written yet). The <code>vibe</code> binary with
-<code>init</code>, <code>task add|list|show|discard</code>, <code>run</code>, <code>status</code>, <code>config</code>, <code>agents</code>, <code>plugins</code> and
-<code>doctor</code>, and live rendering of events. See <a href="#command-line-reference">Command line reference</a>.</p>
+<p><strong>Responsibility.</strong> The <code>vibe</code> binary: every command of the
+<a href="#command-line-reference">Command line reference</a>, the live rendering of events, the terminal UI
+(<code>vibe tui</code>, module <code>tui</code>) and the HTTP server with its embedded web UI (<code>vibe serve</code>,
+module <code>server</code>). Every interface goes through <code>RunManager</code> and the read layer; none keeps
+a state of its own.</p>
 <h2 id="where-to-add-code"><a class="header" href="#where-to-add-code">Where to add code</a></h2>
 <div class="table-wrapper">
 <table>
@@ -3068,6 +3816,7 @@ compile.</p>
 <tr><td><code>labels</code></td><td><code>Vec&lt;String&gt;</code></td><td><code>default</code></td></tr>
 <tr><td><code>source</code></td><td><code>TaskSource</code></td><td><code>default</code> (<code>manual</code>)</td></tr>
 <tr><td><code>created_at</code>, <code>updated_at</code></td><td><code>DateTime&lt;Utc&gt;</code></td><td>RFC 3339 strings</td></tr>
+<tr><td><code>branch</code></td><td><code>Option&lt;String&gt;</code></td><td><code>default</code>, omitted when <code>None</code>; the workspace branch recorded by the last run</td></tr>
 </tbody>
 </table>
 </div>
@@ -3856,6 +4605,18 @@ and yields an error result telling the model not to repeat the call;</li>
 text is written to <code>&lt;workspace_root&gt;/.vibe/tool-output/&lt;uuid&gt;.txt</code> and a note is appended:
 <code>[Output truncated: showing the first N of M characters. The full output was saved to `…`; read it in smaller pieces if you need more.]</code>. If the file cannot be written, the note
 says so instead.</p>
+<h3 id="trace-of-tool-outputs"><a class="header" href="#trace-of-tool-outputs">Trace of tool outputs</a></h3>
+<p>Independently of that truncation, a runner given a <code>ToolTrace</code> (<code>dir</code>, <code>reference</code>,
+<code>max_chars</code>) writes the complete output of every call to <code>&lt;dir&gt;/&lt;call&gt;.txt</code>, cut at
+<code>max_chars</code> characters with a final marker line, and reports it in <code>tool_returned</code>
+(<code>output_file</code> = <code>&lt;reference&gt;/&lt;call&gt;.txt</code>, <code>output_chars</code> = the untruncated length). The
+pipeline passes <code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/</code> of the project when
+<code>pipeline.trace_outputs</code> is on. The <code>call</code> id is generated before the call and repeated on
+the return, so parallel read-only calls pair even when they return out of order;
+<code>exit_code</code> and <code>timed_out</code> are copied from the tool’s metadata (<code>bash</code>). A trace file that
+cannot be written is logged as a warning and leaves <code>output_file</code> empty; the call itself is
+not affected. <code>vibe trace</code> and the read layer’s <code>trace</code> module read the store back
+(<a href="#tool-call-trace">Tool call trace</a>, <a href="#adr-008-trace-store-and-read-layer">ADR-008</a>).</p>
 <h3 id="provider-errors-and-retries"><a class="header" href="#provider-errors-and-retries">Provider errors and retries</a></h3>
 <p>Providers retry transient failures themselves (see <a href="#providers-and-models-1">Providers and
 models</a>). The runner adds a last line of defence: a retryable error
@@ -4803,6 +5564,7 @@ and which ones you may edit.</p>
 ├── plugins/&lt;name&gt;/vibe-plugin.toml plugin manifests
 ├── memory.jsonl                    project memory: one lesson per line, shared by tasks
 ├── server.token                    token of a running `vibe serve` (owner-only)
+├── tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt   complete output of every tool call (trace store)
 ├── worktrees/                      one git worktree per task (git_worktree workspace)
 │   ├── .gitignore                  "*"
 │   └── &lt;slug&gt;-&lt;id8&gt;/               the task's workspace
@@ -4838,8 +5600,13 @@ and which ones you may edit.</p>
 </tbody>
 </table>
 </div>
-<p>The <code>tool-output/</code> and <code>specs/</code> directories live in the <em>workspace</em>, so with the <code>in_place</code>
-workspace they appear directly under <code>&lt;project&gt;/.vibe/</code>. Workspace change summaries and the
+<p>The <code>tool-output/&lt;uuid&gt;.txt</code> files and the <code>specs/</code> directory live in the <em>workspace</em>, so with
+the <code>in_place</code> workspace they appear directly under <code>&lt;project&gt;/.vibe/</code>. The trace store
+<code>&lt;project&gt;/.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/</code> is always at the project root: one file per
+tool call, named by the call id of its <code>tool_called</code>/<code>tool_returned</code> events and capped at
+<code>pipeline.trace_max_chars</code> characters (see <a href="#trace-store">Events</a>).
+<code>pipeline.trace_outputs = false</code> turns it off; <code>vibe task discard</code> removes the task’s
+directory. Workspace change summaries and the
 merge checkpoint commit both exclude <code>.vibe/</code>.</p>
 <h2 id="the-task-store"><a class="header" href="#the-task-store">The task store</a></h2>
 <p><code>FileTaskStore::open(project_root)</code> creates <code>.vibe/tasks/</code> if needed. A task gets its
@@ -4893,9 +5660,13 @@ task id; an ambiguous prefix is an error. A corrupt index is reported as
   "labels": ["auth"],
   "source": { "kind": "manual" },
   "created_at": "2026-09-27T08:12:03.114Z",
-  "updated_at": "2026-09-27T08:41:57.902Z"
+  "updated_at": "2026-09-27T08:41:57.902Z",
+  "branch": "vibe/add-oauth-login-github-6f1c3e0a"
 }
 </code></pre>
+<p><code>branch</code> is recorded when a run opens a workspace that has one (absent with <code>in_place</code>);
+<code>vibe pr</code>, <code>vibe task show</code> and <code>vibe task discard</code> use it instead of recomputing the branch
+from the title.</p>
 <p><code>plan.md</code> marks subtasks with <code>[ ]</code> pending, <code>[~]</code> in progress, <code>[x]</code> done, <code>[!]</code> failed and
 <code>[-]</code> skipped, and shows dependencies by title, the attempt count, verification steps and
 notes. Markdown files are always rendered from the JSON and never parsed back.</p>
@@ -4944,10 +5715,12 @@ remain in <code>events.jsonl</code>, which is never truncated and can be split b
 named temporary file in the same directory (<code>.&lt;name&gt;.&lt;uuid&gt;.tmp</code>), which is then renamed over
 the target. A crash therefore leaves either the old or the new file, never a truncated one;
 at worst a stray <code>.tmp</code> file, safe to delete. JSON is pretty-printed with a trailing newline.</p>
-<p>Appends (<code>progress.md</code>, memory files) and index updates are serialised by locks inside one
-process; <code>events.jsonl</code> has its own lock per sink. There is <strong>no cross-process locking</strong>: do
-not run two <code>vibe</code> processes on the same task at once. Different tasks are independent,
-except for <code>index.json</code>, so avoid creating tasks from two processes at the same moment.</p>
+<p>Appends (<code>progress.md</code>, memory files) are serialised by locks inside one process;
+<code>events.jsonl</code> has its own lock per sink. Across processes, an OS lock on <code>run.lock</code> lets
+one process at a time run a given task (a second <code>vibe run</code> fails with <code>already being run by another process</code>), and <code>.index.lock</code> serialises updates of <code>index.json</code>, so a terminal, a
+terminal UI and <code>vibe serve</code> can work on the same project. Readers never hold a lock: the
+read layer below only consumes complete lines of the logs, and the history only probes a
+task’s run lock for an instant to tell a running run from an interrupted one.</p>
 <p>Missing files are normal: a task without <code>spec.json</code> simply has no spec yet, and loading it
 returns <code>None</code>. A file that exists but does not parse is an error naming the path, so a bad
 hand edit is reported instead of ignored.</p>
@@ -4986,7 +5759,7 @@ reports next to the change they produced.</p>
 </thead>
 <tbody>
 <tr><td><code>config.toml</code> (without inline <code>api_key</code> values)</td><td><code>worktrees/</code> (ignored by <code>vibe init</code>)</td></tr>
-<tr><td><code>agents/</code></td><td><code>tool-output/</code> (ignored by <code>vibe init</code>; only appears with <code>in_place</code>)</td></tr>
+<tr><td><code>agents/</code></td><td><code>tool-output/</code> (ignored by <code>vibe init</code>: the trace store, plus truncated outputs with <code>in_place</code>)</td></tr>
 <tr><td><code>plugins/</code> manifests you want everyone to load</td><td><code>specs/</code> (only appears with <code>in_place</code>)</td></tr>
 <tr><td><code>tasks/</code> (the default)</td><td>optionally <code>tasks/*/events.jsonl</code> and <code>tasks/*/run.json</code></td></tr>
 </tbody>
@@ -4997,6 +5770,78 @@ to <code>.vibe/.gitignore</code> if the noise bothers you. To keep all task data
 <p><code>.vibe/worktrees/</code> also contains its own <code>.gitignore</code> with <code>*</code>, written when the first
 worktree is created, so worktrees never show up in your <code>git status</code> even without these
 entries.</p>
+<h2 id="reading-the-store-the-read-layer"><a class="header" href="#reading-the-store-the-read-layer">Reading the store: the read layer</a></h2>
+<p>Interfaces never parse these files themselves; <code>vibe-pipeline</code> gives them a read layer on
+the same files (<a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a>,
+<a href="#adr-008-trace-store-and-read-layer">ADR-008</a>). It stores nothing of its own:
+histories and traces are rebuilt from the events and git each time they are asked for, and
+followers only remember how far they have read.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>API</th><th>Reads</th><th>For</th></tr>
+</thead>
+<tbody>
+<tr><td><code>EventReader</code> (<code>events_log</code>)</td><td>one <code>events.jsonl</code>, from a byte offset</td><td>following a task without re-reading its whole log</td></tr>
+<tr><td><code>FileTaskStore::all_events(after)</code>, <code>AllEventsFollower</code></td><td>every task’s <code>events.jsonl</code>, tagged with the task id and number</td><td>one stream for the whole project, ordered by time</td></tr>
+<tr><td><code>history::project_history</code>, <code>history::task_history</code></td><td><code>task.json</code>, <code>events.jsonl</code>, <code>run.json</code>, <code>qa_report_*.json</code>, git</td><td>what finished tasks did, cost and changed</td></tr>
+<tr><td><code>trace::run_trace</code>, <code>trace::read_output</code></td><td><code>events.jsonl</code>, <code>.vibe/tool-output/</code></td><td>the tool calls of a run with their complete outputs</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Reading a log while it grows.</strong> A writer appends whole lines, but a reader can see one
+half written: <code>EventReader</code> keeps an incomplete last line until its end arrives, and
+starts over when the file shrinks or is replaced. Complete lines that do not parse are
+skipped, as when a log is loaded whole.</p>
+<p><strong>All tasks at once.</strong> Each event is tagged <code>{task, number}</code> and serialised flat, the
+envelope’s fields next to them: <code>{"task":"…","number":3,"schema":2,"seq":17,"at":"…","event":{…}}</code>.
+Events are ordered by <code>at</code>, then task number, then <code>seq</code>: that triple is the event’s
+<code>EventCursor</code>, written <code>&lt;nanoseconds&gt;-&lt;number&gt;-&lt;seq&gt;</code> so it can serve as an SSE id. A client
+resumes after the cursor of the last event it saw, which does not lose events of other tasks
+published at the same instant. <code>AllEventsFollower</code> re-reads <code>index.json</code> at each poll, so
+tasks created later are followed too; a log that cannot be read is reported with the poll’s
+result and retried at the next poll, without losing the events of the other logs. <code>vibe serve</code>
+runs a single follower for all its open event streams, whatever their number.</p>
+<p><strong>Runs.</strong> A run and its resumes share one id: a run is summarised from its first
+<code>run_started</code> to its last <code>run_finished</code>, whose totals already cover the resumes. A
+<code>run_finished</code> logged before 0.5 has no totals; <code>run.json</code> supplies them for the last run,
+and older runs report their totals as unknown rather than as zeros. <code>run.json</code> also
+supplies the totals of a resumed run that has not finished again. A run without a
+<code>run_finished</code> since its last start is <code>running</code> when a process holds the task’s run lock,
+<code>interrupted</code> otherwise.</p>
+<p><strong>Changed files</strong>, from the most to the least exact source, one or two git commands per
+task after three or four for the whole project:</p>
+<ol>
+<li>a <code>merged</code> event. A true merge commit is compared with its first parent: exact. A
+fast-forward (one parent, or a merged commit that is one of the task’s own commits,
+such as the merge commit of a subtask integration at the tip of the task branch) is
+compared from the parent of the task’s oldest recorded commit that the merged commit
+contains. That is exact when the recorded commits reach back to where the task branch
+forked, and it has limits: commits discarded by a reset and a relaunch are skipped, so
+the diff starts at the relaunched work; commits git makes without an event (the
+checkpoint before merging) are covered only if an older recorded commit precedes them;
+and when no recorded commit is contained, only the merged commit itself is compared
+with its parent. That last case sets <code>approximate</code>. A merged branch that still exists
+diffs as empty against its base, so the merge goes first;</li>
+<li>the task branch still exists: <code>git diff --name-status &lt;base&gt;...&lt;branch&gt;</code>, with the base
+resolved as <code>vibe pr</code> does (<code>branch.&lt;b&gt;.vibebase</code>, then <code>base_branch</code>, then the default
+branch); an empty diff is skipped;</li>
+<li>the <code>files</code> of the <code>committed</code> events (statuses unknown);</li>
+<li>the paths written by <code>write_file</code> and <code>edit_file</code> calls (approximate: files written by
+commands are missing);</li>
+<li>nothing.</li>
+</ol>
+<p><code>approximate</code> means the list may miss files or list files the task did not change in the
+end; it is set for sources 3 and 4 and for a fast-forward without a contained commit.
+Revisions read from the log or the configuration are passed to git after
+<code>--end-of-options</code>, so a value that starts with <code>-</code> is never read as an option.</p>
+<p>A git error on one task, or a task file that does not parse (<code>run.json</code>, a QA report), is
+recorded on that task; only an unreadable index fails the whole history. Git runs with the same neutralised configuration as every other
+framework command (no hooks, no external diff).</p>
+<p><strong>Tool calls</strong> pair by <code>call</code> id; calls logged before 0.5 pair in order per role, tool and
+subtask, and are marked as such. A trace file is only read under <code>.vibe/tool-output/</code>: a
+recorded path that is absolute or climbs out with <code>..</code> is ignored, and <code>read_output</code>
+resolves symbolic links and refuses a file that resolves outside the trace store.</p>
 <h2 id="how-a-resume-reads-the-state"><a class="header" href="#how-a-resume-reads-the-state">How a resume reads the state</a></h2>
 <p><code>Pipeline::resume</code> needs only the task directory:</p>
 <ol>
@@ -5016,7 +5861,9 @@ the exact rules.</p>
 <h1 id="architecture-decision-records"><a class="header" href="#architecture-decision-records">Architecture decision records</a></h1>
 <p>Significant decisions are recorded here in the lightweight ADR format: context, decision,
 consequences. A new ADR is added when a decision changes the shape of the framework; an
-existing ADR is never edited after acceptance, it is superseded by a new one.</p>
+existing ADR is never edited after acceptance, it is superseded by a new one. The one
+exception is a cross reference: a link to the later ADR that details or supersedes a point
+may be added to an accepted ADR, its text does not change otherwise.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -5030,6 +5877,7 @@ existing ADR is never edited after acceptance, it is superseded by a new one.</p
 <tr><td><a href="#adr-005-json-rpc-over-stdio-plugin-protocol">005</a></td><td>JSON-RPC over stdio plugin protocol</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-006-structured-qa-verdicts">006</a></td><td>Structured QA verdicts</td><td>Accepted</td></tr>
 <tr><td><a href="#adr-007-one-seam-for-every-user-interface">007</a></td><td>One seam for every user interface</td><td>Accepted</td></tr>
+<tr><td><a href="#adr-008-trace-store-and-read-layer">008</a></td><td>Trace store and read layer</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>
@@ -5224,12 +6072,70 @@ and a server can work on the same project.</li>
 <li>Streaming, approvals and new events must land before any interface that relies on them.</li>
 <li>The event schema becomes a public, versioned API; changing an event is a breaking change.</li>
 <li>A crash loses no decision: approvals and sequence numbers are on disk.</li>
+<li>Content too large for an event stays out of the log but not out of reach: the complete
+output of each tool call is written to the trace store,
+<code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code> (ignored by git), and <code>tool_returned</code>
+references it by path. Commits and merges are events too (<code>committed</code>, <code>merged</code>), and
+<code>run_finished</code> carries the run’s totals, so a history of every run can be rebuilt from
+events and git alone (<a href="#trace-store">Events</a>; decided in
+<a href="#adr-008-trace-store-and-read-layer">ADR-008</a>).</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="adr-008-trace-store-and-read-layer"><a class="header" href="#adr-008-trace-store-and-read-layer">ADR-008: Trace store and read layer</a></h1>
+<p><strong>Status:</strong> Accepted — 2026-09-27</p>
+<h2 id="context-7"><a class="header" href="#context-7">Context</a></h2>
+<p>Up to 0.4, interfaces show a run while it happens, but reconstructing what was done after
+the fact is hard. <code>tool_returned</code> carries a 200-character preview and nothing pairs it with
+its <code>tool_called</code> when read-only tools run in parallel; the complete output of a call is kept
+nowhere unless it exceeds the model’s limit. Commits other than subtask integrations and the
+final merge emit no event, and <code>run.json</code>, the only place with a run’s totals, is
+overwritten by the next run. Each interface that wanted a history, a project-wide activity
+feed or a trace of tool calls would have had to re-parse <code>events.jsonl</code>, guess, and ask git
+on its own.</p>
+<p><a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a> makes events the interface contract and forbids
+private views that events cannot rebuild, so whatever these views need must be in the
+events, or referenced by them.</p>
+<h2 id="decision-7"><a class="header" href="#decision-7">Decision</a></h2>
+<ol>
+<li><strong>Events carry what the views need</strong>, as optional fields and new types (schema stays 2):
+a <code>call</code> id on <code>tool_called</code> and <code>tool_returned</code>, the <code>subtask</code>, exit code, output length
+and output path on <code>tool_returned</code>, the model on <code>agent_started</code>, <code>committed</code> and <code>merged</code>
+events, and the run’s totals on <code>run_finished</code> (<a href="#events-3">Events</a>).</li>
+<li><strong>Complete tool outputs go to a trace store</strong>, not into the log:
+<code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code> at the project root, ignored by git,
+capped per call (<code>pipeline.trace_max_chars</code>), on by default (<code>pipeline.trace_outputs</code>),
+removed with the task. <code>tool_returned.output_file</code> references the file by a path relative
+to the project root; nothing else points to it.</li>
+<li><strong>One read layer in <code>vibe-pipeline</code></strong> turns events and git into views: <code>events_log</code>
+(incremental reading of one log, every task’s log merged by an event cursor), <code>history</code>
+(runs, commits, changed files, validations, QA, tokens, active time and cost of a task)
+and <code>trace</code> (the calls of a run, paired, with their outputs). It stores nothing: every
+view is rebuilt from <code>.vibe/</code> and git when it is asked for. The command line, the
+terminal UI and the server all use it, so they agree.</li>
+<li><strong>The server reads the logs once.</strong> <code>vibe serve</code> runs one follower of every task’s log,
+shared by all its open event streams, instead of one reader per client.</li>
+</ol>
+<h2 id="consequences-7"><a class="header" href="#consequences-7">Consequences</a></h2>
+<ul>
+<li><code>vibe history</code>, <code>vibe trace</code> and <code>vibe events</code> without a task, and the matching screens of
+the terminal UI, the web UI and the server routes, are thin renderings of the same
+documents (<code>TaskHistory</code>, <code>RunTrace</code>, <code>TaggedEnvelope</code>).</li>
+<li>The trace store costs disk space in proportion to what the tools printed, bounded per call;
+it is local, git-ignored and can hold secrets that a command printed.</li>
+<li>Logs written before 0.5 still load: their calls pair by order, their outputs are only the
+previews, and their totals are unknown rather than zero.</li>
+<li><code>vibe-pipeline</code> now depends on <code>vibe-workspace</code> for read-only git queries of the history;
+the pipeline itself still reaches workspaces through <code>WorkspaceProvider</code>.</li>
+<li>Ordering across tasks relies on the clocks of the processes that log; within a task, <code>seq</code>
+stays the exact order.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="events-3"><a class="header" href="#events-3">Events</a></h1>
 <p>Everything the engine does is published as an event. Interfaces (the CLI, <code>vibe events</code>,
-the terminal UI, and later <code>vibe serve</code>) are built on events only, so this page is a
-public, versioned contract (<a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a>).</p>
+<code>vibe history</code>, <code>vibe trace</code>, the terminal UI, <code>vibe serve</code> and its clients) are built on
+events only, so this page is a public, versioned contract
+(<a href="#adr-007-one-seam-for-every-user-interface">ADR-007</a>,
+<a href="#adr-008-trace-store-and-read-layer">ADR-008</a>).</p>
 <h2 id="envelope-1"><a class="header" href="#envelope-1">Envelope</a></h2>
 <p>Each event travels in an envelope, one JSON object per line in
 <code>.vibe/tasks/&lt;task&gt;/events.jsonl</code> and in <code>vibe --json</code> output:</p>
@@ -5265,14 +6171,16 @@ types and fields they do not know. Removing or changing a field increments <code
 <tr><td><code>run_started</code></td><td><code>run</code>, <code>task</code></td><td>a run or a resumed run starts</td></tr>
 <tr><td><code>phase_started</code></td><td><code>run</code>, <code>phase</code></td><td>before a phase</td></tr>
 <tr><td><code>phase_finished</code></td><td><code>run</code>, <code>phase</code>, <code>success</code>, <code>summary</code></td><td>after a phase</td></tr>
-<tr><td><code>agent_started</code></td><td><code>run</code>, <code>role</code>, <code>subtask</code></td><td>an agent session starts</td></tr>
+<tr><td><code>agent_started</code></td><td><code>run</code>, <code>role</code>, <code>subtask</code>, <code>model</code></td><td>an agent session starts; <code>model</code> is the provider’s model id</td></tr>
 <tr><td><code>agent_delta</code></td><td><code>run</code>, <code>role</code>, <code>subtask</code>, <code>delta</code> (<code>{"kind":"text"|"thinking","text":…}</code>)</td><td><strong>ephemeral</strong>: text arriving while a step streams</td></tr>
 <tr><td><code>agent_text</code></td><td><code>run</code>, <code>role</code>, <code>text</code></td><td>the complete text of a step</td></tr>
-<tr><td><code>tool_called</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>input</code></td><td>before a tool runs</td></tr>
-<tr><td><code>tool_returned</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>is_error</code>, <code>duration_ms</code>, <code>preview</code></td><td>after a tool ran</td></tr>
+<tr><td><code>tool_called</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>input</code> (complete arguments), <code>call</code>, <code>subtask</code></td><td>before a tool runs</td></tr>
+<tr><td><code>tool_returned</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>is_error</code>, <code>duration_ms</code>, <code>preview</code> (first 200 characters), <code>call</code>, <code>subtask</code>, <code>exit_code</code>, <code>timed_out</code>, <code>output_chars</code>, <code>output_file</code></td><td>after a tool ran</td></tr>
 <tr><td><code>agent_finished</code></td><td><code>run</code>, <code>role</code>, <code>steps</code>, <code>usage</code>, <code>stop</code></td><td>an agent session ends</td></tr>
 <tr><td><code>subtask_updated</code></td><td><code>run</code>, <code>subtask</code>, <code>status</code></td><td>a subtask changes state</td></tr>
 <tr><td><code>subtask_integrated</code></td><td><code>run</code>, <code>subtask</code>, <code>commit</code>, <code>conflicts</code></td><td>a finished attempt was merged into the task branch (<code>conflicts</code> empty) or conflicted</td></tr>
+<tr><td><code>committed</code></td><td><code>run</code>, <code>subtask</code>, <code>commit</code>, <code>message</code>, <code>files</code></td><td>the pipeline committed in the task workspace: checkpoint before the build, subtask or fix commit, subtask integration</td></tr>
+<tr><td><code>merged</code></td><td><code>run</code>, <code>commit</code>, <code>branch</code>, <code>base</code></td><td>the merge phase merged the task branch into its base (<code>auto_merge</code>); <code>commit</code> is the resulting commit of <code>base</code>; <code>branch</code> or <code>base</code> is <code>""</code> when the workspace provider does not know it</td></tr>
 <tr><td><code>validation_finished</code></td><td><code>run</code>, <code>command</code>, <code>integration</code>, <code>passed</code>, <code>exit_code</code></td><td>a required validation command finished</td></tr>
 <tr><td><code>budget_updated</code></td><td><code>run</code>, <code>tokens</code>, <code>token_limit</code>, <code>active_ms</code>, <code>duration_limit_ms</code></td><td>after each phase and each subtask attempt</td></tr>
 <tr><td><code>artefact_written</code></td><td><code>run</code>, <code>artefact</code> (<code>{"kind":"spec"}</code>, <code>{"kind":"plan"}</code>, <code>{"kind":"qa_report","round":n}</code>)</td><td>the spec, the plan or a QA report was written</td></tr>
@@ -5280,13 +6188,69 @@ types and fields they do not know. Removing or changing a field increments <code
 <tr><td><code>approval_resolved</code></td><td><code>run</code>, <code>gate</code>, <code>approved</code>, <code>comment</code></td><td><code>vibe approve</code> or <code>vibe reject</code> answered; logged by that command</td></tr>
 <tr><td><code>retrying</code></td><td><code>run</code>, <code>what</code>, <code>attempt</code>, <code>delay_ms</code></td><td>before a retry</td></tr>
 <tr><td><code>paused</code></td><td><code>run</code>, <code>reason</code></td><td>the run stops and waits for a human</td></tr>
-<tr><td><code>run_finished</code></td><td><code>run</code>, <code>success</code>, <code>status</code></td><td>the run ends, always last, also after <code>paused</code></td></tr>
+<tr><td><code>run_finished</code></td><td><code>run</code>, <code>success</code>, <code>status</code>, <code>usage</code>, <code>active_ms</code>, <code>started_at</code></td><td>the run ends: always the last event of a run that published <code>run_started</code>, also after <code>paused</code> and after an error (then <code>success</code> is <code>false</code>, with <code>status</code> <code>failed</code>, or the unchanged task status when the workspace could not be opened); totals of the whole run, resumes included</td></tr>
 <tr><td><code>log</code></td><td><code>run</code> (optional), <code>level</code>, <code>message</code></td><td>diagnostics</td></tr>
 </tbody>
 </table>
 </div>
 <p>Identifiers (<code>run</code>, <code>task</code>, <code>subtask</code>) are UUIDs. <code>role</code> is the agent role (<code>coder</code>,
-<code>qa_reviewer</code>, …). Statuses and phases use the same snake case names as <code>vibe task show</code>.</p>
+<code>qa_reviewer</code>, …). Statuses and phases use the same snake case names as <code>vibe task show</code>.
+<code>usage</code> is <code>{"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"}</code>.</p>
+<h3 id="tool-calls"><a class="header" href="#tool-calls">Tool calls</a></h3>
+<p><code>call</code> is a short random id (12 hex digits) generated for each call: it pairs a
+<code>tool_called</code> with its <code>tool_returned</code>, including when read-only calls of one step run in
+parallel and return out of order. <code>subtask</code> is the subtask the session works on, <code>null</code>
+outside the build.</p>
+<p>On <code>tool_returned</code>, <code>exit_code</code> and <code>timed_out</code> come from tools that run a command (<code>bash</code>);
+other tools leave them <code>null</code> and <code>false</code>. <code>output_chars</code> is the length of the complete
+output, before any truncation. <code>output_file</code> points to the complete output (see below), or
+is <code>null</code> when tracing is off or the file could not be written.</p>
+<h3 id="trace-store"><a class="header" href="#trace-store">Trace store</a></h3>
+<p>With <code>pipeline.trace_outputs = true</code> (the default), the complete output of every tool call
+is kept in <code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code>, where <code>&lt;task dir&gt;</code> is the task’s
+directory name under <code>.vibe/tasks/</code> (<code>003-add-login</code>). <code>output_file</code> gives that path
+relative to the project root. Each file holds at most <code>pipeline.trace_max_chars</code> characters
+(100 000 by default); a longer output is cut and ends with a marker line. The directory is
+ignored by git (<code>.vibe/.gitignore</code>, written by <code>vibe init</code>) and removed by
+<code>vibe task discard</code>. It is independent of what the model sees: an output longer than the
+runner’s limit is still truncated for the model, with the complete text in
+<code>&lt;workspace&gt;/.vibe/tool-output/&lt;uuid&gt;.txt</code> where the agent can read it.</p>
+<h3 id="commits"><a class="header" href="#commits">Commits</a></h3>
+<p><code>committed.subtask</code> is <code>null</code> for the checkpoint before the build, for fix commits, and for
+one commit shared by several subtasks when subtasks are not isolated. <code>committed.files</code>
+lists the paths changed by the commit against its first parent (for a merge commit, what it
+brought in), relative to the repository root; it is empty when the committer does not use
+git. <code>message</code> is the first line of the commit message. Commits the git workspace makes on
+its own are not announced: the checkpoint just before merging and the commit of an assisted
+conflict resolution; the merge itself is, by <code>merged</code>.</p>
+<h3 id="logs-recorded-before-05-1"><a class="header" href="#logs-recorded-before-05-1">Logs recorded before 0.5</a></h3>
+<p>Every field added in 0.5 is optional when reading, so older logs still load under schema
+<code>2</code>: <code>call</code> reads as <code>000000000000</code> (pair those calls by order and <code>tool</code>), <code>subtask</code>,
+<code>exit_code</code> and <code>output_file</code> as <code>null</code>, <code>timed_out</code> as <code>false</code>, <code>output_chars</code> as <code>0</code>,
+<code>model</code> as <code>""</code>, and <code>run_finished</code> without totals reads <code>usage</code> as zeros, <code>active_ms</code> as
+<code>0</code> and <code>started_at</code> as <code>1970-01-01T00:00:00Z</code>.</p>
+<h2 id="events-of-every-task"><a class="header" href="#events-of-every-task">Events of every task</a></h2>
+<p>A task’s <code>events.jsonl</code> does not name its task: it is implied by the directory. Views over
+the whole project (<code>vibe events</code> without a task, <code>GET /api/events</code>, <code>GET /api/stream</code>, the
+Activity screens) read every task’s log and tag each envelope with its task, serialised
+flat, the envelope’s fields next to the tag:</p>
+<pre><code class="language-json">{"task":"6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19","number":3,"schema":2,"seq":17,"at":"2026-09-27T10:00:00Z","event":{"type":"phase_started","run":"…","phase":"build"}}
+</code></pre>
+<p><code>task</code> is the task id and <code>number</code> its number on the board. This shape is
+<code>vibe_pipeline::TaggedEnvelope</code>.</p>
+<p>Tagged events are ordered by an <strong>event cursor</strong>: the time <code>at</code>, then the task number, then
+<code>seq</code> (<code>0</code> when absent). It is written <code>&lt;nanoseconds since the epoch&gt;-&lt;number&gt;-&lt;seq&gt;</code>, for
+example <code>1790000000123456789-3-17</code>, and serves as the id of the events of <code>/api/stream</code>. A
+client that resumes after the cursor of the last event it saw gets neither a repeat nor a
+loss of events of other tasks logged at the same instant; <code>0-0-0</code> means “from the start”.</p>
+<p>The order across tasks is the order of the <code>at</code> times, and each process stamps its own
+events. Events of one task always come in order, but a <code>vibe run</code> in another process whose
+clock reads slightly earlier can log an event whose cursor sorts before one already
+delivered for another task. A live follower still delivers it, once, so cursors are not
+always increasing on the wire; a client that was disconnected while it was logged and
+resumes from a later cursor does not get it. When the state of one task must be exact,
+reload that task’s events (<code>vibe events &lt;REF&gt;</code>, <code>GET /api/tasks/{ref}/events</code>), which are
+ordered by <code>seq</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h1>
 <p>Vibe Factory is young. The list below is ordered by priority, not by date.</p>
@@ -5339,6 +6303,23 @@ artefact events, replay and follow</li>
 <li><input disabled="" type="checkbox" checked=""> Web fetch and search tools</li>
 <li><input disabled="" type="checkbox" checked=""> Persistent project memory across tasks</li>
 <li><input disabled="" type="checkbox" checked=""> VS Code extension on <code>vibe serve</code></li>
+</ul>
+<h2 id="05--visibility-history-global-activity-full-trace-macos-app-done-unreleased"><a class="header" href="#05--visibility-history-global-activity-full-trace-macos-app-done-unreleased">0.5 — visibility: history, global activity, full trace, macOS app (done, unreleased)</a></h2>
+<p>See everything that was done, from every interface
+(<a href="#adr-008-trace-store-and-read-layer">ADR-008</a>).</p>
+<ul>
+<li><input disabled="" type="checkbox" checked=""> Events that tell the whole story: call ids, exit codes and output references on tool
+calls, the model of each session, <code>committed</code> and <code>merged</code> events, run totals on
+<code>run_finished</code> (schema stays 2)</li>
+<li><input disabled="" type="checkbox" checked=""> Trace store: the complete output of every tool call, local and git-ignored</li>
+<li><input disabled="" type="checkbox" checked=""> Read layer: incremental and project-wide event reading with a stable cursor, history
+rebuilt from events and git, traces of tool calls</li>
+<li><input disabled="" type="checkbox" checked=""> <code>vibe history</code>, <code>vibe trace</code>, <code>vibe events</code> across every task, optional <code>[pricing]</code></li>
+<li><input disabled="" type="checkbox" checked=""> Server routes for the global event stream, history and trace; web views Activity,
+History and Trace</li>
+<li><input disabled="" type="checkbox" checked=""> Terminal UI screens Activity and History and a Trace tab</li>
+<li><input disabled="" type="checkbox" checked=""> Native macOS app on <code>vibe serve</code> (SwiftUI, macOS 14+), built from source until its
+first signed release</li>
 </ul>
 <h2 id="later"><a class="header" href="#later">Later</a></h2>
 <ul>

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,12 +184,12 @@
 <p>Vibe Factory is a Cargo workspace of eight crates arranged in strict layers. Every arrow
 points downwards; no crate depends on a crate above it.</p>
 <pre><code class="language-text">                        ┌─────────────┐
-                        │  vibe-cli   │   command line: wires everything together
+                        │  vibe-cli   │   command line, terminal UI, server: wires everything together
                         └──────┬──────┘
         ┌──────────┬───────────┼───────────┬────────────┐
         │          │           │           │            │
         │   ┌──────▼──────┐    │           │            │
-        │   │vibe-pipeline│    │           │            │   orchestration, task store, run state
+        │   │vibe-pipeline│    │           │            │   orchestration, task store, run state, read layer
         │   └──────┬──────┘    │           │            │
         │   ┌──────▼──────┐    │           │            │
         │   │ vibe-agents │    │           │            │   agentic loop, prompts, structured output
@@ -202,7 +202,8 @@ points downwards; no crate depends on a crate above it.</p>
                          │  vibe-core  │   domain model, traits, registry, events
                          └─────────────┘
 </code></pre>
-<p>Only <code>vibe-pipeline</code> depends on <code>vibe-agents</code>; every other crate depends on <code>vibe-core</code>
+<p>Only <code>vibe-pipeline</code> depends on <code>vibe-agents</code> (and on <code>vibe-workspace</code>, whose git helpers
+its read layer uses to rebuild a task’s history); every other crate depends on <code>vibe-core</code>
 alone and reaches the others through the traits in the <code>Registry</code>. The CLI is the only
 place where concrete implementations meet.</p>
 <h2 id="the-three-ideas"><a class="header" href="#the-three-ideas">The three ideas</a></h2>

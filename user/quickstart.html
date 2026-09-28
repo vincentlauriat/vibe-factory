@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -368,8 +368,11 @@ cd .vibe/worktrees/add-a-json-flag-to-the-export-command-6f1c3e0a &amp;&amp; car
 <p>The task is <code>ready</code>: nothing reached your branch yet. Merge it as any branch:</p>
 <pre><code class="language-sh">git switch main
 git merge vibe/add-a-json-flag-to-the-export-command-6f1c3e0a
-vibe task discard 1 --yes          # remove the worktree and the branch
 </code></pre>
+<p>The worktree and the branch stay until you discard the task. <code>vibe task discard 1 --yes</code>
+removes them, together with the task directory and its traced tool outputs, so the task no
+longer appears in its history: run it once you no longer need to look back at the task
+(step 8).</p>
 <p>To let Vibe Factory merge by itself as soon as QA approves, run with <code>--auto-merge</code>, or
 set it for the project:</p>
 <pre><code class="language-sh">vibe run 2 --auto-merge
@@ -379,6 +382,29 @@ vibe config set pipeline.auto_merge true
 while tracked files of your checkout have uncommitted changes, and it leaves the task
 <code>ready</code> with the list of conflicting files when the branches conflict. Details in
 <a href="workspaces.html#merge-behaviour">Workspaces and merging</a>.</p>
+<h2 id="8-see-what-was-done"><a class="header" href="#8-see-what-was-done">8. See what was done</a></h2>
+<p>Everything a run did stays readable after it ended, rebuilt from the task’s events and git:</p>
+<pre><code class="language-sh">vibe history                 # every finished task: runs, commits, files, tokens, time, cost
+vibe history 1               # one task: its runs, commits, changed files, validations, QA
+vibe trace 1                 # every tool call of the last run, with its result
+vibe trace 1 --full          # … and the complete output of each call
+vibe events --since 1d       # what happened on every task today, in time order
+vibe events --follow         # the activity of every task from now on (Ctrl-C to stop)
+</code></pre>
+<p><code>vibe history</code> shows a cost only once you give model prices in
+<a href="configuration.html#pricing"><code>[pricing]</code></a>. The complete tool outputs <code>vibe trace --full</code> reads
+are kept under <code>.vibe/tool-output/</code>, ignored by git; see <a href="trace.html">Tool call trace</a> for
+their disk usage and <a href="history.html">History</a> for where each figure comes from.</p>
+<p>The same views exist outside the command line:</p>
+<ul>
+<li><code>vibe tui</code> opens a terminal UI: the task board (<code>T</code>), the activity of every task (<code>A</code>),
+the history (<code>H</code>), and a <strong>Trace</strong> tab in the task detail;</li>
+<li><code>vibe serve</code> serves a web UI on <code>http://127.0.0.1:7777</code> (open the link it prints, which
+carries the access token) with the <strong>Tasks</strong>, <strong>Activity</strong>, <strong>History</strong> and
+<strong>Evaluations</strong> views and a <strong>Trace</strong> tab per task, and the HTTP API they use;</li>
+<li>the macOS app in <a href="https://github.com/vincentlauriat/vibe-factory/tree/main/apps/macos/VibeFactory"><code>apps/macos/VibeFactory</code></a>
+opens a project folder and starts <code>vibe serve</code> for it, or connects to one already running.</li>
+</ul>
 <h2 id="try-it-with-no-api-key"><a class="header" href="#try-it-with-no-api-key">Try it with no API key</a></h2>
 <p>The built-in <code>mock</code> provider answers every agent with canned, valid documents without
 calling any model. It edits no file, so it is only good for seeing the pipeline move:</p>
@@ -423,6 +449,8 @@ reviews again with the canned approval, and the task ends <code>ready</code>.</p
 <ul>
 <li><a href="concepts.html">Concepts</a> explains tasks, profiles, specs, plans and workspaces.</li>
 <li><a href="configuration.html">Configuration</a> lists every setting, including models per phase.</li>
+<li><a href="history.html">History</a> and <a href="trace.html">Tool call trace</a> explain what <code>vibe history</code> and
+<code>vibe trace</code> show and where it comes from.</li>
 <li><a href="troubleshooting.html">Troubleshooting</a> covers what to do when a run pauses or fails.</li>
 </ul>
 

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -223,6 +223,20 @@ you to review). <code>in_place</code> mode disables isolation for quick experime
 <p>The <strong>pipeline</strong> runs the phases <code>assess → spec → plan → build → qa → fix → merge</code>. Each
 phase reads the artefacts of the previous ones and writes its own into
 <code>.vibe/tasks/&lt;task&gt;/</code>. A <strong>run</strong> can be watched live, interrupted, and resumed.</p>
+<h2 id="events-trace-and-history"><a class="header" href="#events-trace-and-history">Events, trace and history</a></h2>
+<p>Everything a run does is published as an <strong>event</strong> (a phase started, an agent called a
+tool, a subtask was committed, the run finished with its totals) and appended to the task’s
+<code>events.jsonl</code>. Events are the contract between the engine and every interface: the live
+output of <code>vibe run</code>, <code>vibe events</code>, the terminal UI, the web UI and the macOS app all show
+events, and none of them keeps a state of its own (<a href="../reference/events.html">Events</a>).</p>
+<p>What does not fit in an event is referenced by one. The complete output of each tool call
+goes to the <strong>trace store</strong>, <code>.vibe/tool-output/</code>, local and ignored by git, and the
+<code>tool_returned</code> event points to it (<a href="trace.html">Tool call trace</a>).</p>
+<p>A <strong>read layer</strong> turns events and git back into views: the activity of every task in time
+order, the <strong>history</strong> of what a task delivered (runs, commits, changed files, validations,
+QA verdict, tokens, active time, cost; see <a href="history.html">History</a>), and the <strong>trace</strong> of a
+run’s tool calls. The command line, the terminal UI and <code>vibe serve</code> use the same read
+layer, so they always agree.</p>
 <h2 id="providers-and-models"><a class="header" href="#providers-and-models">Providers and models</a></h2>
 <p>A <strong>provider</strong> is a model vendor or API (Anthropic, OpenAI, a local Ollama…). Models are
 referred to as <code>provider/model</code>, for example <code>anthropic/claude-sonnet-5</code> or

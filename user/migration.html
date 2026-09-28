@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,12 +181,107 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="upgrading"><a class="header" href="#upgrading">Upgrading</a></h1>
+<h2 id="from-04-to-05"><a class="header" href="#from-04-to-05">From 0.4 to 0.5</a></h2>
+<p>Version 0.5 is about seeing everything that was done: the history of finished work, the
+activity of every task in one feed, the complete trace of each tool call, and a native macOS
+app on <code>vibe serve</code>. Existing <code>.vibe/config.toml</code> files keep working, and runs started with
+0.4 can be resumed with 0.5.</p>
+<h3 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h3>
+<p>Once 0.5.0 is released:</p>
+<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.0 vibe-cli --force
+vibe --version    # vibe 0.5.0
+vibe doctor
+</code></pre>
+<p>Nothing on disk needs converting and the event schema stays <code>2</code>: 0.5 only adds optional
+fields and two event types (<code>committed</code>, <code>merged</code>), which older clients must ignore anyway.
+Logs written by 0.4 still load, with what they lack shown as such: <code>vibe trace</code> pairs their
+tool calls with their results by order (<code>paired: by order</code>) and has only the 200-character
+previews of their outputs, and <code>vibe history</code> marks their token and time totals as lower
+bounds (<code>+</code>) unless <code>run.json</code> still describes the run, and shows no cost for them (their
+model is not recorded). See <a href="../reference/events.html#logs-recorded-before-05">Logs recorded before 0.5</a>.</p>
+<p><code>task.json</code> gains a <code>branch</code> field, recorded the next time a run opens the task’s workspace.
+Until then <code>vibe pr</code>, <code>vibe task show</code> and <code>vibe task discard</code> compute the branch from the
+title as before.</p>
+<h3 id="behaviour-that-changes-by-default"><a class="header" href="#behaviour-that-changes-by-default">Behaviour that changes by default</a></h3>
+<p><strong>Complete tool outputs are kept.</strong> Every tool call’s output is written to
+<code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code>, at most 100 000 characters per call, so the
+directory grows with every run. It is ignored by git (<code>vibe init</code> has always put
+<code>tool-output/</code> in <code>.vibe/.gitignore</code>; check that yours has it), removed per task by
+<code>vibe task discard</code>, and can be limited or turned off:</p>
+<pre><code class="language-toml">[pipeline]
+trace_max_chars = 20_000    # keep less per call
+trace_outputs = false       # or keep nothing but the previews in the log
+</code></pre>
+<p>Outputs may contain secrets printed by tools; they never leave your machine. See
+<a href="trace.html#disk-usage">Tool call trace</a> for disk usage and privacy.</p>
+<p><strong><code>vibe events &lt;REF&gt; --follow</code> follows a resumed run to its end.</strong> It used to stop at the
+<code>run_finished</code> left by an earlier pause of the same run. It also stops at the end of the run
+when <code>--after</code> (or the new <code>--type</code> and <code>--since</code>) hides the <code>run_finished</code> event, where an
+<code>--after</code> beyond it used to follow forever.</p>
+<p><strong>The web UI reads one event stream.</strong> The page opens a single <code>GET /api/stream</code> for the
+whole project (after loading the recent events with <code>GET /api/events</code>) instead of one
+stream per selected task. The per-task routes (<code>/api/tasks/{ref}/events</code> and
+<code>/api/tasks/{ref}/stream</code>) are unchanged, so the VS Code extension and other clients keep
+working. A task reference that matches several tasks is now answered with 400 instead of
+500 on every route.</p>
+<p><strong><code>vibe tui</code></strong> has three screens (<code>T</code> Tasks, <code>A</code> Activity, <code>H</code> History) and a <strong>Trace</strong> tab.
+<code>Esc</code> still quits from the Tasks board; on the other screens it closes what is open and
+goes back. In the Trace tab, <code>↑</code> <code>↓</code> select calls instead of tasks.</p>
+<h3 id="new-settings"><a class="header" href="#new-settings">New settings</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>What it does</th><th>Page</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pipeline.trace_outputs</code></td><td>keep the complete output of every tool call (default <code>true</code>)</td><td><a href="trace.html">Tool call trace</a></td></tr>
+<tr><td><code>pipeline.trace_max_chars</code></td><td>characters kept per call (default <code>100000</code>)</td><td>same</td></tr>
+<tr><td><code>[pricing."&lt;provider&gt;/&lt;model&gt;"]</code></td><td>prices per million tokens, to show a cost in the history (none by default)</td><td><a href="configuration.html#pricing"><code>[pricing]</code></a></td></tr>
+</tbody>
+</table>
+</div>
+<p>New commands and options: <code>vibe history [REF] [--all]</code>, <code>vibe trace &lt;REF&gt;</code>, <code>vibe events</code>
+without a task (with <code>--since</code>, <code>--type</code>, <code>--task</code>, <code>--follow</code>), <code>--since</code> and <code>--type</code> for
+<code>vibe events &lt;REF&gt;</code>, and <code>vibe serve --exit-on-stdin-eof</code>. New server routes:
+<code>GET /api/events</code>, <code>GET /api/stream</code>, <code>GET /api/history[/{ref}]</code>,
+<code>GET /api/tasks/{ref}/trace</code> and <code>GET /api/tasks/{ref}/trace/{call}/output</code>; see
+<a href="cli.html#vibe-serve"><code>vibe serve</code></a>.</p>
+<h3 id="the-macos-app"><a class="header" href="#the-macos-app">The macOS app</a></h3>
+<p><code>apps/macos/VibeFactory</code> is a SwiftUI client of <code>vibe serve</code> for macOS 14 and later. It
+starts <code>vibe serve --exit-on-stdin-eof</code> for the project it opens, so it needs the 0.5
+<code>vibe</code> on the machine. It is built from source for now (its README explains how); a signed
+DMG comes with its first release.</p>
+<h3 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h3>
+<p>The Rust API is pre-1.0 and 0.5 changes it in a few places. Code that only uses the <code>vibe</code>
+command line is not affected.</p>
+<ul>
+<li><code>vibe_core::Event</code> has two new variants, <code>Committed</code> and <code>Merged</code>, and new fields:
+<code>AgentStarted::model</code>, <code>ToolCalled::{call, subtask}</code>,
+<code>ToolReturned::{call, subtask, exit_code, timed_out, output_chars, output_file}</code> and
+<code>RunFinished::{usage, active_ms, started_at}</code>. A <code>match</code> needs the new cases (or a
+wildcard) and <code>..</code> in struct patterns; code that builds these events must fill the fields.
+<code>vibe_core::CallId</code> identifies a tool call.</li>
+<li><code>Task</code> has a new <code>branch</code> field, <code>PipelineConfig</code> new <code>trace_outputs</code> and
+<code>trace_max_chars</code> fields, and <code>VibeConfig</code> a <code>pricing</code> table of <code>ModelPrice</code>: use
+<code>..Default::default()</code> rather than full struct literals.</li>
+<li><code>vibe_agents::ToolTrace</code> and <code>AgentRunner::tool_trace</code> write the complete output of each
+call; <code>RunContext</code> has a new <code>tool_trace</code> field and <code>RunContext::commit</code> takes the
+subtask the commit belongs to (<code>None</code> for checkpoints and fixes).</li>
+<li><code>PipelineStore</code> has three new methods with defaults, <code>task_dir_name</code>, <code>task_numbers</code> and
+<code>is_running</code>; implement them in a custom store to name trace directories after the task
+and to report running tasks.</li>
+<li><code>vibe_pipeline</code> has a read layer (<a href="../design/adr/008-trace-store-and-read-layer.html">ADR-008</a>):
+the modules <code>events_log</code> (<code>EventReader</code>, <code>TaggedEnvelope</code>, <code>EventCursor</code>,
+<code>AllEventsFollower</code>), <code>history</code> (<code>TaskHistory</code>, <code>task_history</code>, <code>project_history</code>) and
+<code>trace</code> (<code>RunTrace</code>, <code>Call</code>, <code>run_trace</code>, <code>read_output</code>).</li>
+<li><code>vibe-pipeline</code> now depends on <code>vibe-workspace</code> (read-only git queries of the history).</li>
+</ul>
 <h2 id="from-02-to-04"><a class="header" href="#from-02-to-04">From 0.2 to 0.4</a></h2>
 <p>Version 0.4 includes the work planned for 0.3 (streaming, numbered events, human approvals,
 the run manager and the terminal UI) and for 0.4 (<code>vibe serve</code>, the web UI, integrations).
 There was no 0.3 release. Existing <code>.vibe/config.toml</code> files keep working, and runs started
 with 0.2 can be resumed with 0.4.</p>
-<h3 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h3>
+<h3 id="upgrade-1"><a class="header" href="#upgrade-1">Upgrade</a></h3>
 <pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.4.0 vibe-cli --force
 vibe --version    # vibe 0.4.0
 vibe doctor
@@ -194,7 +289,7 @@ vibe doctor
 <p>Nothing on disk needs converting. Events written by 0.2 in <code>events.jsonl</code> have no <code>schema</code>
 or <code>seq</code> field: they read as schema 1 and are not replayed by <code>vibe events</code>; a resumed run
 numbers its new events from 1. <code>run.json</code> gains approval fields that load empty.</p>
-<h3 id="behaviour-that-changes-by-default"><a class="header" href="#behaviour-that-changes-by-default">Behaviour that changes by default</a></h3>
+<h3 id="behaviour-that-changes-by-default-1"><a class="header" href="#behaviour-that-changes-by-default-1">Behaviour that changes by default</a></h3>
 <p><strong>Answers are streamed.</strong> Anthropic and OpenAI-compatible providers now use server-sent
 events, and <code>vibe --json</code> prints <code>agent_delta</code> lines while a step is generated (they are not
 kept in <code>events.jsonl</code>). For a gateway that mishandles streaming, set
@@ -224,7 +319,7 @@ which they require. Older models keep the token budget form; <code>extra.thinkin
 <p>New commands: <code>vibe events</code>, <code>vibe approve</code>, <code>vibe reject</code>, <code>vibe cancel</code>, <code>vibe tui</code>,
 <code>vibe serve</code>, <code>vibe memory</code>, <code>vibe task import</code> and <code>vibe pr</code>. A run paused for an approval
 exits with code 2, like any run that waits for a human.</p>
-<h3 id="for-library-users"><a class="header" href="#for-library-users">For library users</a></h3>
+<h3 id="for-library-users-1"><a class="header" href="#for-library-users-1">For library users</a></h3>
 <p>The Rust API is pre-1.0 and 0.4 changes it in a few places. Code that only uses the <code>vibe</code>
 command line is not affected.</p>
 <ul>
@@ -246,7 +341,7 @@ interface uses (<a href="../design/adr/007-one-seam-many-interfaces.html">ADR-00
 <p>Version 0.2 is about reliability. Existing <code>.vibe/config.toml</code> files keep working, and runs
 started with 0.1 can be resumed with 0.2. This page lists what changes when you upgrade and
 what you may want to turn on.</p>
-<h3 id="upgrade-1"><a class="header" href="#upgrade-1">Upgrade</a></h3>
+<h3 id="upgrade-2"><a class="header" href="#upgrade-2">Upgrade</a></h3>
 <pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.2.0 vibe-cli --force
 vibe --version    # vibe 0.2.0
 vibe doctor
@@ -254,7 +349,7 @@ vibe doctor
 <p>Nothing on disk needs converting. <code>run.json</code> gains new fields (<code>validations</code>,
 <code>validation_fix_attempts</code>, <code>pending_validation_fix</code>, <code>usage</code>, <code>active_ms</code>); files written by
 0.1 load with empty or zero values, so a resumed 0.1 run starts its budgets from zero.</p>
-<h3 id="behaviour-that-changes-by-default-1"><a class="header" href="#behaviour-that-changes-by-default-1">Behaviour that changes by default</a></h3>
+<h3 id="behaviour-that-changes-by-default-2"><a class="header" href="#behaviour-that-changes-by-default-2">Behaviour that changes by default</a></h3>
 <p><strong>One worktree per subtask attempt.</strong> With the default <code>git_worktree</code> workspace, every
 subtask attempt now runs in its own worktree and branch (<code>&lt;task branch&gt;--s&lt;N&gt;-a&lt;attempt&gt;</code>)
 and is merged into the task branch as soon as it is done. You will see:</p>
@@ -304,7 +399,7 @@ validation_commands = ["cargo fmt --all -- --check", "cargo test --offline"]
 max_tokens = 3_000_000
 max_duration_secs = 7200
 </code></pre>
-<h3 id="for-library-users-1"><a class="header" href="#for-library-users-1">For library users</a></h3>
+<h3 id="for-library-users-2"><a class="header" href="#for-library-users-2">For library users</a></h3>
 <p>The Rust API is pre-1.0 and 0.2 changes it in a few places. Code that only uses the <code>vibe</code>
 command line is not affected.</p>
 <ul>

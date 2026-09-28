@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Domain model - Vibe Factory</title>
+        <title>Tool call trace - Vibe Factory</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/vincentlauriat/vibe-factory" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/design/domain-model.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/vincentlauriat/vibe-factory/edit/main/docs/src/user/trace.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,324 +180,129 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="domain-model"><a class="header" href="#domain-model">Domain model</a></h1>
-<p>Every artefact the framework produces or exchanges is a plain Rust type in <code>vibe-core</code>,
-serialisable with <code>serde</code>. This page describes those types and shows how they look on disk.
-All types derive <code>Serialize</code>, <code>Deserialize</code>, <code>Clone</code>, <code>Debug</code> and <code>PartialEq</code>; most enums use
-<code>#[serde(rename_all = "snake_case")]</code>, so <code>TaskStatus::InProgress</code> is written <code>"in_progress"</code>.</p>
-<pre><code class="language-text">Task ──1:1── Spec ──1:1── Plan ──1:n── PlanPhase ──1:n── Subtask
-  │                                                        │
-  └──1:n── QaReport (one per round) ──1:n── QaIssue        └── depends_on: [SubtaskId]
+                        <h1 id="tool-call-trace"><a class="header" href="#tool-call-trace">Tool call trace</a></h1>
+<p><code>vibe trace</code> shows how a run did its work: every tool call an agent made, with its complete
+arguments, how long it took, how it ended, and its output. It is the answer to “which
+command failed, and what did it print?” once the live output of <code>vibe run</code> is gone.</p>
+<h2 id="reading-a-trace"><a class="header" href="#reading-a-trace">Reading a trace</a></h2>
+<pre><code class="language-sh">vibe trace 2                     # the last run of task 2
+vibe trace 2 --full              # with complete arguments and outputs
+vibe trace 2 --tool bash         # only the shell commands
+vibe trace 2 --all               # every run of the task
+vibe trace 2 --run 4ef9          # one run, by id or id prefix
+vibe trace 2 --subtask 7c1e      # the calls made for one subtask
+</code></pre>
+<pre><code class="language-text">── run 4ef9f554 ──────────
 
-Run: RunId ──publishes──▶ Event (wrapped in Envelope) ──▶ EventBus
-Agent session: SessionId, Message[] of ContentBlock, Usage
-</code></pre>
-<h2 id="identifiers"><a class="header" href="#identifiers">Identifiers</a></h2>
-<p><code>TaskId</code>, <code>SubtaskId</code>, <code>SessionId</code> and <code>RunId</code> are generated by one macro in <code>ids.rs</code>: a
-newtype over a v4 <code>uuid::Uuid</code>, <code>#[serde(transparent)]</code>, so each serialises as a bare string.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Method</th><th>Purpose</th></tr>
-</thead>
-<tbody>
-<tr><td><code>new()</code> / <code>default()</code></td><td>fresh random id</td></tr>
-<tr><td><code>parse(&amp;str)</code> / <code>FromStr</code></td><td>parse the canonical UUID form</td></tr>
-<tr><td><code>short()</code></td><td>first 8 characters, used in branch and directory names</td></tr>
-<tr><td><code>Display</code></td><td>full UUID</td></tr>
-</tbody>
-</table>
-</div>
-<p>The ids are distinct types, so passing a <code>TaskId</code> where a <code>SubtaskId</code> is expected does not
-compile.</p>
-<h2 id="task"><a class="header" href="#task">Task</a></h2>
-<p>A <code>Task</code> is the unit of work handed to the pipeline.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Field</th><th>Type</th><th>Serde</th></tr>
-</thead>
-<tbody>
-<tr><td><code>id</code></td><td><code>TaskId</code></td><td>required</td></tr>
-<tr><td><code>title</code></td><td><code>String</code></td><td>required</td></tr>
-<tr><td><code>description</code></td><td><code>String</code></td><td>required</td></tr>
-<tr><td><code>status</code></td><td><code>TaskStatus</code></td><td>required</td></tr>
-<tr><td><code>complexity</code></td><td><code>Option&lt;Complexity&gt;</code></td><td>required key, <code>null</code> until assessed</td></tr>
-<tr><td><code>labels</code></td><td><code>Vec&lt;String&gt;</code></td><td><code>default</code></td></tr>
-<tr><td><code>source</code></td><td><code>TaskSource</code></td><td><code>default</code> (<code>manual</code>)</td></tr>
-<tr><td><code>created_at</code>, <code>updated_at</code></td><td><code>DateTime&lt;Utc&gt;</code></td><td>RFC 3339 strings</td></tr>
-<tr><td><code>branch</code></td><td><code>Option&lt;String&gt;</code></td><td><code>default</code>, omitted when <code>None</code>; the workspace branch recorded by the last run</td></tr>
-</tbody>
-</table>
-</div>
-<p><code>Task::new</code> creates a backlog task; <code>set_status</code> and <code>touch</code> bump <code>updated_at</code>; <code>slug()</code>
-applies <code>slugify</code> (lowercase ASCII alphanumerics separated by <code>-</code>, at most 48 characters,
-<code>"task"</code> when empty).</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th><code>TaskStatus</code></th><th>Meaning</th><th><code>is_terminal()</code></th></tr>
-</thead>
-<tbody>
-<tr><td><code>backlog</code> (default)</td><td>created, not started</td><td>no</td></tr>
-<tr><td><code>planning</code></td><td>spec and plan being produced</td><td>no</td></tr>
-<tr><td><code>building</code></td><td>subtasks being implemented</td><td>no</td></tr>
-<tr><td><code>review</code></td><td>QA reviewing or fixing</td><td>no</td></tr>
-<tr><td><code>ready</code></td><td>waiting for a human to review and merge</td><td>no</td></tr>
-<tr><td><code>done</code></td><td>merged or accepted</td><td>yes</td></tr>
-<tr><td><code>failed</code></td><td>the pipeline gave up</td><td>yes</td></tr>
-<tr><td><code>cancelled</code></td><td>cancelled by the user</td><td>yes</td></tr>
-</tbody>
-</table>
-</div>
-<p><code>Complexity</code> is ordered (<code>trivial &lt; simple &lt; standard &lt; complex</code>) and exposes two thresholds:
-<code>needs_spec()</code> is true from <code>simple</code> upwards, <code>needs_research()</code> from <code>standard</code> upwards.</p>
-<p><code>TaskSource</code> is internally tagged with <code>kind</code>: <code>{"kind": "manual"}</code>,
-<code>{"kind": "issue", "provider": "github", "reference": "412"}</code> or
-<code>{"kind": "derived", "parent": "&lt;task id&gt;"}</code>.</p>
-<p>A task as serialised by <code>serde_json</code>:</p>
-<pre><code class="language-json">{
-  "id": "6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19",
-  "title": "Add OAuth login with GitHub",
-  "description": "Users should be able to sign in with their GitHub account.",
-  "status": "planning",
-  "complexity": "standard",
-  "labels": ["auth"],
-  "source": { "kind": "issue", "provider": "github", "reference": "412" },
-  "created_at": "2026-09-27T08:12:44.120Z",
-  "updated_at": "2026-09-27T08:15:02.871Z"
-}
-</code></pre>
-<h2 id="spec"><a class="header" href="#spec">Spec</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Type</th><th>Fields</th></tr>
-</thead>
-<tbody>
-<tr><td><code>Spec</code></td><td><code>task_id</code>, <code>summary</code>, <code>requirements</code> (default <code>[]</code>), <code>context</code> (default), <code>body</code> (default <code>""</code>, free markdown)</td></tr>
-<tr><td><code>Requirement</code></td><td><code>id</code> (<code>"R1"</code>…), <code>description</code>, <code>kind</code> (default <code>functional</code>), <code>priority</code> (default <code>1</code>, 1 = must have), <code>acceptance</code> (default <code>[]</code>)</td></tr>
-<tr><td><code>RequirementKind</code></td><td><code>functional</code>, <code>non_functional</code>, <code>constraint</code></td></tr>
-<tr><td><code>SpecContext</code></td><td><code>relevant_files</code>, <code>findings</code>, <code>assumptions</code>, all default <code>[]</code></td></tr>
-</tbody>
-</table>
-</div>
-<pre><code class="language-json">{
-  "task_id": "6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19",
-  "summary": "Add a GitHub OAuth sign-in flow next to the existing password login.",
-  "requirements": [
+#1 coder · subtask 1/1 Implement the task · write_file  1 ms  ok  [call 2e5c7f564a52]
     {
-      "id": "R1",
-      "description": "A 'Sign in with GitHub' button starts the OAuth flow.",
-      "kind": "functional",
-      "priority": 1,
-      "acceptance": ["GET /auth/github redirects to github.com/login/oauth/authorize"]
-    },
-    {
-      "id": "R2",
-      "description": "Password login keeps working unchanged.",
-      "kind": "constraint",
-      "priority": 1,
-      "acceptance": ["existing tests in tests/auth pass"]
+      "content": "Hello, world!\n",
+      "path": "hello.txt"
     }
-  ],
-  "context": {
-    "relevant_files": ["src/auth/mod.rs", "src/routes.rs"],
-    "findings": ["sessions are stored with tower-sessions"],
-    "assumptions": ["client id and secret come from environment variables"]
-  },
-  "body": ""
-}
-</code></pre>
-<p>Because every field but <code>task_id</code> and <code>summary</code> has a default, a minimal spec is two keys.</p>
-<h2 id="plan"><a class="header" href="#plan">Plan</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Type</th><th>Fields</th></tr>
-</thead>
-<tbody>
-<tr><td><code>Plan</code></td><td><code>task_id</code>, <code>approach</code> (default <code>""</code>), <code>phases</code> (default <code>[]</code>)</td></tr>
-<tr><td><code>PlanPhase</code></td><td><code>name</code>, <code>parallel</code> (default <code>false</code>), <code>subtasks</code> (default <code>[]</code>)</td></tr>
-<tr><td><code>Subtask</code></td><td><code>id</code>, <code>title</code>, <code>description</code>, <code>files</code>, <code>depends_on: Vec&lt;SubtaskId&gt;</code>, <code>verification</code>, <code>status</code> (default <code>pending</code>), <code>attempts</code> (default <code>0</code>), <code>notes</code> (default <code>""</code>)</td></tr>
-</tbody>
-</table>
-</div>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th><code>SubtaskStatus</code></th><th>Meaning</th></tr>
-</thead>
-<tbody>
-<tr><td><code>pending</code> (default)</td><td>not started</td></tr>
-<tr><td><code>in_progress</code></td><td>an agent is working on it</td></tr>
-<tr><td><code>done</code></td><td>implemented</td></tr>
-<tr><td><code>failed</code></td><td>gave up after retries</td></tr>
-<tr><td><code>skipped</code></td><td>dependency failed or no longer needed</td></tr>
-</tbody>
-</table>
-</div>
-<p>Phases always run in order; the subtasks of a phase may run concurrently when <code>parallel</code> is
-true. <code>Plan</code> offers <code>subtasks()</code> / <code>subtasks_mut()</code> (plan order), <code>subtask(id)</code>, <code>len()</code>,
-<code>is_empty()</code> and <code>is_complete()</code> (every subtask <code>done</code> or <code>skipped</code>).</p>
-<p><code>Plan::validate()</code> rejects two kinds of broken plans with an <code>ErrorKind::Config</code> error:</p>
-<ol>
-<li>a <code>depends_on</code> entry naming a subtask that is not in the plan
-(<code>"subtask &lt;id&gt; depends on unknown subtask &lt;id&gt;"</code>);</li>
-<li>a dependency cycle, found with Kahn’s algorithm: every subtask starts with an in-degree
-equal to its number of dependencies, subtasks at zero are dequeued, and each dequeue
-decrements the subtasks that depend on it. If fewer subtasks are dequeued than exist, the
-remainder forms a cycle (<code>"plan contains a dependency cycle"</code>).</li>
-</ol>
-<p>Dependencies may cross phase boundaries; validation looks at the whole plan.</p>
-<pre><code class="language-json">{
-  "task_id": "6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19",
-  "approach": "Add an OAuth client module, then wire routes and the login page.",
-  "phases": [
+  ⟵ output
+    Created `hello.txt` (14 bytes).
+
+#2 coder · subtask 1/1 Implement the task · bash  7 ms  error, exit 1  [call 4b5fd969429a]
     {
-      "name": "Foundations",
-      "parallel": false,
-      "subtasks": [
-        {
-          "id": "0b7e2f4c-1d3a-4e8b-9c6f-5a2d8e1f3b70",
-          "title": "OAuth client",
-          "description": "Create src/auth/github.rs exposing authorize_url() and exchange_code() (R1).",
-          "files": ["src/auth/github.rs", "src/auth/mod.rs"],
-          "depends_on": [],
-          "verification": ["cargo test auth::github"],
-          "status": "done",
-          "attempts": 1,
-          "notes": "Uses reqwest already present in Cargo.toml."
-        }
-      ]
-    },
-    {
-      "name": "Wiring",
-      "parallel": true,
-      "subtasks": [
-        {
-          "id": "c41a9e07-6b52-4f1d-a3e8-2d9f0b7c6e15",
-          "title": "Routes",
-          "description": "Add GET /auth/github and GET /auth/github/callback (R1, R2).",
-          "files": ["src/routes.rs"],
-          "depends_on": ["0b7e2f4c-1d3a-4e8b-9c6f-5a2d8e1f3b70"],
-          "verification": ["cargo test --test auth"],
-          "status": "pending",
-          "attempts": 0,
-          "notes": ""
-        }
-      ]
+      "command": "cat hello.txt; ls nope"
     }
-  ]
-}
+  ⟵ output
+    Hello, world!
+    ls: nope: No such file or directory
+
+    Exit code: 1
+
+2 call(s), 1 error(s)
+files written: hello.txt
 </code></pre>
-<h2 id="qa-report"><a class="header" href="#qa-report">QA report</a></h2>
+<p>Each block starts with the call’s position in the run, the agent role, the subtask (its
+position and title in the plan), the tool, the duration and the result: <code>ok</code>, <code>exit N</code> for a
+command, <code>error</code>, <code>timed out</code>, or <code>no result</code> when the run was interrupted before the tool
+returned. The call id at the end pairs the call with its result. The footer counts the calls
+and errors and lists the files written by <code>write_file</code> and <code>edit_file</code>. The options are
+described in the <a href="cli.html#vibe-trace">command line reference</a>.</p>
+<p>Without <code>--full</code>, the output is the 200-character preview logged with the event, and
+strings longer than 2 000 characters in the arguments are cut. <code>--full</code> reads the complete
+output from the trace store and prints the arguments whole.</p>
+<h2 id="the-trace-store"><a class="header" href="#the-trace-store">The trace store</a></h2>
+<p>While a run works, the complete output of every tool call is written to</p>
+<pre><code class="language-text">.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt
+</code></pre>
+<p>at the project root, for example
+<code>.vibe/tool-output/002-write-the-greeting-module/4ef9f554-…/4b5fd969429a.txt</code>. The
+<code>tool_returned</code> event records that path (<code>output_file</code>) and the length of the complete
+output (<code>output_chars</code>), so the log stays small and the output stays one read away
+(<a href="../reference/events.html#trace-store">Events</a>).</p>
+<p>Two settings control it (<a href="configuration.html#pipeline"><code>[pipeline]</code></a>):</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Type</th><th>Fields</th></tr>
+<tr><th>Key</th><th>Default</th><th>Effect</th></tr>
 </thead>
 <tbody>
-<tr><td><code>QaReport</code></td><td><code>task_id</code>, <code>round</code> (1-based), <code>verdict</code>, <code>summary</code> (default), <code>issues</code> (default)</td></tr>
-<tr><td><code>QaIssue</code></td><td><code>severity</code>, <code>title</code>, <code>detail</code>, and optional <code>requirement</code>, <code>file</code>, <code>line</code>, <code>suggested_fix</code></td></tr>
-<tr><td><code>QaVerdict</code></td><td><code>approved</code>, <code>changes_requested</code>, <code>inconclusive</code></td></tr>
-<tr><td><code>Severity</code></td><td><code>low &lt; medium &lt; high &lt; critical</code> (ordered)</td></tr>
+<tr><td><code>trace_outputs</code></td><td><code>true</code></td><td>write the store; <code>false</code> keeps only the previews in the log</td></tr>
+<tr><td><code>trace_max_chars</code></td><td><code>100000</code></td><td>characters kept per call; a longer output is cut and ends with <code>[vibe: output cut to the first N of M characters]</code></td></tr>
 </tbody>
 </table>
 </div>
-<p><code>issues_at_least(Severity::High)</code> filters by severity; <code>is_blocking()</code> is true for any
-verdict other than <code>approved</code>; <code>to_markdown()</code> renders the human-readable report.</p>
-<h2 id="messages"><a class="header" href="#messages">Messages</a></h2>
-<p>A conversation is a <code>Vec&lt;Message&gt;</code>; each <code>Message</code> has a <code>role</code> (<code>user</code> or <code>assistant</code>) and
-a list of <code>ContentBlock</code>s. There is no system role: the system prompt travels separately in
-<code>CompletionRequest::system</code>. Tool results are sent back in a <code>user</code> message.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th><code>ContentBlock</code> (tag <code>type</code>)</th><th>Fields</th></tr>
-</thead>
-<tbody>
-<tr><td><code>text</code></td><td><code>text</code></td></tr>
-<tr><td><code>thinking</code></td><td><code>text</code> (only when the provider exposes reasoning)</td></tr>
-<tr><td><code>tool_use</code></td><td><code>id</code>, <code>name</code>, <code>input</code> (JSON matching the tool schema)</td></tr>
-<tr><td><code>tool_result</code></td><td><code>tool_use_id</code>, <code>content</code> (text), <code>is_error</code> (default <code>false</code>)</td></tr>
-</tbody>
-</table>
-</div>
-<pre><code class="language-json">{"role": "assistant", "content": [
-  {"type": "text", "text": "Reading the router first."},
-  {"type": "tool_use", "id": "toolu_01", "name": "read_file", "input": {"path": "src/routes.rs"}}
-]}
+<p>The store is independent of what the model sees. An output longer than the runner’s limit
+is still truncated for the model, and its complete text is also written in the workspace
+(<code>&lt;workspace&gt;/.vibe/tool-output/&lt;uuid&gt;.txt</code>) where the agent can read it, so such outputs
+exist twice.</p>
+<h3 id="disk-usage"><a class="header" href="#disk-usage">Disk usage</a></h3>
+<p>The store grows with what the tools print: at most <code>trace_max_chars</code> characters per call,
+usually far less (a <code>write_file</code> result is one line; a test suite’s output can reach the
+cap). Nothing is removed automatically. To see and reclaim the space:</p>
+<pre><code class="language-sh">du -sh .vibe/tool-output/*/                      # per task
+rm -rf .vibe/tool-output/002-write-the-greeting-module/&lt;run&gt;   # one run's outputs
+vibe task discard 2 --yes                        # the task, its workspace and its outputs
 </code></pre>
-<p>Helpers: <code>Message::user</code>, <code>Message::assistant</code>, <code>Message::tool_results</code>, <code>text()</code> (joins text
-blocks), <code>tool_uses()</code>, <code>has_tool_use()</code>, and <code>estimate_tokens()</code>, a deliberately rough
-4-characters-per-token estimate used for context budgeting without a tokenizer.</p>
-<p><code>Usage</code> counts <code>input_tokens</code>, <code>output_tokens</code>, <code>cache_read_tokens</code> and <code>cache_write_tokens</code>
-(the last two default to 0). It supports <code>combined</code>, <code>+=</code> and <code>total()</code> (input plus output).</p>
-<h2 id="phase"><a class="header" href="#phase">Phase</a></h2>
-<p><code>Phase</code> lists the pipeline stages in canonical order: <code>assess</code>, <code>spec</code>, <code>plan</code>, <code>build</code>,
-<code>qa</code>, <code>fix</code>, <code>merge</code> (<code>Phase::ALL</code>). <code>as_str()</code> gives the stable lowercase name used in
-<code>[phases.&lt;name&gt;]</code> configuration and CLI flags; <code>FromStr</code> accepts it case-insensitively and
-returns a <code>Config</code> error otherwise. The enum does not impose an order at run time: a
-pipeline may skip <code>spec</code> or loop <code>fix → qa</code>.</p>
-<h2 id="events"><a class="header" href="#events">Events</a></h2>
-<p><code>Event</code> is internally tagged with <code>type</code>. Every variant except <code>log</code> carries the <code>run</code> id.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Variant</th><th>Extra fields</th></tr>
-</thead>
-<tbody>
-<tr><td><code>run_started</code></td><td><code>task</code></td></tr>
-<tr><td><code>phase_started</code></td><td><code>phase</code></td></tr>
-<tr><td><code>phase_finished</code></td><td><code>phase</code>, <code>success</code>, <code>summary</code></td></tr>
-<tr><td><code>agent_started</code></td><td><code>role</code>, <code>subtask</code> (nullable)</td></tr>
-<tr><td><code>agent_text</code></td><td><code>role</code>, <code>text</code></td></tr>
-<tr><td><code>tool_called</code></td><td><code>role</code>, <code>tool</code>, <code>input</code></td></tr>
-<tr><td><code>tool_returned</code></td><td><code>role</code>, <code>tool</code>, <code>is_error</code>, <code>duration_ms</code>, <code>preview</code></td></tr>
-<tr><td><code>agent_finished</code></td><td><code>role</code>, <code>steps</code>, <code>usage</code>, <code>stop</code> (the <code>AgentStop</code> serialised as a JSON string)</td></tr>
-<tr><td><code>subtask_updated</code></td><td><code>subtask</code>, <code>status</code></td></tr>
-<tr><td><code>retrying</code></td><td><code>what</code>, <code>attempt</code>, <code>delay_ms</code></td></tr>
-<tr><td><code>paused</code></td><td><code>reason</code></td></tr>
-<tr><td><code>run_finished</code></td><td><code>success</code>, <code>status</code> (a <code>TaskStatus</code>)</td></tr>
-<tr><td><code>log</code></td><td><code>run</code> (nullable), <code>level</code> (<code>info</code>, <code>warn</code>, <code>error</code>), <code>message</code></td></tr>
-</tbody>
-</table>
-</div>
-<p><code>EventBus::publish</code> wraps the event in an <code>Envelope</code> stamped with the current time; that is
-the shape appended to <code>events.jsonl</code>:</p>
-<pre><code class="language-json">{"at":"2026-09-27T08:16:10.002Z","event":{"type":"tool_returned","run":"a3f0…","role":"coder","tool":"read_file","is_error":false,"duration_ms":3,"preview":"use axum::Router;…"}}
-</code></pre>
-<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
-<p>Every crate returns <code>vibe_core::Result&lt;T&gt;</code> with a single <code>Error { kind, message, retry_after, source }</code>. <code>ErrorKind</code> drives behaviour rather than display: <code>RateLimited</code>,
-<code>ServerError</code> and <code>Network</code> are the only kinds for which <code>is_retryable()</code> is true;
-<code>ContextTooLong</code> ends an agent run with <code>AgentStop::ContextWindow</code>; <code>Denied</code> is what policy
-checks return. <code>io::Error</code> converts to <code>Storage</code>, <code>serde_json::Error</code> to <code>InvalidRequest</code>,
-<code>toml::de::Error</code> to <code>Config</code>.</p>
-<h2 id="json-is-the-source-of-truth"><a class="header" href="#json-is-the-source-of-truth">JSON is the source of truth</a></h2>
-<p>Complexity assessments, specs, plans and QA reports are produced by agents as JSON, parsed
-into these types, and saved as JSON. Markdown (<code>Spec::to_markdown</code>, <code>QaReport::to_markdown</code>)
-is rendered <em>from</em> the typed value for humans and is never parsed back. There is therefore
-one source of truth per artefact, and a malformed model answer is caught at the boundary by
-<code>serde</code> instead of deep in the pipeline. The rationale is in
-<a href="adr/006-structured-qa.html">ADR-006</a>; the extraction and repair strategy is in
-<a href="agent-runtime.html#structured-output">Agent runtime</a>.</p>
-<p>The JSON documents the built-in prompts ask for are the <em>agent-facing</em> shapes, not the
-persisted ones: they omit fields only the framework knows. The planner, for example, returns
-subtasks without <code>id</code>, <code>status</code> or <code>attempts</code> and names dependencies by subtask title, and
-the QA reviewer returns a report without <code>task_id</code> or <code>round</code>. Assigning ids, resolving
-titles to <code>SubtaskId</code>s and filling <code>task_id</code> and <code>round</code> is the caller’s job before a value
-becomes a <code>Plan</code> or a <code>QaReport</code> and before <code>Plan::validate()</code> runs.</p>
+<p>Removing files only affects <code>--full</code> and the complete output in the other interfaces:
+<code>vibe trace</code> then says the output file is missing and shows the preview. Lower
+<code>trace_max_chars</code> to keep less per call, or set <code>trace_outputs = false</code> to stop writing the
+store.</p>
+<h2 id="privacy"><a class="header" href="#privacy">Privacy</a></h2>
+<p>Tool outputs can contain secrets: a command that prints an environment variable, a
+configuration file an agent read, a token in an error message. The trace store stays on
+your machine: <code>vibe init</code> puts <code>tool-output/</code> in <code>.vibe/.gitignore</code>, so it is never
+committed, and nothing sends it anywhere.</p>
+<p>Two things are worth knowing:</p>
+<ul>
+<li>the event log, <code>.vibe/tasks/*/events.jsonl</code>, is committed with the task by default
+(<code>tasks/</code> is project history on purpose), and it holds each call’s complete <strong>arguments</strong>
+and the 200-character <strong>preview</strong> of its output. Add <code>tasks/*/events.jsonl</code> to
+<code>.vibe/.gitignore</code> if that is too much to share
+(<a href="../design/persistence.html#what-to-commit">What to commit</a>);</li>
+<li><code>vibe serve</code> returns complete outputs (<code>GET /api/tasks/{ref}/trace/{call}/output</code>) to
+anyone holding its token. It listens on the loopback interface by default; with another
+<code>--bind</code> address, anyone who can reach it with the token can read them.</li>
+</ul>
+<h2 id="logs-recorded-before-05"><a class="header" href="#logs-recorded-before-05">Logs recorded before 0.5</a></h2>
+<p>Runs logged by an earlier version have no call ids and no stored outputs. <code>vibe trace</code>
+pairs their calls with their results by order, per role, tool and subtask, and shows
+<code>paired: by order</code>; <code>--full</code> reports that the output was not traced and shows the preview.</p>
+<h2 id="json-and-other-interfaces"><a class="header" href="#json-and-other-interfaces">JSON and other interfaces</a></h2>
+<p><code>vibe --json trace &lt;REF&gt;</code> prints the <code>RunTrace</code> document (an array of them with <code>--all</code>):
+<code>run</code>, <code>calls</code> and <code>files_written</code>, each call with its arguments, times, result, preview,
+<code>output_chars</code> and <code>output_file</code>. <code>--full</code> does not change it; read <code>output_file</code> for the
+complete output. The same documents are served by <code>GET /api/tasks/{ref}/trace</code> and the
+complete output by <code>GET /api/tasks/{ref}/trace/{call}/output</code>
+(<a href="cli.html#vibe-serve"><code>vibe serve</code></a>). The web UI shows them in the <strong>Trace</strong> tab of a task
+(a call expands to its arguments and output; <strong>Load complete output</strong> fetches the whole
+text), and <code>vibe tui</code> in the <strong>Trace</strong> tab of the task detail (<code>Enter</code> expands a call, <code>o</code>
+loads its complete output).</p>
+<p>For what the task delivered in the end (commits, changed files, tokens, cost), see
+<a href="history.html">History</a>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../design/crates.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../user/history.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../design/pipeline.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../user/providers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -507,11 +312,11 @@ becomes a <code>Plan</code> or a <code>QaReport</code> and before <code>Plan::va
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../design/crates.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../user/history.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../design/pipeline.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../user/providers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

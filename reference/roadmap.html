@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -231,6 +231,23 @@ artefact events, replay and follow</li>
 <li><input disabled="" type="checkbox" checked=""> Web fetch and search tools</li>
 <li><input disabled="" type="checkbox" checked=""> Persistent project memory across tasks</li>
 <li><input disabled="" type="checkbox" checked=""> VS Code extension on <code>vibe serve</code></li>
+</ul>
+<h2 id="05--visibility-history-global-activity-full-trace-macos-app-done-unreleased"><a class="header" href="#05--visibility-history-global-activity-full-trace-macos-app-done-unreleased">0.5 — visibility: history, global activity, full trace, macOS app (done, unreleased)</a></h2>
+<p>See everything that was done, from every interface
+(<a href="../design/adr/008-trace-store-and-read-layer.html">ADR-008</a>).</p>
+<ul>
+<li><input disabled="" type="checkbox" checked=""> Events that tell the whole story: call ids, exit codes and output references on tool
+calls, the model of each session, <code>committed</code> and <code>merged</code> events, run totals on
+<code>run_finished</code> (schema stays 2)</li>
+<li><input disabled="" type="checkbox" checked=""> Trace store: the complete output of every tool call, local and git-ignored</li>
+<li><input disabled="" type="checkbox" checked=""> Read layer: incremental and project-wide event reading with a stable cursor, history
+rebuilt from events and git, traces of tool calls</li>
+<li><input disabled="" type="checkbox" checked=""> <code>vibe history</code>, <code>vibe trace</code>, <code>vibe events</code> across every task, optional <code>[pricing]</code></li>
+<li><input disabled="" type="checkbox" checked=""> Server routes for the global event stream, history and trace; web views Activity,
+History and Trace</li>
+<li><input disabled="" type="checkbox" checked=""> Terminal UI screens Activity and History and a Trace tab</li>
+<li><input disabled="" type="checkbox" checked=""> Native macOS app on <code>vibe serve</code> (SwiftUI, macOS 14+), built from source until its
+first signed release</li>
 </ul>
 <h2 id="later"><a class="header" href="#later">Later</a></h2>
 <ul>

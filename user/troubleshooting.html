@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,11 +198,15 @@ vibe doctor              # environment, configuration, keys, plugins
 <tr><td><code>.vibe/tasks/NNN-slug/events.jsonl</code></td><td>every event of every run: tool calls with their input, tool results, retries, agent stops</td></tr>
 <tr><td><code>.vibe/tasks/NNN-slug/plan.md</code></td><td>each subtask’s status, attempts and notes</td></tr>
 <tr><td><code>.vibe/tasks/NNN-slug/qa_report_&lt;n&gt;.md</code></td><td>the issues of each QA round</td></tr>
+<tr><td><code>vibe history &lt;ref&gt;</code></td><td>what each run did: phases, commits, changed files, validations, QA verdict, errors (<a href="history.html">History</a>)</td></tr>
+<tr><td><code>vibe trace &lt;ref&gt; [--full]</code></td><td>every tool call of a run with its arguments, exit code and complete output (<a href="trace.html">Tool call trace</a>)</td></tr>
+<tr><td><code>vibe events --since 1h</code></td><td>the recent activity of every task, in time order</td></tr>
 <tr><td>standard error with <code>-v</code>, <code>-vv</code>, <code>-vvv</code></td><td>logs at info, debug, trace level; <code>RUST_LOG</code> overrides</td></tr>
 </tbody>
 </table>
 </div>
-<pre><code class="language-sh">jq -r 'select(.event.type == "tool_returned" and .event.is_error) | "\(.event.tool): \(.event.preview)"' \
+<pre><code class="language-sh">vibe trace 3 --tool bash --full      # every shell command of the last run, with its output
+jq -r 'select(.event.type == "tool_returned" and .event.is_error) | "\(.event.tool): \(.event.preview)"' \
   .vibe/tasks/003-*/events.jsonl
 RUST_LOG=vibe_agents=debug,vibe_plugins=debug vibe run 3 --resume 2&gt; run.log
 </code></pre>
@@ -359,6 +363,68 @@ subtasks or QA fail.</p>
 remove the program from <code>blocked_commands</code>, or add it to <code>allowed_commands</code> if you use an
 allowlist. System administration programs (<code>sudo</code>, <code>mount</code>, …) are always blocked. The rules
 are listed in <a href="security.html">Tools and security</a>.</p>
+<h2 id="vibe-says-your-home-directory-is-not-a-git-repository"><a class="header" href="#vibe-says-your-home-directory-is-not-a-git-repository"><code>vibe</code> says your home directory is not a git repository</a></h2>
+<pre><code class="language-text">error: /Users/me is not a git repository: run `git init`, or use `--workspace in_place`
+</code></pre>
+<p><strong>Cause.</strong> Before 0.4.0, <code>vibe</code> looked for the nearest parent holding a <code>.vibe</code> directory
+without limit, and a <code>~/.vibe</code> left by another tool made it take your home directory for the
+project. Since 0.4.0 the search stops at the git repository and never climbs up to the home
+directory; running <code>vibe</code> from the home directory itself still uses it, like any other
+directory.</p>
+<p><strong>Fix.</strong> Check which binary runs (<code>vibe --version</code>, <code>which -a vibe</code>) and reinstall if it is
+older than 0.4.0. With a current version, the project is the directory you are in (or the
+nearest parent with <code>.vibe</code> inside the same repository): run <code>vibe</code> from inside the
+repository, or name it with <code>-C &lt;dir&gt;</code>. The other tool’s <code>~/.vibe</code> does not need to be
+removed.</p>
+<h2 id="vibetool-output-keeps-growing"><a class="header" href="#vibetool-output-keeps-growing"><code>.vibe/tool-output/</code> keeps growing</a></h2>
+<p><strong>Cause.</strong> The trace store keeps the complete output of every tool call of every run, up to
+<code>pipeline.trace_max_chars</code> characters per call (100 000 by default), and nothing removes it
+automatically. Long test suites and verbose builds fill it fastest.</p>
+<p><strong>Fix.</strong></p>
+<pre><code class="language-sh">du -sh .vibe/tool-output/*/                  # which tasks use the space
+vibe task discard 3 --yes                   # a task you no longer need, with its outputs
+rm -rf .vibe/tool-output/003-*/&lt;run&gt;        # the outputs of one old run only
+</code></pre>
+<p>To keep less, lower <code>pipeline.trace_max_chars</code>; to keep nothing but the previews in the log,
+set <code>pipeline.trace_outputs = false</code>. Removed outputs only make <code>vibe trace --full</code> fall back
+to the preview. The directory is ignored by git. Details in
+<a href="trace.html#disk-usage">Tool call trace</a>.</p>
+<h2 id="a-vibe-serve-started-by-an-application-is-still-running"><a class="header" href="#a-vibe-serve-started-by-an-application-is-still-running">A <code>vibe serve</code> started by an application is still running</a></h2>
+<pre><code class="language-text">error: cannot listen on 127.0.0.1:7777
+  caused by: Address already in use (os error 48)
+</code></pre>
+<p><strong>Cause.</strong> An application (an editor, the macOS app, a script) started <code>vibe serve</code> as a
+child process and died without stopping it, for example after a crash or a <code>kill -9</code>. The
+orphan server keeps its port, its token file <code>.vibe/server.token</code>, and possibly runs.</p>
+<p><strong>Fix.</strong> Find it and stop it with <code>SIGINT</code>, which cancels its runs cleanly (they stay
+resumable) and removes the token file:</p>
+<pre><code class="language-sh">pgrep -fl "vibe.*serve"
+kill -INT &lt;pid&gt;
+</code></pre>
+<p>An application that starts <code>vibe serve</code> should pass <code>--exit-on-stdin-eof</code> and keep a pipe
+on the child’s standard input: when the application ends, however it ends, the pipe closes
+and the server stops as on <code>Ctrl-C</code>. The macOS app does this. For a server you start by
+hand, <code>--port 0</code> picks a free port.</p>
+<h2 id="vibe-history-shows---or--"><a class="header" href="#vibe-history-shows---or--"><code>vibe history</code> shows <code>~</code>, <code>+</code> or <code>-</code></a></h2>
+<pre><code class="language-text">#  title          status  runs  commits  files  tokens  active      cost  finished
+4  Add a cache    done    2     3        5~     84.1k+  3 min 10 s+ -     2 d ago
+</code></pre>
+<p>These marks are not errors:</p>
+<ul>
+<li><strong><code>~</code> on files</strong>: the list of changed files is approximate. The task branch is gone and
+no merge was recorded, so the list comes from the commit events or from the files the
+agents wrote. <code>vibe history &lt;ref&gt;</code> names the source.</li>
+<li><strong><code>+</code> on tokens or active time</strong>: a lower bound. A run was logged before 0.5 (its totals
+are unknown) or has not finished; <code>vibe history &lt;ref&gt;</code> shows which run.</li>
+<li><strong><code>+</code> on the cost</strong>: some tokens were used outside a finished agent session (a session cut
+by a crash, or the repair of an invalid structured answer) and are not priced.</li>
+<li><strong><code>-</code> as the cost</strong>: there is no <a href="configuration.html#pricing"><code>[pricing]</code></a> table, or a model
+the task used has no price in it (a local model needs a price of zero), or the task ran
+before 0.5 and its models are not recorded.</li>
+</ul>
+<p>The detail also lists <strong>problems</strong> met while reading, such as a merge commit that git no
+longer has (after a rebase or a garbage collection): the history then falls back to the next
+source. See <a href="history.html#changed-files-and-the-approximate-marker">History</a>.</p>
 <h2 id="windows-specifics"><a class="header" href="#windows-specifics">Windows specifics</a></h2>
 <ul>
 <li>Shell commands run through <code>cmd /C</code> but are validated with POSIX shell rules, so <code>cmd</code>

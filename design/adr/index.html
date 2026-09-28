@@ -35,10 +35,10 @@
             const path_to_root = "../../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../toc-f3067f38.js"></script>
+        <script src="../../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,7 +183,9 @@
                         <h1 id="architecture-decision-records"><a class="header" href="#architecture-decision-records">Architecture decision records</a></h1>
 <p>Significant decisions are recorded here in the lightweight ADR format: context, decision,
 consequences. A new ADR is added when a decision changes the shape of the framework; an
-existing ADR is never edited after acceptance, it is superseded by a new one.</p>
+existing ADR is never edited after acceptance, it is superseded by a new one. The one
+exception is a cross reference: a link to the later ADR that details or supersedes a point
+may be added to an accepted ADR, its text does not change otherwise.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -197,6 +199,7 @@ existing ADR is never edited after acceptance, it is superseded by a new one.</p
 <tr><td><a href="005-plugin-protocol.html">005</a></td><td>JSON-RPC over stdio plugin protocol</td><td>Accepted</td></tr>
 <tr><td><a href="006-structured-qa.html">006</a></td><td>Structured QA verdicts</td><td>Accepted</td></tr>
 <tr><td><a href="007-one-seam-many-interfaces.html">007</a></td><td>One seam for every user interface</td><td>Accepted</td></tr>
+<tr><td><a href="008-trace-store-and-read-layer.html">008</a></td><td>Trace store and read layer</td><td>Accepted</td></tr>
 </tbody>
 </table>
 </div>

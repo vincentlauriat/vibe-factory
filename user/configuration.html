@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -204,6 +204,9 @@ vibe config show --default   # the built-in defaults only
 <tr><td><code>[pipeline]</code></td><td>table</td><td>see below</td><td>pipeline tuning</td></tr>
 <tr><td><code>[security]</code></td><td>table</td><td>see below</td><td>tool security policy</td></tr>
 <tr><td><code>[[plugins]]</code></td><td>array of tables</td><td>none</td><td>out-of-process plugins to start</td></tr>
+<tr><td><code>[workspace.container]</code></td><td>table</td><td>none</td><td>settings of the <code>container</code> workspace; see below</td></tr>
+<tr><td><code>[integrations]</code></td><td>table</td><td>none</td><td>GitHub and GitLab access for <code>vibe task import</code> and <code>vibe pr</code>; see below</td></tr>
+<tr><td><code>[pricing."&lt;provider&gt;/&lt;model&gt;"]</code></td><td>table</td><td>none</td><td>model prices, to show what a task cost in <code>vibe history</code>; see below</td></tr>
 </tbody>
 </table>
 </div>
@@ -294,6 +297,8 @@ recipes (Groq, OpenRouter, xAI, Mistral, mock) are in <a href="providers.html">P
 <tr><td><code>approvals</code></td><td>list of <code>"spec"</code>, <code>"plan"</code>, <code>"merge"</code></td><td><code>[]</code></td><td>where the run waits for a human decision; see <a href="#human-approvals">Human approvals</a></td></tr>
 <tr><td><code>max_tokens</code></td><td>integer</td><td>none</td><td>input plus output tokens of the whole run, including resumes; the run pauses when reached</td></tr>
 <tr><td><code>max_duration_secs</code></td><td>integer</td><td>none</td><td>active time of the whole run in seconds, including resumes; the run pauses when reached</td></tr>
+<tr><td><code>trace_outputs</code></td><td>bool</td><td><code>true</code></td><td>keep the complete output of every tool call in <code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code> (ignored by git), referenced by the <code>tool_returned</code> events and read by <code>vibe trace --full</code>; see <a href="trace.html">Tool call trace</a> for disk usage and privacy</td></tr>
+<tr><td><code>trace_max_chars</code></td><td>integer</td><td><code>100000</code></td><td>characters kept per traced tool output; longer outputs are cut and end with a marker line. Only the trace is affected: what the model sees is truncated separately</td></tr>
 </tbody>
 </table>
 </div>
@@ -445,6 +450,49 @@ token_env = "GITLAB_TOKEN"
 </code></pre>
 <p>Used by <code>vibe task import</code> and <code>vibe pr</code>. Tokens are read from the environment only, never
 from the configuration file.</p>
+<h2 id="pricing"><a class="header" href="#pricing"><code>[pricing]</code></a></h2>
+<pre><code class="language-toml">[pricing."anthropic/claude-sonnet-5"]
+input = 3.0          # USD per million prompt tokens
+output = 15.0        # USD per million completion tokens
+cache_read = 0.3     # optional: prompt tokens served from cache
+cache_write = 3.75   # optional: prompt tokens written to cache
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Type</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>input</code></td><td>number, required</td><td>none</td><td>USD per million prompt tokens</td></tr>
+<tr><td><code>output</code></td><td>number, required</td><td>none</td><td>USD per million completion tokens</td></tr>
+<tr><td><code>cache_read</code></td><td>number</td><td>unset</td><td>USD per million prompt tokens read from the cache</td></tr>
+<tr><td><code>cache_write</code></td><td>number</td><td>unset</td><td>USD per million prompt tokens written to the cache</td></tr>
+</tbody>
+</table>
+</div>
+<p>Prices are only used to show the cost of a task in <a href="history.html"><code>vibe history</code></a> and its
+web, terminal and API equivalents; they change nothing in a run. There are no built-in
+prices: without this table no cost is shown. Every price must be a
+finite number, zero or more; <code>vibe</code> refuses a configuration with any other value.</p>
+<p>Events name a model by the provider’s model id, without the provider. A model id is
+matched first against a key equal to it, then against every key <code>"&lt;provider&gt;/&lt;model id&gt;"</code>,
+the provider being the part of the key before its first <code>/</code>. So <code>claude-sonnet-5</code> in a log
+matches <code>"claude-sonnet-5"</code>, else <code>"anthropic/claude-sonnet-5"</code>; a model id that contains a
+<code>/</code> itself, such as <code>meta-llama/llama-3</code> served by <code>openrouter</code>, matches
+<code>"openrouter/meta-llama/llama-3"</code>. When two providers price the same model id differently,
+the model counts as unpriced. A local model needs a table too, at zero, or tasks that used
+it show no cost:</p>
+<pre><code class="language-toml">[pricing."ollama/qwen2.5-coder"]
+input = 0.0
+output = 0.0
+</code></pre>
+<p>A task’s cost is shown only when every agent session it ran has a price that covers the
+tokens it used: one model without a price, cache tokens without a <code>cache_read</code> or
+<code>cache_write</code> price, or a session logged before 0.5 (whose model is not recorded) and the
+cost is left out rather than estimated. The cost is marked incomplete, a lower bound, when
+a session started but never finished (a crash: its tokens were not logged) or when a run
+used more tokens than its sessions account for (a call outside any agent session, such as
+the repair of an invalid structured answer, whose model is not logged).</p>
 <h2 id="plugins"><a class="header" href="#plugins"><code>[[plugins]]</code></a></h2>
 <div class="table-wrapper">
 <table>
@@ -507,6 +555,8 @@ auto_merge = false          # stop in `ready` and let me merge
 merge_strategy = "manual"
 max_tokens = 3_000_000      # pause the run beyond this, resumes included
 max_duration_secs = 7200    # and beyond two hours of active work
+trace_outputs = true        # keep every tool output under .vibe/tool-output/ (git-ignored)
+trace_max_chars = 50_000    # at most this many characters per call
 
 # Security ----------------------------------------------------------------
 [security]

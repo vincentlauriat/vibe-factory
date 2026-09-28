@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,8 +182,10 @@
                     <main>
                         <h1 id="events"><a class="header" href="#events">Events</a></h1>
 <p>Everything the engine does is published as an event. Interfaces (the CLI, <code>vibe events</code>,
-the terminal UI, and later <code>vibe serve</code>) are built on events only, so this page is a
-public, versioned contract (<a href="../design/adr/007-one-seam-many-interfaces.html">ADR-007</a>).</p>
+<code>vibe history</code>, <code>vibe trace</code>, the terminal UI, <code>vibe serve</code> and its clients) are built on
+events only, so this page is a public, versioned contract
+(<a href="../design/adr/007-one-seam-many-interfaces.html">ADR-007</a>,
+<a href="../design/adr/008-trace-store-and-read-layer.html">ADR-008</a>).</p>
 <h2 id="envelope"><a class="header" href="#envelope">Envelope</a></h2>
 <p>Each event travels in an envelope, one JSON object per line in
 <code>.vibe/tasks/&lt;task&gt;/events.jsonl</code> and in <code>vibe --json</code> output:</p>
@@ -219,14 +221,16 @@ types and fields they do not know. Removing or changing a field increments <code
 <tr><td><code>run_started</code></td><td><code>run</code>, <code>task</code></td><td>a run or a resumed run starts</td></tr>
 <tr><td><code>phase_started</code></td><td><code>run</code>, <code>phase</code></td><td>before a phase</td></tr>
 <tr><td><code>phase_finished</code></td><td><code>run</code>, <code>phase</code>, <code>success</code>, <code>summary</code></td><td>after a phase</td></tr>
-<tr><td><code>agent_started</code></td><td><code>run</code>, <code>role</code>, <code>subtask</code></td><td>an agent session starts</td></tr>
+<tr><td><code>agent_started</code></td><td><code>run</code>, <code>role</code>, <code>subtask</code>, <code>model</code></td><td>an agent session starts; <code>model</code> is the provider’s model id</td></tr>
 <tr><td><code>agent_delta</code></td><td><code>run</code>, <code>role</code>, <code>subtask</code>, <code>delta</code> (<code>{"kind":"text"|"thinking","text":…}</code>)</td><td><strong>ephemeral</strong>: text arriving while a step streams</td></tr>
 <tr><td><code>agent_text</code></td><td><code>run</code>, <code>role</code>, <code>text</code></td><td>the complete text of a step</td></tr>
-<tr><td><code>tool_called</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>input</code></td><td>before a tool runs</td></tr>
-<tr><td><code>tool_returned</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>is_error</code>, <code>duration_ms</code>, <code>preview</code></td><td>after a tool ran</td></tr>
+<tr><td><code>tool_called</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>input</code> (complete arguments), <code>call</code>, <code>subtask</code></td><td>before a tool runs</td></tr>
+<tr><td><code>tool_returned</code></td><td><code>run</code>, <code>role</code>, <code>tool</code>, <code>is_error</code>, <code>duration_ms</code>, <code>preview</code> (first 200 characters), <code>call</code>, <code>subtask</code>, <code>exit_code</code>, <code>timed_out</code>, <code>output_chars</code>, <code>output_file</code></td><td>after a tool ran</td></tr>
 <tr><td><code>agent_finished</code></td><td><code>run</code>, <code>role</code>, <code>steps</code>, <code>usage</code>, <code>stop</code></td><td>an agent session ends</td></tr>
 <tr><td><code>subtask_updated</code></td><td><code>run</code>, <code>subtask</code>, <code>status</code></td><td>a subtask changes state</td></tr>
 <tr><td><code>subtask_integrated</code></td><td><code>run</code>, <code>subtask</code>, <code>commit</code>, <code>conflicts</code></td><td>a finished attempt was merged into the task branch (<code>conflicts</code> empty) or conflicted</td></tr>
+<tr><td><code>committed</code></td><td><code>run</code>, <code>subtask</code>, <code>commit</code>, <code>message</code>, <code>files</code></td><td>the pipeline committed in the task workspace: checkpoint before the build, subtask or fix commit, subtask integration</td></tr>
+<tr><td><code>merged</code></td><td><code>run</code>, <code>commit</code>, <code>branch</code>, <code>base</code></td><td>the merge phase merged the task branch into its base (<code>auto_merge</code>); <code>commit</code> is the resulting commit of <code>base</code>; <code>branch</code> or <code>base</code> is <code>""</code> when the workspace provider does not know it</td></tr>
 <tr><td><code>validation_finished</code></td><td><code>run</code>, <code>command</code>, <code>integration</code>, <code>passed</code>, <code>exit_code</code></td><td>a required validation command finished</td></tr>
 <tr><td><code>budget_updated</code></td><td><code>run</code>, <code>tokens</code>, <code>token_limit</code>, <code>active_ms</code>, <code>duration_limit_ms</code></td><td>after each phase and each subtask attempt</td></tr>
 <tr><td><code>artefact_written</code></td><td><code>run</code>, <code>artefact</code> (<code>{"kind":"spec"}</code>, <code>{"kind":"plan"}</code>, <code>{"kind":"qa_report","round":n}</code>)</td><td>the spec, the plan or a QA report was written</td></tr>
@@ -234,19 +238,75 @@ types and fields they do not know. Removing or changing a field increments <code
 <tr><td><code>approval_resolved</code></td><td><code>run</code>, <code>gate</code>, <code>approved</code>, <code>comment</code></td><td><code>vibe approve</code> or <code>vibe reject</code> answered; logged by that command</td></tr>
 <tr><td><code>retrying</code></td><td><code>run</code>, <code>what</code>, <code>attempt</code>, <code>delay_ms</code></td><td>before a retry</td></tr>
 <tr><td><code>paused</code></td><td><code>run</code>, <code>reason</code></td><td>the run stops and waits for a human</td></tr>
-<tr><td><code>run_finished</code></td><td><code>run</code>, <code>success</code>, <code>status</code></td><td>the run ends, always last, also after <code>paused</code></td></tr>
+<tr><td><code>run_finished</code></td><td><code>run</code>, <code>success</code>, <code>status</code>, <code>usage</code>, <code>active_ms</code>, <code>started_at</code></td><td>the run ends: always the last event of a run that published <code>run_started</code>, also after <code>paused</code> and after an error (then <code>success</code> is <code>false</code>, with <code>status</code> <code>failed</code>, or the unchanged task status when the workspace could not be opened); totals of the whole run, resumes included</td></tr>
 <tr><td><code>log</code></td><td><code>run</code> (optional), <code>level</code>, <code>message</code></td><td>diagnostics</td></tr>
 </tbody>
 </table>
 </div>
 <p>Identifiers (<code>run</code>, <code>task</code>, <code>subtask</code>) are UUIDs. <code>role</code> is the agent role (<code>coder</code>,
-<code>qa_reviewer</code>, …). Statuses and phases use the same snake case names as <code>vibe task show</code>.</p>
+<code>qa_reviewer</code>, …). Statuses and phases use the same snake case names as <code>vibe task show</code>.
+<code>usage</code> is <code>{"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"}</code>.</p>
+<h3 id="tool-calls"><a class="header" href="#tool-calls">Tool calls</a></h3>
+<p><code>call</code> is a short random id (12 hex digits) generated for each call: it pairs a
+<code>tool_called</code> with its <code>tool_returned</code>, including when read-only calls of one step run in
+parallel and return out of order. <code>subtask</code> is the subtask the session works on, <code>null</code>
+outside the build.</p>
+<p>On <code>tool_returned</code>, <code>exit_code</code> and <code>timed_out</code> come from tools that run a command (<code>bash</code>);
+other tools leave them <code>null</code> and <code>false</code>. <code>output_chars</code> is the length of the complete
+output, before any truncation. <code>output_file</code> points to the complete output (see below), or
+is <code>null</code> when tracing is off or the file could not be written.</p>
+<h3 id="trace-store"><a class="header" href="#trace-store">Trace store</a></h3>
+<p>With <code>pipeline.trace_outputs = true</code> (the default), the complete output of every tool call
+is kept in <code>.vibe/tool-output/&lt;task dir&gt;/&lt;run&gt;/&lt;call&gt;.txt</code>, where <code>&lt;task dir&gt;</code> is the task’s
+directory name under <code>.vibe/tasks/</code> (<code>003-add-login</code>). <code>output_file</code> gives that path
+relative to the project root. Each file holds at most <code>pipeline.trace_max_chars</code> characters
+(100 000 by default); a longer output is cut and ends with a marker line. The directory is
+ignored by git (<code>.vibe/.gitignore</code>, written by <code>vibe init</code>) and removed by
+<code>vibe task discard</code>. It is independent of what the model sees: an output longer than the
+runner’s limit is still truncated for the model, with the complete text in
+<code>&lt;workspace&gt;/.vibe/tool-output/&lt;uuid&gt;.txt</code> where the agent can read it.</p>
+<h3 id="commits"><a class="header" href="#commits">Commits</a></h3>
+<p><code>committed.subtask</code> is <code>null</code> for the checkpoint before the build, for fix commits, and for
+one commit shared by several subtasks when subtasks are not isolated. <code>committed.files</code>
+lists the paths changed by the commit against its first parent (for a merge commit, what it
+brought in), relative to the repository root; it is empty when the committer does not use
+git. <code>message</code> is the first line of the commit message. Commits the git workspace makes on
+its own are not announced: the checkpoint just before merging and the commit of an assisted
+conflict resolution; the merge itself is, by <code>merged</code>.</p>
+<h3 id="logs-recorded-before-05"><a class="header" href="#logs-recorded-before-05">Logs recorded before 0.5</a></h3>
+<p>Every field added in 0.5 is optional when reading, so older logs still load under schema
+<code>2</code>: <code>call</code> reads as <code>000000000000</code> (pair those calls by order and <code>tool</code>), <code>subtask</code>,
+<code>exit_code</code> and <code>output_file</code> as <code>null</code>, <code>timed_out</code> as <code>false</code>, <code>output_chars</code> as <code>0</code>,
+<code>model</code> as <code>""</code>, and <code>run_finished</code> without totals reads <code>usage</code> as zeros, <code>active_ms</code> as
+<code>0</code> and <code>started_at</code> as <code>1970-01-01T00:00:00Z</code>.</p>
+<h2 id="events-of-every-task"><a class="header" href="#events-of-every-task">Events of every task</a></h2>
+<p>A task’s <code>events.jsonl</code> does not name its task: it is implied by the directory. Views over
+the whole project (<code>vibe events</code> without a task, <code>GET /api/events</code>, <code>GET /api/stream</code>, the
+Activity screens) read every task’s log and tag each envelope with its task, serialised
+flat, the envelope’s fields next to the tag:</p>
+<pre><code class="language-json">{"task":"6f1c3e0a-9b2d-4c47-8a51-0e3b8f2d7c19","number":3,"schema":2,"seq":17,"at":"2026-09-27T10:00:00Z","event":{"type":"phase_started","run":"…","phase":"build"}}
+</code></pre>
+<p><code>task</code> is the task id and <code>number</code> its number on the board. This shape is
+<code>vibe_pipeline::TaggedEnvelope</code>.</p>
+<p>Tagged events are ordered by an <strong>event cursor</strong>: the time <code>at</code>, then the task number, then
+<code>seq</code> (<code>0</code> when absent). It is written <code>&lt;nanoseconds since the epoch&gt;-&lt;number&gt;-&lt;seq&gt;</code>, for
+example <code>1790000000123456789-3-17</code>, and serves as the id of the events of <code>/api/stream</code>. A
+client that resumes after the cursor of the last event it saw gets neither a repeat nor a
+loss of events of other tasks logged at the same instant; <code>0-0-0</code> means “from the start”.</p>
+<p>The order across tasks is the order of the <code>at</code> times, and each process stamps its own
+events. Events of one task always come in order, but a <code>vibe run</code> in another process whose
+clock reads slightly earlier can log an event whose cursor sorts before one already
+delivered for another task. A live follower still delivers it, once, so cursors are not
+always increasing on the wire; a client that was disconnected while it was logged and
+resumes from a later cursor does not get it. When the state of one task must be exact,
+reload that task’s events (<code>vibe events &lt;REF&gt;</code>, <code>GET /api/tasks/{ref}/events</code>), which are
+ordered by <code>seq</code>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../design/adr/007-one-seam-many-interfaces.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../design/adr/008-trace-store-and-read-layer.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -260,7 +320,7 @@ types and fields they do not know. Removing or changing a field increments <code
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../design/adr/007-one-seam-many-interfaces.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../design/adr/008-trace-store-and-read-layer.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

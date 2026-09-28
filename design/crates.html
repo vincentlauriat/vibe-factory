@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-995fcdd3.js";
+            window.path_to_searchindex_js = "../searchindex-d26b20d3.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f3067f38.js"></script>
+        <script src="../toc-a937d295.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,26 +186,28 @@ the public types you will meet first, what it is allowed to depend on, and how i
 The <a href="overview.html">Architecture overview</a> explains why the layering exists; this page is the
 map.</p>
 <h2 id="dependency-graph"><a class="header" href="#dependency-graph">Dependency graph</a></h2>
-<p>The graph below is the one declared in the <code>Cargo.toml</code> files today. Every implementation
-crate depends on <code>vibe-core</code> and on nothing else from the workspace: <code>vibe-agents</code> reaches
-models, tools and hooks only through the core traits, so it does not link any concrete
-provider, tool set, workspace or plugin transport. Wiring concrete implementations together
-is the job of the layers above it.</p>
-<pre><code class="language-text">                 vibe-cli            (binary `vibe`)
-                    │
-                 vibe-pipeline       (orchestration, task store)
-                    │
-   ┌────────────┬───┴────────┬──────────────┬──────────────┬─────────────┐
-   │            │            │              │              │             │
-vibe-agents  vibe-providers vibe-tools  vibe-workspace  vibe-plugins     │
-   │            │            │              │              │             │
-   └────────────┴────────────┴──────┬───────┴──────────────┴─────────────┘
-                                    │
-                                vibe-core      (types + traits, no I/O)
+<p>The graph below is the one declared in the <code>Cargo.toml</code> files. The implementation crates
+depend on <code>vibe-core</code> and on nothing else from the workspace: <code>vibe-agents</code> reaches models,
+tools and hooks only through the core traits, so it does not link any concrete provider,
+tool set, workspace or plugin transport. <code>vibe-pipeline</code> builds on <code>vibe-agents</code>, and on
+<code>vibe-workspace</code> for the git reads of its read layer (the history of a task: its branch, its
+merge commit, the files it changed); the pipeline itself still reaches workspaces through
+the <code>WorkspaceProvider</code> trait. Wiring concrete implementations together is the job of
+<code>vibe-cli</code>.</p>
+<pre><code class="language-text">   vibe-cli        (binary `vibe`: commands, terminal UI, HTTP server and web UI)
+      │   depends on every crate below
+      ├──────────────────────────────┬────────────────┬──────────────┐
+      │                              │                │              │
+   vibe-pipeline                     │                │              │
+      │                              │                │              │
+      ├──────────────┐               │                │              │
+      │              │               │                │              │
+   vibe-agents   vibe-workspace   vibe-providers   vibe-tools   vibe-plugins
+      │              │               │                │              │
+      └──────────────┴───────┬───────┴────────────────┴──────────────┘
+                             │
+                         vibe-core      (types + traits, no I/O)
 </code></pre>
-<p><code>vibe-pipeline</code> and <code>vibe-cli</code> currently declare only <code>vibe-core</code> (both are placeholders);
-the edges from the pipeline to the five middle crates are the intended wiring described in
-<code>ARCHITECTURE_EN.md</code>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -218,8 +220,8 @@ the edges from the pipeline to the five middle crates are the intended wiring de
 <tr><td><code>vibe-workspace</code></td><td><code>vibe-core</code></td><td><code>tokio</code> (process); shells out to <code>git</code></td></tr>
 <tr><td><code>vibe-plugins</code></td><td><code>vibe-core</code></td><td><code>tokio</code> (process, io), <code>futures</code>, <code>dirs</code>, <code>indexmap</code></td></tr>
 <tr><td><code>vibe-agents</code></td><td><code>vibe-core</code></td><td><code>futures</code>, <code>tokio</code>, <code>chrono</code>, <code>uuid</code>, <code>toml</code></td></tr>
-<tr><td><code>vibe-pipeline</code></td><td><code>vibe-core</code></td><td>none yet</td></tr>
-<tr><td><code>vibe-cli</code></td><td><code>vibe-core</code></td><td>none yet</td></tr>
+<tr><td><code>vibe-pipeline</code></td><td><code>vibe-core</code>, <code>vibe-agents</code>, <code>vibe-workspace</code></td><td><code>tokio</code>, <code>fs4</code> (file locks), <code>futures</code>, <code>chrono</code>, <code>uuid</code>, <code>regex</code></td></tr>
+<tr><td><code>vibe-cli</code></td><td>every crate above</td><td><code>clap</code>, <code>ratatui</code>, <code>axum</code>, <code>reqwest</code>, <code>tokio</code>, <code>console</code>, <code>toml_edit</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -336,14 +338,27 @@ truncation to <code>.vibe/tool-output/</code>, cancellation, provider error hand
 max-tokens nudge, convergence at 75 %, prompt variables and hook augmentation, published
 events, and a smoke run of every built-in agent.</p>
 <h2 id="vibe-pipeline"><a class="header" href="#vibe-pipeline">vibe-pipeline</a></h2>
-<p><strong>Responsibility</strong> (from <code>ARCHITECTURE_EN.md</code>; not written yet). File-backed <code>TaskStore</code>
-under <code>.vibe/tasks/NNN-slug/</code>, complexity profiles, phase orchestration, parallel subtask
-execution honouring <code>depends_on</code>, the QA/fix loop with escalation, run state and resume, and
-the event log. See <a href="pipeline.html">The pipeline</a>.</p>
+<p><strong>Responsibility.</strong> The file-backed <code>TaskStore</code> under <code>.vibe/tasks/NNN-slug/</code>
+(<code>FileTaskStore</code>), complexity profiles, phase orchestration, parallel subtask execution
+honouring <code>depends_on</code>, the QA/fix loop with escalation, human approvals, budgets, run state
+and resume, and the event log. <code>RunManager</code> is the seam every interface uses to start,
+resume, cancel and list runs (<a href="adr/007-one-seam-many-interfaces.html">ADR-007</a>). See
+<a href="pipeline.html">The pipeline</a>.</p>
+<p><strong>Read layer</strong> (<a href="adr/008-trace-store-and-read-layer.html">ADR-008</a>): <code>events_log</code>
+(<code>EventReader</code>, <code>TaggedEnvelope</code>, <code>EventCursor</code>, <code>AllEventsFollower</code>) reads one log
+incrementally or every task’s log in cursor order; <code>history</code> rebuilds what a task did
+(<code>TaskHistory</code>, <code>project_history</code>, <code>task_history</code>); <code>trace</code> pairs the tool calls of a run
+(<code>RunTrace</code>, <code>Call</code>, <code>run_trace</code>, <code>read_output</code>). They are described in
+<a href="persistence.html#reading-the-store-the-read-layer">Persistence layout</a>.</p>
+<p><strong>Tests.</strong> <code>tests/pipeline.rs</code> runs whole pipelines on the scripted provider and a temporary
+git repository; <code>tests/history.rs</code> builds histories from logs of both schemas and from real
+git histories (branch, fast-forward, merge, reset).</p>
 <h2 id="vibe-cli"><a class="header" href="#vibe-cli">vibe-cli</a></h2>
-<p><strong>Responsibility</strong> (from <code>ARCHITECTURE_EN.md</code>; not written yet). The <code>vibe</code> binary with
-<code>init</code>, <code>task add|list|show|discard</code>, <code>run</code>, <code>status</code>, <code>config</code>, <code>agents</code>, <code>plugins</code> and
-<code>doctor</code>, and live rendering of events. See <a href="../user/cli.html">Command line reference</a>.</p>
+<p><strong>Responsibility.</strong> The <code>vibe</code> binary: every command of the
+<a href="../user/cli.html">Command line reference</a>, the live rendering of events, the terminal UI
+(<code>vibe tui</code>, module <code>tui</code>) and the HTTP server with its embedded web UI (<code>vibe serve</code>,
+module <code>server</code>). Every interface goes through <code>RunManager</code> and the read layer; none keeps
+a state of its own.</p>
 <h2 id="where-to-add-code"><a class="header" href="#where-to-add-code">Where to add code</a></h2>
 <div class="table-wrapper">
 <table>
