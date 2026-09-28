@@ -71,9 +71,9 @@ Requires Rust 1.88+ and git.
 cargo install --git https://github.com/vincentlauriat/vibe-factory vibe-cli
 ```
 
-The macOS app (macOS 14+) is built from source for now: see
-[apps/macos/VibeFactory](apps/macos/VibeFactory/README.md) (Xcode and `xcodegen`). A signed
-DMG will be attached to its first release. It needs the `vibe` binary above.
+The macOS app (macOS 14+) ships as a signed, notarized DMG, `VibeFactory-0.5.0.dmg`, on the
+[v0.5.0 release](https://github.com/vincentlauriat/vibe-factory/releases/tag/v0.5.0); it updates itself with Sparkle. It needs the `vibe` binary above. To
+build it yourself, see [apps/macos/VibeFactory](apps/macos/VibeFactory/README.md).
 
 ## Quick start
 

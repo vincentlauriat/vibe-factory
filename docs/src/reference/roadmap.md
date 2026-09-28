@@ -69,8 +69,8 @@ See everything that was done, from every interface
 - [x] Server routes for the global event stream, history and trace; web views Activity,
       History and Trace
 - [x] Terminal UI screens Activity and History and a Trace tab
-- [x] Native macOS app on `vibe serve` (SwiftUI, macOS 14+), built from source until its
-      first signed release
+- [x] Native macOS app on `vibe serve` (SwiftUI, macOS 14+): signed, notarized DMG with
+      Sparkle auto-update
 
 ## Later
 

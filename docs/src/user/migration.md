@@ -79,8 +79,8 @@ without a task (with `--since`, `--type`, `--task`, `--follow`), `--since` and `
 
 `apps/macos/VibeFactory` is a SwiftUI client of `vibe serve` for macOS 14 and later. It
 starts `vibe serve --exit-on-stdin-eof` for the project it opens, so it needs the 0.5
-`vibe` on the machine. It is built from source for now (its README explains how); a signed
-DMG comes with its first release.
+`vibe` on the machine. A signed, notarized DMG is attached to the v0.5.0 release; the app
+then updates itself (Check for Updates…). Its README explains how to build it from source.
 
 ### For library users
 
