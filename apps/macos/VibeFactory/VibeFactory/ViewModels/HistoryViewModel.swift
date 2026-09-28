@@ -92,11 +92,59 @@ final class ActivityViewModel {
         if filter.groups.contains(group) { filter.groups.remove(group) } else { filter.groups.insert(group) }
     }
 
-    /// Entries the filter keeps, up to the pause.
+    /// What the last `visible` call kept, so that the next one only looks at
+    /// the entries the feed added since. Not observed: it changes during a
+    /// view update.
+    @ObservationIgnored private var cache: VisibleCache?
+
+    private struct VisibleCache {
+        let filter: ActivityFilter
+        let pausedAt: Int?
+        /// Id of the last feed entry looked at.
+        var lastId: Int
+        var entries: [ProjectFeed.Entry]
+    }
+
+    /// Entries the filter keeps, up to the pause. The feed grows by one
+    /// entry per event and its ids only increase, so the whole buffer is
+    /// filtered again only when the filter or the pause changes.
     func visible(_ feed: ProjectFeed) -> [ProjectFeed.Entry] {
-        feed.entries.filter { entry in
-            (pausedAt.map { entry.id <= $0 } ?? true) && filter.keeps(task: entry.task, type: entry.type)
+        let entries = feed.entries
+        var cache: VisibleCache
+        if let kept = self.cache, kept.filter == filter, kept.pausedAt == pausedAt {
+            cache = kept
+            // The feed drops its oldest entries past its limit (all of them
+            // when the stream reseeds it): drop them from the result too.
+            if let first = entries.first?.id, let keptFirst = cache.entries.first?.id, keptFirst < first {
+                cache.entries.removeFirst(Self.count(upTo: first, in: cache.entries))
+            } else if entries.isEmpty {
+                cache.entries.removeAll()
+            }
+        } else {
+            cache = VisibleCache(filter: filter, pausedAt: pausedAt, lastId: -1, entries: [])
         }
+        let fresh = entries[Self.count(upTo: cache.lastId + 1, in: entries)...]
+        for entry in fresh where keeps(entry) {
+            cache.entries.append(entry)
+        }
+        if let last = entries.last?.id { cache.lastId = last }
+        self.cache = cache
+        return cache.entries
+    }
+
+    private func keeps(_ entry: ProjectFeed.Entry) -> Bool {
+        (pausedAt.map { entry.id <= $0 } ?? true) && filter.keeps(task: entry.task, type: entry.type)
+    }
+
+    /// Number of entries whose id is below `id`; `entries` are ordered by id.
+    private static func count(upTo id: Int, in entries: [ProjectFeed.Entry]) -> Int {
+        var low = 0
+        var high = entries.count
+        while low < high {
+            let mid = (low + high) / 2
+            if entries[mid].id < id { low = mid + 1 } else { high = mid }
+        }
+        return low
     }
 
     /// Entries kept by the filter that arrived after the pause.
