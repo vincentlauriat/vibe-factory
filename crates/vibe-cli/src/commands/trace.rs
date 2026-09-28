@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::{Result, bail};
 use serde_json::Value;
-use vibe_core::{RunId, SubtaskId};
+use vibe_core::{Envelope, RunId, SubtaskId};
 use vibe_pipeline::trace::files_written;
 use vibe_pipeline::{Call, PairedBy, PipelineStore, RunTrace, read_output, run_trace};
 
@@ -24,12 +24,7 @@ pub async fn run(root: &Path, args: TraceArgs, ui: Ui) -> Result<u8> {
     let store = open_store(root)?;
     let task = resolve_task(&store, &args.reference).await?;
     let events = store.load_events(task.id).await?;
-    let mut runs: Vec<RunId> = Vec::new();
-    for run in events.iter().filter_map(|e| e.event.run_id()) {
-        if !runs.contains(&run) {
-            runs.push(run);
-        }
-    }
+    let runs = runs_of(&events);
     if runs.is_empty() {
         if ui.json {
             ui.print_json(&if args.all {
@@ -104,8 +99,29 @@ pub async fn run(root: &Path, args: TraceArgs, ui: Ui) -> Result<u8> {
     Ok(0)
 }
 
-/// The only one of `ids` whose text starts with `prefix`.
-fn match_prefix<T: Copy + std::fmt::Display>(prefix: &str, ids: &[T], what: &str) -> Result<T> {
+/// Runs of a log, in the order they first appear.
+pub(crate) fn runs_of(events: &[Envelope]) -> Vec<RunId> {
+    let mut runs: Vec<RunId> = Vec::new();
+    for run in events.iter().filter_map(|e| e.event.run_id()) {
+        if !runs.contains(&run) {
+            runs.push(run);
+        }
+    }
+    runs
+}
+
+/// How a prefix matches a list of ids.
+pub(crate) enum PrefixMatch<T> {
+    /// Exactly one id.
+    One(T),
+    /// No id (or an empty prefix).
+    None,
+    /// Several ids.
+    Several,
+}
+
+/// Which of `ids` start with `prefix`, ignoring surrounding spaces and case.
+pub(crate) fn find_prefix<T: Copy + std::fmt::Display>(prefix: &str, ids: &[T]) -> PrefixMatch<T> {
     let prefix = prefix.trim().to_ascii_lowercase();
     let found: Vec<T> = ids
         .iter()
@@ -113,9 +129,21 @@ fn match_prefix<T: Copy + std::fmt::Display>(prefix: &str, ids: &[T], what: &str
         .filter(|id| !prefix.is_empty() && id.to_string().starts_with(&prefix))
         .collect();
     match found.as_slice() {
-        [one] => Ok(*one),
-        [] => bail!("no {what} of this task matches `{prefix}`"),
-        _ => bail!("`{prefix}` matches several {what}s of this task: give more characters"),
+        [one] => PrefixMatch::One(*one),
+        [] => PrefixMatch::None,
+        _ => PrefixMatch::Several,
+    }
+}
+
+/// The only one of `ids` whose text starts with `prefix`.
+fn match_prefix<T: Copy + std::fmt::Display>(prefix: &str, ids: &[T], what: &str) -> Result<T> {
+    let shown = prefix.trim().to_ascii_lowercase();
+    match find_prefix(prefix, ids) {
+        PrefixMatch::One(one) => Ok(one),
+        PrefixMatch::None => bail!("no {what} of this task matches `{shown}`"),
+        PrefixMatch::Several => {
+            bail!("`{shown}` matches several {what}s of this task: give more characters")
+        }
     }
 }
 

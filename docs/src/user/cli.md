@@ -344,16 +344,36 @@ vibe serve [--bind 127.0.0.1] [--port 7777] [--provider NAME] [--model P/M] [--w
 Serves an HTTP API and a web UI for the project. It prints the address and a link that
 carries the access token (`http://127.0.0.1:7777/#token=…`); open it in a browser. The web
 UI shows the task board, the selected task with its run, budget, a live activity feed with
-the text as the model writes it, the plan, spec, QA reports and workspace changes, and lets
-you create, run, resume and cancel tasks and approve or reject what a run waits for. With
-`--evals DIR`, an **Evaluations** view shows every `summary.json` that
-`evals/run_suite.py` wrote under `DIR` (success rate, time, tokens per case and model).
+the text as the model writes it, the plan, spec, QA reports, tool-call trace and workspace
+changes, and lets you create, run, resume and cancel tasks and approve or reject what a run
+waits for. Its views:
+
+- **Tasks**: the board and the selected task. Its **Trace** tab lists every tool call of a
+  run (role, subtask, tool, duration, exit code, a badge for errors and for calls logged
+  before 0.5 that were `paired by order`); a call expands to its arguments as JSON and its
+  output preview, and **Load complete output** fetches the whole traced output. A selector
+  picks the run when there are several; the footer counts calls and errors and lists the
+  files written.
+- **Activity**: every task's events as they happen, with toggles per group of event types
+  (agents, tools, phases, git, approvals, budget, logs), a task filter and a pause button.
+  Clicking a line opens its task.
+- **History**: what each finished task delivered (the columns of `vibe history`), with
+  failed and cancelled tasks on demand; a row expands to its runs, commits, changed files
+  (with their source and whether the list is approximate), validations, last QA verdict
+  and problems.
+- **Evaluations**: with `--evals DIR`, every `summary.json` that `evals/run_suite.py` wrote
+  under `DIR` (success rate, time, tokens per case and model).
+
+The page reads one event stream, `GET /api/stream`, for the whole project; it resumes from
+the last event id when the connection comes back, and polls the task list every 10 s
+(every 2 s while the stream is down) since creating a task is not an event.
 
 Security: the server listens on the loopback interface by default and then only accepts its
 own host names (`127.0.0.1`, `localhost`, `[::1]`), which blocks DNS rebinding. Every API
 call needs `Authorization: Bearer <token>`; the token is random per start, printed once and
-written to `.vibe/server.token` (owner-only on Unix), and removed on exit. Event streams also
-accept `?token=`, because browsers cannot set headers on them. The API never returns the
+written to `.vibe/server.token` (owner-only on Unix), and removed on exit. The two event
+streams, `/api/stream` and `/api/tasks/{ref}/stream`, also accept `?token=`, because browsers
+cannot set headers on them; no other route does. The API never returns the
 configuration or keys. `--bind` with another address prints a warning: anyone who reaches it
 with the token controls the agents. `Ctrl-C` stops the server and cancels the runs it started
 (they stay resumable).
@@ -378,9 +398,47 @@ read.
 | `GET /api/tasks/{ref}/events?after=SEQ&all=bool` | logged events |
 | `GET /api/evals` | evaluation summaries found under `--evals` |
 | `GET /api/tasks/{ref}/stream?after=SEQ` | server-sent events: logged events after `SEQ`, then new ones and streamed text; each SSE event is named by its type and carries the envelope, with the sequence number as id |
+| `GET /api/events?after=CURSOR&since=TIME&type=T&task=REF&limit=N` | logged events of every task as tagged envelopes (`{"task", "number", "schema", "seq", "at", "event"}`), oldest first, the last `N` (default 1000, at most 10000) after the filters; see below |
+| `GET /api/stream?after=CURSOR&since=TIME&type=T&task=REF` | server-sent events of every task: logged events after the starting point, then new ones (tasks created later included) and the streamed text of runs this server started; see below |
+| `GET /api/history?all=bool` | history of every finished task (`vibe history --json`); `all` adds failed and cancelled ones |
+| `GET /api/history/{ref}` | history of one task, finished or not (`vibe history REF --json`) |
+| `GET /api/tasks/{ref}/trace?run=RUN&all=bool` | tool calls of the last run, of the run whose id starts with `RUN`, or of every run with `all` (a list), as `vibe trace --json`; 404 when the task has not been run (where `vibe trace --json` prints `null` or `[]`) or no run matches `RUN`, 400 when `RUN` matches several runs or comes with `all` |
+| `GET /api/tasks/{ref}/trace/{call}/output` | complete output of a call, as `text/plain`, cut at 8 MiB (then marked at the end and with `X-Vibe-Truncated: true`); 400 for an id that is not 12 hex digits, 404 when the call is unknown or its output was not traced, is gone or cannot be read |
 
-`{ref}` is a task number, directory name or id prefix, as on the command line. Errors are
-`{"error": "…"}` with 400, 401, 403, 404 or 409.
+`{ref}` is a task number, directory name or id prefix, as on the command line; a prefix
+that matches several tasks is a 400. Errors are `{"error": "…"}` with 400 (including an
+unknown event type, a malformed cursor, time or limit in `/api/events` and `/api/stream`),
+401, 403, 404, 409, or 503 when too many event streams are open.
+
+Project-wide events are ordered by an **event cursor**, `<nanoseconds since the
+epoch>-<task number>-<seq>` (`1790000000123456789-3-17`): by time, then task, then sequence
+number, so events of two tasks logged at the same instant are neither lost nor repeated on
+resume. In `/api/events` and `/api/stream`, `after=CURSOR` keeps the events after it and
+`since=TIME` those after that time (RFC 3339, or an age such as `30m`, `2h`, `1d`, as
+`vibe events --since`); `type` (an event type) and `task` (a task
+reference) repeat, and each list keeps events that match one of its values. `/api/events`
+answers with two headers: `X-Vibe-Cursor`, the cursor of the last event read before the
+filters (the value to pass as `after` to go on from there, absent when nothing was read),
+and `X-Vibe-Read-Errors`, the number of task logs that could not be read (their events are
+missing; the server logs why). In `/api/stream`, each SSE event is named by its type and
+its data is the tagged envelope; logged events carry their cursor as `id`, and a client that
+reconnects with `Last-Event-ID` resumes after it (the header wins over `after`). Streamed
+text (`agent_delta`) has no id and is not replayed. Without `after`, `since` or
+`Last-Event-ID`, the stream starts from now. A comment line is sent every 15 s to keep an
+idle connection open. All streams share one reader of the logs, which runs while at least
+one is open; at most 32 streams are open at once (503 beyond).
+
+Cursor order is the order of the `at` times each process writes. Events of one task always
+come in order, but a `vibe run` in another process whose clock reads earlier than the
+server's can log an event with a cursor below one already sent for another task. An open
+stream still sends it, once, so ids are not always increasing; but a client that was
+disconnected while it was logged and resumes from its last id does not get it, since it
+sorts before that id. Reload the events of a task (`/api/tasks/{ref}/events`) when its
+state must be exact.
+
+Trace outputs are only read from `.vibe/tool-output/`: paths recorded elsewhere are
+ignored, and a file there that is a link leading out of it is answered like a missing
+output (404, the reason in the server's log).
 
 ## `vibe events`
 

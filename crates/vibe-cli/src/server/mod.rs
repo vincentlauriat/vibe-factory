@@ -112,6 +112,7 @@ pub async fn run(root: &Path, args: ServeArgs, ui: Ui) -> Result<u8> {
         token,
         allowed_hosts,
         evals: args.evals.clone(),
+        streams: Arc::new(api::StreamHub::new()),
     });
     let stdin_closed = args.exit_on_stdin_eof.then(stdin_eof);
     axum::serve(listener, api::router(state))
