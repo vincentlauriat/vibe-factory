@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d26b20d3.js";
+            window.path_to_searchindex_js = "searchindex-479f1378.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-a937d295.js"></script>
@@ -283,7 +283,7 @@ worktree per task. For a directory without git, use the <code>in_place</code> wo
 <code>~/.cargo/bin</code> (<code>%USERPROFILE%\.cargo\bin</code> on Windows), which rustup adds to your <code>PATH</code>.
 The first build downloads and compiles the dependencies and takes a few minutes.</p>
 <p>To install a tagged release or a branch (replace the tag with one that exists):</p>
-<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.4.0 vibe-cli
+<pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.0 vibe-cli
 cargo install --git https://github.com/vincentlauriat/vibe-factory --branch main vibe-cli
 </code></pre>
 <h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
@@ -306,7 +306,7 @@ mdbook serve docs          # this book, on http://localhost:3000
 <h2 id="verifying-the-installation"><a class="header" href="#verifying-the-installation">Verifying the installation</a></h2>
 <pre><code class="language-sh">vibe --version
 </code></pre>
-<pre><code class="language-text">vibe 0.4.0
+<pre><code class="language-text">vibe 0.5.0
 </code></pre>
 <p>Then, inside a project:</p>
 <pre><code class="language-sh">cd your-project
@@ -3270,7 +3270,6 @@ activity of every task in one feed, the complete trace of each tool call, and a 
 app on <code>vibe serve</code>. Existing <code>.vibe/config.toml</code> files keep working, and runs started with
 0.4 can be resumed with 0.5.</p>
 <h3 id="upgrade"><a class="header" href="#upgrade">Upgrade</a></h3>
-<p>Once 0.5.0 is released:</p>
 <pre><code class="language-sh">cargo install --git https://github.com/vincentlauriat/vibe-factory --tag v0.5.0 vibe-cli --force
 vibe --version    # vibe 0.5.0
 vibe doctor
@@ -5178,9 +5177,9 @@ call fast; after <code>shutdown</code> closed stdin, writes fail with <code>plug
 <p>The host sends the VPP fields and, for MCP servers, the MCP fields:</p>
 <pre><code class="language-json">{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
   "protocol_version":"1",
-  "host":{"name":"vibe-factory","version":"0.4.0"},
+  "host":{"name":"vibe-factory","version":"0.5.0"},
   "protocolVersion":"2025-06-18",
-  "clientInfo":{"name":"vibe-factory","version":"0.4.0"},
+  "clientInfo":{"name":"vibe-factory","version":"0.5.0"},
   "capabilities":{}}}
 </code></pre>
 <pre><code class="language-json">{"jsonrpc":"2.0","id":1,"result":{"name":"echo","version":"0.1.0",
@@ -6304,7 +6303,7 @@ artefact events, replay and follow</li>
 <li><input disabled="" type="checkbox" checked=""> Persistent project memory across tasks</li>
 <li><input disabled="" type="checkbox" checked=""> VS Code extension on <code>vibe serve</code></li>
 </ul>
-<h2 id="05--visibility-history-global-activity-full-trace-macos-app-done-unreleased"><a class="header" href="#05--visibility-history-global-activity-full-trace-macos-app-done-unreleased">0.5 — visibility: history, global activity, full trace, macOS app (done, unreleased)</a></h2>
+<h2 id="05--visibility-history-global-activity-full-trace-macos-app-released"><a class="header" href="#05--visibility-history-global-activity-full-trace-macos-app-released">0.5 — visibility: history, global activity, full trace, macOS app (released)</a></h2>
 <p>See everything that was done, from every interface
 (<a href="#adr-008-trace-store-and-read-layer">ADR-008</a>).</p>
 <ul>
