@@ -101,8 +101,8 @@ then a terminal UI on top of it.
 - [x] `vibe trace <REF> [--run|--all] [--tool] [--full]`
 
 ### 4. Server and web UI
-- [ ] Global `/api/events` and `/api/stream`, `/api/history`, `/api/tasks/{t}/trace` routes
-- [ ] Web views Activity and History, Trace tab
+- [x] Global `/api/events` and `/api/stream`, `/api/history`, `/api/tasks/{t}/trace` routes
+- [x] Web views Activity and History, Trace tab
 
 ### 5. TUI
 - [x] Activity and History screens, Trace tab

@@ -36,6 +36,14 @@ All notable changes to this project are documented here. The format follows
   tasks, `Enter` for the detail) and a Trace tab in the task detail (`Enter` expands a call,
   `o` loads its complete output, `[`/`]` switch runs); the selected task's log is read
   incrementally instead of re-parsed every tick.
+- `vibe serve`: global routes `GET /api/events` (filters `after`, `since`, `type`, `task`,
+  `limit`; `X-Vibe-Cursor` and `X-Vibe-Read-Errors` headers) and `GET /api/stream` (server-sent
+  events over every task, replay from a cursor or `Last-Event-ID`, one shared follower),
+  `GET /api/history[/{task}]`, `GET /api/tasks/{task}/trace[?run=|all=]` and
+  `GET /api/tasks/{task}/trace/{call}/output`.
+- Web UI: Activity view (every task, type-group filters, task filter, pause), History view
+  (table and per-task detail), Trace tab in the task detail (calls, arguments, complete
+  output on demand, run selector); one global event stream feeds the page.
 - A native macOS app, `apps/macos/VibeFactory` (SwiftUI, macOS 14+): opens a project and
   starts `vibe serve` for it, or connects to a running server; task board, detail with spec,
   plan, QA, live activity and changes, approvals, menu bar item and notifications. Built
