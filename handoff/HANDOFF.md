@@ -1,53 +1,66 @@
-# Handoff — Vibe Factory 0.5 "visibility" (local → cloud session)
+# Handoff — Vibe Factory 0.5 "visibility" (cloud session → local Claude Code)
 
-Written 2026-09-28 by the local Claude Code session before the laptop was shut down.
-Talk to Vincent in **French** (full accents); code, commits and docs in **English**.
+Written 2026-09-28 by the cloud session (https://claude.ai/code/session_014nmyM24rNX2fwSVEeH8Sgd) before
+Vincent went back to his Mac. Talk to Vincent in **French** (full accents); code, commits and docs in **English**.
 
-## Rules of the repository
+## Rules of the repository (unchanged)
 
-- Work on `feat/visibility-0.5` (draft **PR #8**). **Do not work on this `wip/...` branch**: it only carries this folder.
-- `main` is protected (ruleset "Protect main"): no direct push, PR + 7 green CI checks required.
-  **Vincent merges PRs himself** — never merge, never push to `main`, never force-push, never create or move tags.
-- Conventional commits, short English messages, present tense. **No `Co-Authored-By: Claude` trailer** (repo rule).
+- `main` is protected: no direct push, PR + green CI required. **Vincent merges PRs himself** — never merge,
+  never push to `main`, never force-push, never create or move tags.
+- Conventional commits, short English messages, present tense. **No `Co-Authored-By: Claude` trailer**.
 - Anything outward-facing (repo description/topics, releases, tags): **ask Vincent first**.
-- Plan of record: `handoff/PLAN.md` (copy of the git-ignored `PLAN.md`). Checklist: `TODOS.md`, section "0.5 — visibility".
-  Step reports and reviews: `handoff/reports/`.
+- Plan of record: `handoff/PLAN.md`. Checklist: `TODOS.md`. Step reports and reviews: `handoff/reports/`.
+- This `wip/visibility-0.5-handoff` branch only carries this folder; do not develop on it.
 
-## State: all implementation is committed and pushed on `feat/visibility-0.5`
+## What the cloud session did (2026-09-28, 06:00–08:00 UTC)
 
-| Step | Content | Commit |
-|---|---|---|
-| 1 Engine | call ids, full tool outputs (trace store), `committed`/`merged`, `run_finished` totals, task branch | `88a5918` |
-| fix | `run.lock` released explicitly (child processes inherited the flock) | `fb422a5` |
-| 2 Read layer | incremental reader, all-tasks reader + cursor, `TaskHistory`, `run_trace`, `[pricing]` | `9f6993e` |
-| 3 CLI | `vibe history`, `vibe trace`, global `vibe events`, `serve --exit-on-stdin-eof` | `4820d9d` |
-| 5 TUI | Activity / History screens, Trace tab | `2e9f5e9`, `945fb06` |
-| 4 Server + web UI | `/api/events`, `/api/stream`, `/api/history`, `/api/tasks/{t}/trace`, web views | `8721c3f`, merge `57fe094` |
-| 7a macOS app | `VibeAPI` package + SwiftUI app, CI workflow `macos-app.yml` | `8d2f5ff` |
-| 6 Docs | all docs + landing pages, `history.md`, `trace.md`, ADR-008, CHANGELOG `[Unreleased]` | `9ca5697` |
-| 7b macOS app | global stream, History + Trace views, activity filters, event notifications | `7e311aa` |
+On `feat/visibility-0.5` (PR #8, now **ready for review**, `mergeable_state: clean`, head `beabae8`):
 
-Every step had an independent review, its findings fixed, and a separate verification.
-Last local checks: Rust 666 tests / 0 failed, fmt + clippy `-D warnings` clean (at `57fe094`, docs-only and
-Swift-only commits since); `mdbook build docs` no warning; `swift test` 57 tests (1 smoke skipped) / 0 failed;
-`xcodebuild` BUILD SUCCEEDED, 0 warnings in `apps/macos`.
+| Commit | Content |
+|---|---|
+| `2213ad6` | test(cli): `wait_for` helper gated to `#[cfg(unix)]` like its two callers. The Windows CI job failed on dead code under `-D warnings`; every other check was green. |
+| `5c6c629` | docs: `adr/README.md` now allows adding a cross reference to a later ADR in an accepted ADR (the ADR-007 → ADR-008 link stays); `config.rs` doc comment says `<task dir>`. |
+| `beabae8` | perf(macos): `ActivityViewModel.visible(feed)` keeps its result (`@ObservationIgnored` cache keyed by filter + pausedAt) and only filters the entries the feed added since; drops trimmed heads by binary search on ids; starts over when the filter or the pause changes. |
+
+CI on `beabae8`: all 9 checks green (ubuntu/macos/windows, MSRV 1.88, docs, evals, VS Code, macOS app
+build + `swift test`). PR #8 body updated (steps 6 and 7 ticked, CI fix and follow-ups listed).
+
+Local checks on the release tree: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features`
+with `-D warnings`, `cargo test --workspace` (0 failures), `vibe --version` → `vibe 0.5.0`.
+
+On `release/0.5.0` (branched from `feat/visibility-0.5`, one commit `1009cd2` "chore(release): 0.5.0"), **PR #9**
+open against `main`: workspace + internal crate versions 0.5.0, `Cargo.lock`, `crates/vibe-plugins/src/lib.rs`
+example, `docs/src/design/plugin-protocol.md`, `installation.md` (tag + `vibe 0.5.0`), `migration.md` ("Once
+0.5.0 is released:" removed), `roadmap.md` and `TODOS.md` say released, `editors/vscode/package*.json` 0.5.0,
+macOS `project.yml` `MARKETING_VERSION` 0.1.0 → 0.5.0, CHANGELOG `[Unreleased]` → `[0.5.0] — 2026-09-28` with
+compare links (`[Unreleased]` kept empty above it).
+
+Repository description and topics: Vincent applied them himself with `gh repo edit` (the cloud proxy refuses
+repository-settings writes). Done, nothing left there.
+
+## State to check first
+
+At 07:50 UTC Vincent said PR #8 was merged, but GitHub still showed it **open** and `main` still at `45f33cb`
+(pre-0.5). Verify with `gh pr view 8` / `git fetch origin main`. The merge is Vincent's; if it is still open,
+tell him plainly.
 
 ## Next steps, in order
 
-1. `git checkout feat/visibility-0.5 && git pull`. Check CI of PR #8 on `7e311aa` (`gh pr checks 8`). The Swift/Xcode
-   part cannot be built in a Linux container — the `macos-app.yml` job is the check for it. Fix anything red
-   (root cause, no suppression).
-2. Optional follow-ups from the reviews (non-blocking, see `reports/review-step6.md`, `reports/review-step7b.md`):
-   the global Activity feed re-filters its 3000-entry buffer on every event (memoize `ActivityViewModel.visible`);
-   ADR-007 cross-reference vs "never edited" rule; `config.rs` doc comment `<task>` → `<task dir>`.
-   Ask Vincent whether to do them in PR #8 or later.
-3. (`TODOS.md` already ticked in `f46d0d3`.) Update PR #8 body (tick 6 and 7b), mark PR #8
-   **ready for review** (`gh pr ready 8`), tell Vincent it can be merged once CI is green.
-4. Ask Vincent before: `gh repo edit` description + topics (PLAN step 6).
-5. Propose release 0.5.0 right after PR #8 is merged (the `deploy-book` CI job publishes the book on every push
-   to `main`, so the 0.5 docs go live at merge). Release PR as for 0.4.0 (PR #4): bump 0.4.0 → 0.5.0 in the
-   workspace `Cargo.toml`, internal crates, `Cargo.lock`, doc examples, `editors/vscode/package*.json`, the macOS
-   app `MARKETING_VERSION`; `[Unreleased]` → `[0.5.0] — <date>`; roadmap/README. Vincent tags after merging.
+1. `gh pr checks 9` — CI of the release PR on `1009cd2` (it also carries PR #8's commits until PR #8 is merged;
+   the diff then shrinks to the release commit, no rebase needed since the repo merges with merge commits).
+   Fix anything red (root cause, no suppression). If Vincent merges PR #8 with a squash instead, rebase
+   `release/0.5.0` onto `main` (that is a branch the cloud session created, a force-with-lease push is fine
+   there **only** with Vincent's ok).
+2. Once PR #8 is merged: confirm PR #9's diff is the single release commit and CI is green, tell Vincent he
+   can merge it. Vincent then tags `v0.5.0` on the merge commit → `release.yml` builds the binaries;
+   `deploy-book` publishes the 0.5 book on the push to `main`.
+3. After the tag: check the release workflow, the GitHub release notes (CHANGELOG `[0.5.0]` section), the
+   book front page. The macOS app is "built from source" for 0.5 (README + roadmap say so); a signed DMG via
+   `apps/macos/VibeFactory/Scripts/release.sh` is a separate decision for Vincent.
+4. Optional, later (out of scope for 0.5, listed in PR #8 "Left for later"): unit tests for the macOS view
+   models (extract pure functions: dedup, run selection, the new `visible` cache); SSE 503 "too many streams"
+   distinct backoff; global feed `detail: nil` so subtask ids are not resolved to titles; fixture-driven
+   exhaustiveness test for `EventGroup` vs `Event::TYPES`.
 
 ## Known open points (documented, out of scope for 0.5)
 
@@ -55,5 +68,4 @@ Swift-only commits since); `mdbook build docs` no warning; `swift test` 57 tests
   last run has no recorded end).
 - A corrupted `task.json` still fails the whole task list (index read).
 - Cross-process cursor ordering on `/api/stream` is a documented limit (`docs/src/reference/events.md`).
-- The macOS app view models (ProjectSession, TaskDetail/Trace/History VMs) have no unit tests; only the `VibeAPI`
-  package is tested.
+- The macOS app view models have no unit tests; only the `VibeAPI` package is tested.
