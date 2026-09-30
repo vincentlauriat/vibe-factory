@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "navy";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f77a0982.js";
+            window.path_to_searchindex_js = "../searchindex-d322b171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a937d295.js"></script>
@@ -229,6 +229,11 @@ first call only, so listing providers you do not use is harmless.</p>
 </table>
 </div>
 <p><code>api_key</code> wins over <code>api_key_env</code> when both are set.</p>
+<p>An Anthropic API key that is not scoped to a workspace is refused with HTTP 400 (“must include
+the anthropic-workspace-id header”). Set <code>ANTHROPIC_WORKSPACE_ID</code> to the workspace id
+(<code>wrkspc_…</code>, from the console’s workspace settings) and every <code>anthropic</code> provider sends it as
+<code>anthropic-workspace-id</code>, or use a key created in a workspace. In the macOS app, add the
+variable in Settings like the key.</p>
 <h3 id="extra-keys"><a class="header" href="#extra-keys"><code>extra</code> keys</a></h3>
 <div class="table-wrapper">
 <table>
