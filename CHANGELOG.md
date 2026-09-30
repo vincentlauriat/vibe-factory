@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Anthropic: the HTTP 400 refusing an API key that is not scoped to a workspace now says to set
+  `ANTHROPIC_WORKSPACE_ID` (or to use a key created in a workspace); the providers guide
+  documents it.
+
 ## [0.5.1] — 2026-09-28
 
 macOS app release: an app icon, a fix for API keys entered after a project is opened, and

@@ -52,6 +52,12 @@ Every `[providers.<name>]` table accepts:
 
 `api_key` wins over `api_key_env` when both are set.
 
+An Anthropic API key that is not scoped to a workspace is refused with HTTP 400 ("must include
+the anthropic-workspace-id header"). Set `ANTHROPIC_WORKSPACE_ID` to the workspace id
+(`wrkspc_…`, from the console's workspace settings) and every `anthropic` provider sends it as
+`anthropic-workspace-id`, or use a key created in a workspace. In the macOS app, add the
+variable in Settings like the key.
+
 ### `extra` keys
 
 | Key | Kinds | Type | Effect |

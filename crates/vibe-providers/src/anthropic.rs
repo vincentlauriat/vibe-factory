@@ -471,6 +471,20 @@ fn add_workspace_header(headers: &mut HeaderMap, workspace: Option<String>) -> R
     Ok(())
 }
 
+/// An API key that is not scoped to a workspace is refused (HTTP 400) until
+/// the request names one: tell how, unless a workspace header was sent.
+fn workspace_hint(mut error: Error, headers: &HeaderMap) -> Error {
+    if error.kind == ErrorKind::InvalidRequest
+        && error.message.contains(WORKSPACE_HEADER)
+        && !headers.contains_key(WORKSPACE_HEADER)
+    {
+        error.message.push_str(&format!(
+            " (set {WORKSPACE_ID_ENV} to the workspace id, or use an API key created in a workspace)"
+        ));
+    }
+    error
+}
+
 /// Convert one core message into the wire format, or `None` when nothing
 /// sendable remains (e.g. a message made only of thinking blocks).
 fn message_to_wire(message: &Message, cache: &ThinkingCache) -> Option<Value> {
@@ -786,8 +800,9 @@ impl ModelProvider for AnthropicProvider {
             .ok_or_else(|| missing_key_error(&self.name))?;
         let model = self.effective_model(&request);
         let body = self.build_body(&request);
-        let value =
-            with_retry(&self.retry, || send_json(self.request_builder(auth, &body))).await?;
+        let value = with_retry(&self.retry, || send_json(self.request_builder(auth, &body)))
+            .await
+            .map_err(|e| workspace_hint(e, &self.headers))?;
         if let Some((tool_id, blocks)) = signed_thinking(&value) {
             lock(&self.thinking_cache).insert(tool_id, blocks);
         }
@@ -830,7 +845,8 @@ impl ModelProvider for AnthropicProvider {
                 Err(e) => Err(e),
             }
         })
-        .await?;
+        .await
+        .map_err(|e| workspace_hint(e, &self.headers))?;
         if let Some((tool_id, blocks)) = signed_thinking(&value) {
             lock(&self.thinking_cache).insert(tool_id, blocks);
         }
@@ -868,6 +884,28 @@ mod tests {
         assert_eq!(headers[WORKSPACE_HEADER], "wrkspc_01");
         let error = add_workspace_header(&mut HeaderMap::new(), Some("a\nb".into())).unwrap_err();
         assert_eq!(error.kind, vibe_core::ErrorKind::Config);
+    }
+
+    #[test]
+    fn workspace_hint_on_a_key_without_workspace() {
+        let body = r#"{"type":"error","error":{"type":"invalid_request_error","message":"This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use."}}"#;
+        let error = workspace_hint(
+            crate::classify::classify_http_error(400, body),
+            &HeaderMap::new(),
+        );
+        assert!(error.message.ends_with(
+            "(set ANTHROPIC_WORKSPACE_ID to the workspace id, or use an API key created in a workspace)"
+        ));
+        // Sent already, or another error: the message stays as it is.
+        let mut sent = HeaderMap::new();
+        add_workspace_header(&mut sent, Some("wrkspc_01".into())).unwrap();
+        let error = workspace_hint(crate::classify::classify_http_error(400, body), &sent);
+        assert!(!error.message.contains("set ANTHROPIC_WORKSPACE_ID"));
+        let error = workspace_hint(
+            crate::classify::classify_http_error(400, "bad model"),
+            &HeaderMap::new(),
+        );
+        assert_eq!(error.message, "HTTP 400: bad model");
     }
 
     #[test]
