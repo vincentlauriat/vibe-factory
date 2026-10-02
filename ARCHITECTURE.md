@@ -49,7 +49,7 @@ Les implémentations concrètes ne se rencontrent que dans `vibe-cli`, via le `R
 | Ligne de commande | `vibe` (`vibe-cli`) | `RunManager` et la couche de lecture, dans le processus |
 | UI terminal | `vibe tui` (`vibe-cli`, module `tui`) | les mêmes, dans le processus |
 | UI web et API HTTP | `vibe serve` (`vibe-cli`, module `server`) | les mêmes ; les clients passent par HTTP et les server-sent events |
-| App macOS | `apps/macos/VibeFactory` (SwiftUI) | l'API HTTP d'un `vibe serve` qu'elle démarre ou auquel elle se connecte |
+| App macOS | `apps/macos/VibeFactory` (SwiftUI ; DMG signé, mises à jour Sparkle) | l'API HTTP d'un `vibe serve` qu'elle démarre ou auquel elle se connecte |
 | Extension VS Code | `editors/vscode` (TypeScript) | l'API HTTP de `vibe serve` |
 
 ## Persistance (`.vibe/`)

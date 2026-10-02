@@ -117,7 +117,9 @@ then a terminal UI on top of it.
 - [x] `VibeAPI` Swift package: models, REST client, SSE stream with reconnection, fixtures tests
 - [x] SwiftUI app: open a project, start/stop `vibe serve`, board, detail tabs, approvals, activity, global stream, History and Trace views
 - [x] Menu bar item and notifications (approval requested, run finished, paused)
-- [~] `project.yml` (xcodegen), CI workflow on macos-latest, release script written (not yet run)
+- [x] `project.yml` (xcodegen), CI workflow on macos-latest, `Scripts/release.sh`: signed, notarized DMG with Sparkle auto-update (0.5.0, 0.5.1 shipped; first Sparkle update 0.5.0 → 0.5.1 verified)
+- [x] App icon drawn by `Scripts/make-app-icon.swift`
+- [x] Settings variables (API keys) restart the open projects' servers
 - [ ] Global event cursor robust to cross-process ordering (an external `vibe run` can write an earlier `at` after a delivered event; documented limit)
 - [x] Memoize the global Activity feed filter (review 7b)
 - [~] Unit tests for the app view models: their pure logic (event dedup, Trace run selection, Activity filter cache) lives in `VibeAPI` and is tested there; `ProjectSession` and the `@MainActor` view models themselves are not
